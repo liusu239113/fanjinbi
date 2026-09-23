@@ -76,13 +76,15 @@ jobs:
             FishingIdle/app/build/outputs/apk/debug/*.apk
           retention-days: 90
 
+      # tag 固定为 latest-<分支>：每次构建覆盖更新同一个 Release，
+      # 下载地址始终稳定，也不会在仓库里堆一堆历史 tag。
       - name: 发布到 Release（附下载直链）
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: 钓鱼大师 v1.0.${{ github.run_number }}
+          tag_name: latest-${{ github.ref_name }}
+          name: 钓鱼大师 · ${{ github.ref_name }}
           body: |
-            自动化构建产物。
+            自动化构建产物，随最新提交更新。
 
             - 构建号：`${{ github.run_number }}`
             - 提交：`${{ github.sha }}`
@@ -93,4 +95,5 @@ jobs:
             FishingIdle/app/build/outputs/apk/release/*.apk
             FishingIdle/app/build/outputs/apk/debug/*.apk
           draft: false
-          prerelease: false
+          prerelease: true
+          make_latest: false
