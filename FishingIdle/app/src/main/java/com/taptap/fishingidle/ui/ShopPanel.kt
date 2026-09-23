@@ -33,31 +33,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.taptap.fishingidle.game.Assets
+import com.taptap.fishingidle.game.Content
+import com.taptap.fishingidle.game.Bestiary
+import com.taptap.fishingidle.game.FishingMap
+import com.taptap.fishingidle.game.Rarity
+import com.taptap.fishingidle.game.Species
+import com.taptap.fishingidle.game.World
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.PurchasableDef
-import com.taptap.fishingidle.game.Content
+import com.taptap.fishingidle.game.Source
 import com.taptap.fishingidle.game.formatNumber
 
 /**
- * 商店面板：鱼苗 / 升级 / 统计 三个页签。
+ * 商店面板：鱼苗 / 升级 / 图鉴 / 统计 四个页签。
  * 以底部抽屉形式呈现 —— 竖屏手机上单手可及，且不遮挡上方的钓场。
  */
 @Composable
 fun ShopPanel(
     state: GameState,
     assets: Assets,
+    world: World,
     onBuy: (PurchasableDef) -> Unit,
+    onUnlockMap: (FishingMap) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("鱼苗", "升级", "统计")
+    val tabs = listOf("鱼苗", "升级", "水域", "图鉴", "统计")
 
     Box(modifier.fillMaxSize()) {
-        // 点击上半屏空白处关闭
         Box(
             Modifier
                 .fillMaxSize()
@@ -67,23 +75,22 @@ fun ShopPanel(
 
         Column(
             Modifier
-                .fillMaxHeight(0.72f)
+                .fillMaxHeight(0.78f)
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding(),
         ) {
-            WoodPanel(Modifier.fillMaxSize(), assets = assets) {
+            WoodPanel(Modifier.fillMaxSize(), assets = assets, cornerPx = 110) {
                 Column(Modifier.fillMaxSize().padding(12.dp)) {
-                    // 标题栏 + 页签
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         tabs.forEachIndexed { i, name ->
                             TabButton(name, i == tab, Modifier.weight(1f)) { tab = i }
                         }
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(3.dp))
                         GameButton("✕", onClose, accent = UITheme.WaterTop, fontSize = 14)
                     }
 
@@ -92,6 +99,8 @@ fun ShopPanel(
                     when (tab) {
                         0 -> ItemList(Content.fishItems, state, assets, onBuy, "鱼苗")
                         1 -> ItemList(Content.upgrades, state, assets, onBuy, "升级")
+                        2 -> MapList(state, assets, onUnlockMap)
+                        3 -> FishDex(state, assets)
                         else -> StatsView(state)
                     }
                 }
@@ -120,7 +129,7 @@ private fun TabButton(text: String, selected: Boolean, modifier: Modifier, onCli
     }
 }
 
-/** 可购买项列表。已满足购买条件的排前面，未解锁的沉底。 */
+/** 可购买项列表。可买的排前面，已满级的沉底。 */
 @Composable
 private fun ItemList(
     defs: List<PurchasableDef>,
@@ -130,33 +139,37 @@ private fun ItemList(
     emptyHint: String,
 ) {
     val visible = remember(state.purchases.size, state.money, defs) {
-        val list = defs.filter { it.visibleWhen(state) }
-        // 可买的排前面，已满级的排最后
-        list.sortedWith(
-            compareBy(
-                { def ->
-                    val owned = state.owned(def.id)
-                    when {
-                        def.isMaxed(owned) -> 2
-                        state.money >= def.price(owned) -> 0
-                        else -> 1
-                    }
-                },
-                { def -> def.price(state.owned(def.id)) },
+        defs.filter { it.visibleWhen(state) }
+            .sortedWith(
+                compareBy(
+                    { def ->
+                        val owned = state.owned(def.id)
+                        when {
+                            def.isMaxed(owned) -> 2
+                            state.money >= def.price(owned) -> 0
+                            else -> 1
+                        }
+                    },
+                    { def -> def.price(state.owned(def.id)) },
+                )
             )
-        )
     }
 
     if (visible.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("还没有可用的$emptyHint\n继续钓鱼攒金币吧", color = UITheme.TextDim, fontSize = 14.sp)
+            Text(
+                "还没有可用的$emptyHint\n继续钓鱼攒金币吧",
+                color = UITheme.TextDim,
+                fontSize = 14.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
         }
         return
     }
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         items(visible, key = { it.id }) { def ->
             ShopItemRow(def, state, assets, onBuy)
@@ -165,6 +178,11 @@ private fun ItemList(
     }
 }
 
+/**
+ * 单条商品。
+ * 布局：图标 | 名称+进度 / 描述 | 价格按钮。
+ * 价格做成独立的按钮块，和条目其余部分视觉分离，避免之前挤成一团。
+ */
 @Composable
 private fun ShopItemRow(
     def: PurchasableDef,
@@ -178,30 +196,25 @@ private fun ShopItemRow(
     val affordable = state.money >= price
     val buyable = !maxed && affordable && def.buyableWhen(state)
 
-    val icon = remember(def.icon) {
-        assets.scaled(def.icon, 96)?.asImageBitmap()
+    val icon = remember(def.icon) { assets.scaled(def.icon, 96)?.asImageBitmap() }
+
+    val borderColor = when {
+        maxed -> UITheme.TextGood.copy(alpha = 0.65f)
+        buyable -> UITheme.Gold
+        else -> Color(0xFF4A565A)
+    }
+    val bgColor = when {
+        maxed -> UITheme.SlotBgOwned
+        buyable -> Color(0xFF33505C)
+        else -> UITheme.SlotBg
     }
 
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                when {
-                    maxed -> UITheme.SlotBgOwned
-                    buyable -> Color(0xFF35505A)
-                    else -> UITheme.SlotBg
-                }
-            )
-            .border(
-                2.dp,
-                when {
-                    maxed -> UITheme.TextGood.copy(alpha = 0.6f)
-                    buyable -> UITheme.Gold
-                    else -> Color(0xFF4A565A)
-                },
-                RoundedCornerShape(10.dp),
-            )
+            .background(bgColor)
+            .border(2.dp, borderColor, RoundedCornerShape(10.dp))
             .clickableNoRipple(buyable) { onBuy(def) }
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -209,16 +222,16 @@ private fun ShopItemRow(
         // 图标
         Box(
             Modifier
-                .size(44.dp)
+                .size(46.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(UITheme.DeepWater)
-                .border(1.5.dp, UITheme.GoldDark.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
+                .border(1.5.dp, UITheme.GoldDark.copy(alpha = 0.55f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (icon != null) {
                 Image(
                     icon, contentDescription = def.name,
-                    modifier = Modifier.size(34.dp).alpha(if (maxed) 0.55f else 1f),
+                    modifier = Modifier.size(36.dp).alpha(if (maxed) 0.5f else 1f),
                     contentScale = ContentScale.Fit,
                 )
             }
@@ -226,6 +239,7 @@ private fun ShopItemRow(
 
         Spacer(Modifier.width(9.dp))
 
+        // 名称 + 描述
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -233,14 +247,12 @@ private fun ShopItemRow(
                     color = if (maxed) UITheme.TextGood else UITheme.Cream,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (def.maxPurchases > 1) {
                     Spacer(Modifier.width(5.dp))
-                    Text(
-                        "$owned/${def.maxPurchases}",
-                        color = UITheme.TextDim,
-                        fontSize = 11.sp,
-                    )
+                    Text("$owned/${def.maxPurchases}", color = UITheme.TextDim, fontSize = 11.sp)
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -249,28 +261,40 @@ private fun ShopItemRow(
                 color = UITheme.TextDim,
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
         Spacer(Modifier.width(8.dp))
 
-        // 价格 / 状态
-        Column(horizontalAlignment = Alignment.End) {
+        // 价格按钮
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    when {
+                        maxed -> UITheme.TextGood.copy(alpha = 0.18f)
+                        buyable -> UITheme.Gold
+                        else -> Color(0xFF3A4348)
+                    }
+                )
+                .padding(horizontal = 9.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             if (maxed) {
-                Text("已满级", color = UITheme.TextGood, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("满级", color = UITheme.TextGood, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🪙", fontSize = 12.sp)
-                    Spacer(Modifier.width(3.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        formatNumber(price),
-                        color = if (affordable) UITheme.GoldLight else UITheme.TextBad,
+                        "🪙${formatNumber(price)}",
+                        color = if (buyable) UITheme.Ink else UITheme.TextBad,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                     )
-                }
-                if (!affordable) {
-                    Text("金币不足", color = UITheme.TextBad, fontSize = 10.sp)
+                    if (!affordable) {
+                        Text("金币不足", color = UITheme.TextBad, fontSize = 9.sp)
+                    }
                 }
             }
         }
@@ -281,13 +305,214 @@ private fun ShopItemRow(
 private fun describeEffect(def: PurchasableDef, state: GameState): String {
     val n = formatNumber(def.increaseAmount)
     val v = when (def.id) {
-        "common_fish" -> formatNumber(state.catchValue(com.taptap.fishingidle.game.FishKind.COMMON))
-        "rare_fish" -> formatNumber(state.catchValue(com.taptap.fishingidle.game.FishKind.RARE))
-        "epic_fish" -> formatNumber(state.catchValue(com.taptap.fishingidle.game.FishKind.EPIC))
-        "legend_fish" -> formatNumber(state.catchValue(com.taptap.fishingidle.game.FishKind.LEGEND))
+        "common_fish" -> formatNumber(state.catchValue(Rarity.COMMON))
+        "rare_fish" -> formatNumber(state.catchValue(Rarity.RARE))
+        "epic_fish" -> formatNumber(state.catchValue(Rarity.EPIC))
+        "legend_fish" -> formatNumber(state.catchValue(Rarity.LEGEND))
         else -> n
     }
     return def.desc.replace("{n}", n).replace("{v}", v)
+}
+
+/** 水域列表：解锁新地图，每张图的鱼价值成倍提升。 */
+@Composable
+private fun MapList(state: GameState, assets: Assets, onUnlock: (FishingMap) -> Unit) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(Bestiary.maps, key = { it.id }) { map ->
+            val unlocked = state.unlockedMaps.contains(map.id)
+            val current = state.currentMapId == map.id
+            val affordable = state.money >= map.unlockCost
+            val canUnlock = !unlocked && affordable
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        when {
+                            current -> Color(0xFF3A5A32)
+                            unlocked -> UITheme.SlotBgOwned
+                            canUnlock -> Color(0xFF33505C)
+                            else -> UITheme.SlotBg
+                        }
+                    )
+                    .border(
+                        2.dp,
+                        when {
+                            current -> UITheme.TextGood
+                            unlocked -> UITheme.TextGood.copy(alpha = 0.5f)
+                            canUnlock -> UITheme.Gold
+                            else -> Color(0xFF4A565A)
+                        },
+                        RoundedCornerShape(10.dp),
+                    )
+                    .clickableNoRipple(canUnlock || (unlocked && !current)) {
+                        if (unlocked) onUnlock(map) else if (canUnlock) onUnlock(map)
+                    }
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            map.name,
+                            color = if (unlocked) UITheme.Cream else UITheme.TextDim,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        if (current) Pill("当前", UITheme.TextGood)
+                        else if (unlocked) Pill("已解锁", UITheme.TextGood.copy(alpha = 0.7f))
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(map.desc, color = UITheme.TextDim, fontSize = 11.sp, lineHeight = 14.sp)
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "价值 ×${formatNumber(map.valueMultiplier)}  ·  ${map.species.size} 种鱼",
+                        color = UITheme.GoldLight,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            when {
+                                current -> UITheme.TextGood.copy(alpha = 0.2f)
+                                canUnlock -> UITheme.Gold
+                                else -> Color(0xFF3A4348)
+                            }
+                        )
+                        .padding(horizontal = 9.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        current -> Text("所在", color = UITheme.TextGood, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        unlocked -> Text("前往", color = UITheme.TextGood, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "🪙${formatNumber(map.unlockCost)}",
+                                color = if (canUnlock) UITheme.Ink else UITheme.TextBad,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            if (!affordable) Text("金币不足", color = UITheme.TextBad, fontSize = 9.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+/** 鱼类图鉴：54 种鱼的收集册，按地图分组。 */
+@Composable
+private fun FishDex(state: GameState, assets: Assets) {
+    val caught = state.caughtSpecies
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        item {
+            Column {
+                SectionTitle("收集进度")
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${caught.size} / ${Bestiary.totalSpecies} 种",
+                    color = UITheme.GoldLight,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+
+        Bestiary.maps.forEach { map ->
+            item(key = "hdr_${map.id}") {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(width = 4.dp, height = 15.dp).background(UITheme.Gold, RoundedCornerShape(2.dp)))
+                    Spacer(Modifier.width(7.dp))
+                    Text(map.name, color = UITheme.Gold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "${map.species.count { caught.contains(it.id) }}/${map.species.size}",
+                        color = UITheme.TextDim, fontSize = 11.sp,
+                    )
+                }
+            }
+            items(map.species, key = { it.id }) { sp ->
+                SpeciesRow(sp, caught.contains(sp.id), assets)
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun SpeciesRow(sp: Species, isCaught: Boolean, assets: Assets) {
+    val icon = remember(sp.sprite) { assets.scaled(sp.sprite, 128)?.asImageBitmap() }
+    val rarity = when (sp.rarity) {
+        Rarity.COMMON -> UITheme.RarityCommon
+        Rarity.RARE -> UITheme.RarityRare
+        Rarity.EPIC -> UITheme.RarityEpic
+        Rarity.LEGEND -> UITheme.RarityLegend
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(UITheme.SlotBg)
+            .border(1.5.dp, rarity.copy(alpha = if (isCaught) 0.7f else 0.2f), RoundedCornerShape(8.dp))
+            .padding(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(UITheme.DeepWater),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (icon != null) {
+                Image(
+                    icon, contentDescription = sp.name,
+                    modifier = Modifier.size(36.dp).alpha(if (isCaught) 1f else 0.18f),
+                    contentScale = ContentScale.Fit,
+                    colorFilter = if (isCaught) null else null,
+                )
+            }
+        }
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (isCaught) sp.name else "？？？",
+                color = if (isCaught) rarity else UITheme.TextDim,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "${sp.rarity.displayName} · ${sp.tint.display}",
+                color = UITheme.TextDim,
+                fontSize = 10.sp,
+            )
+        }
+        Text(
+            "#${sp.dexNo}",
+            color = if (isCaught) rarity else UITheme.TextDim.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 /** 统计视图。 */
@@ -325,27 +550,14 @@ private fun StatsView(state: GameState) {
                 SectionTitle("收益构成")
                 Spacer(Modifier.height(6.dp))
                 val total = state.earningsBySource.values.sum().coerceAtLeast(1.0)
-                com.taptap.fishingidle.game.Source.entries.forEach { src ->
+                Source.entries.forEach { src ->
                     val amount = state.earningsBySource[src] ?: 0.0
                     if (amount > 0) {
-                        StatRow(
-                            src.displayName,
-                            "${formatNumber(amount)}  (${(amount / total * 100).toInt()}%)",
-                        )
+                        StatRow(src.displayName, "${formatNumber(amount)}  (${(amount / total * 100).toInt()}%)")
                     }
                 }
                 if (state.earningsBySource.isEmpty()) {
                     Text("暂无数据", color = UITheme.TextDim, fontSize = 12.sp)
-                }
-            }
-        }
-
-        item {
-            Column {
-                SectionTitle("单次渔获价值")
-                Spacer(Modifier.height(6.dp))
-                com.taptap.fishingidle.game.FishKind.entries.forEach { kind ->
-                    StatRow(kind.displayName, formatNumber(state.catchValue(kind)))
                 }
             }
         }

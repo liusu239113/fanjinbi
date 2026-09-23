@@ -60,9 +60,40 @@ class GameState {
 
     // ---- 会话统计（不存档）----
     val earningsBySource: MutableMap<Source, Double> = mutableMapOf()
-    val earningsByFish: MutableMap<FishKind, Double> = mutableMapOf()
+    val earningsByFish: MutableMap<Rarity, Double> = mutableMapOf()
 
-    fun recordEarning(kind: FishKind, source: Source, amount: Double) {
+    // ---- 进度与成就 ----
+    /** 累计钓上来的鱼数量（成就用）。 */
+    var totalCatches: Long = 0
+        private set
+
+    /** 已解锁成就 id。 */
+    val unlockedAchievements: MutableSet<String> = mutableSetOf()
+
+    /** 已解锁的水域 id。 */
+    val unlockedMaps: MutableSet<String> = mutableSetOf("creek")
+
+    /** 当前所在水域 id。 */
+    var currentMapId: String = "creek"
+
+    /** 已钓到过的鱼种 id（图鉴收集进度）。 */
+    val caughtSpecies: MutableSet<String> = mutableSetOf()
+
+    /** 当前水域。 */
+    val currentMap: FishingMap
+        get() = Bestiary.mapById(currentMapId) ?: Bestiary.maps.first()
+
+    /** 当前连击数：连续成功收线不脱钩会累加，脱钩清零。 */
+    var combo: Int = 0
+    /** 历史最高连击。 */
+    var bestCombo: Int = 0
+        private set
+
+    /** 连击带来的收益加成：每连击 +4%，上限 +120%。 */
+    val comboMultiplier: Double
+        get() = 1.0 + (combo.coerceAtMost(30) * 0.04)
+
+    fun recordEarning(kind: Rarity, source: Source, amount: Double) {
         earningsBySource[source] = (earningsBySource[source] ?: 0.0) + amount
         earningsByFish[kind] = (earningsByFish[kind] ?: 0.0) + amount
     }
@@ -71,35 +102,72 @@ class GameState {
         if (amount > highestCatch) highestCatch = amount
     }
 
-    /** 某鱼种单次渔获价值。对应原版 (base + additional) * multiplier。 */
-    fun catchValue(kind: FishKind): Double = when (kind) {
-        FishKind.COMMON -> (BASE_COMMON + commonValueAdd) * commonValueMul
-        FishKind.RARE -> (BASE_RARE + rareValueAdd) * rareValueMul
-        FishKind.EPIC -> (BASE_EPIC + epicValueAdd) * epicValueMul
-        FishKind.LEGEND -> (BASE_LEGEND + legendValueAdd) * legendValueMul
+    /** 成功钓上一条鱼：累计计数 + 连击推进。 */
+    fun onCatchSuccess() {
+        totalCatches++
+        combo++
+        if (combo > bestCombo) bestCombo = combo
+    }
+
+    /** 脱钩/超时：连击清零。 */
+    fun onCatchFail() {
+        combo = 0
+    }
+
+    /** 某稀有度档位的单次渔获价值。对应原版 (base + additional) * multiplier。 */
+    fun catchValue(kind: Rarity): Double = when (kind) {
+        Rarity.COMMON -> (BASE_COMMON + commonValueAdd) * commonValueMul
+        Rarity.RARE -> (BASE_RARE + rareValueAdd) * rareValueMul
+        Rarity.EPIC -> (BASE_EPIC + epicValueAdd) * epicValueMul
+        Rarity.LEGEND -> (BASE_LEGEND + legendValueAdd) * legendValueMul
+    }
+
+    /**
+     * 具体鱼种的价值 = 稀有度基础价值 × 该鱼种倍率 × 地图倍率。
+     * 地图倍率是长线成长的主轴。
+     */
+    fun catchValue(sp: Species, map: FishingMap = currentMap): Double =
+        catchValue(sp.rarity) * sp.valueMul * map.valueMultiplier
+
+    /** 解锁一张地图。返回是否成功。 */
+    fun unlockMap(map: FishingMap): Boolean {
+        if (unlockedMaps.contains(map.id)) {
+            currentMapId = map.id
+            return true
+        }
+        if (money < map.unlockCost) return false
+        money -= map.unlockCost
+        unlockedMaps.add(map.id)
+        currentMapId = map.id
+        return true
+    }
+
+    /** 记录钓到某个鱼种。 */
+    fun recordSpecies(id: String) {
+        caughtSpecies.add(id)
     }
 
     /** 某鱼种收线耗时倍率（越大越快）。 */
-    fun reelSpeed(kind: FishKind): Double = when (kind) {
-        FishKind.COMMON -> commonReelSpeed
-        FishKind.RARE -> rareReelSpeed
-        FishKind.EPIC -> epicReelSpeed
-        FishKind.LEGEND -> legendReelSpeed
+    fun reelSpeed(kind: Rarity): Double = when (kind) {
+        Rarity.COMMON -> commonReelSpeed
+        Rarity.RARE -> rareReelSpeed
+        Rarity.EPIC -> epicReelSpeed
+        Rarity.LEGEND -> legendReelSpeed
     }
 
     /** 该鱼种是否已解锁（拥有至少一条）。 */
-    fun isUnlocked(kind: FishKind): Boolean = when (kind) {
-        FishKind.COMMON -> commonFish > 0
-        FishKind.RARE -> rareFish > 0
-        FishKind.EPIC -> epicFish > 0
-        FishKind.LEGEND -> legendFish > 0
+    fun isUnlocked(kind: Rarity): Boolean = when (kind) {
+        Rarity.COMMON -> commonFish > 0
+        Rarity.RARE -> rareFish > 0
+        Rarity.EPIC -> epicFish > 0
+        Rarity.LEGEND -> legendFish > 0
     }
 
-    fun ownedCount(kind: FishKind): Int = when (kind) {
-        FishKind.COMMON -> commonFish
-        FishKind.RARE -> rareFish
-        FishKind.EPIC -> epicFish
-        FishKind.LEGEND -> legendFish
+    fun ownedCount(kind: Rarity): Int = when (kind) {
+        Rarity.COMMON -> commonFish
+        Rarity.RARE -> rareFish
+        Rarity.EPIC -> epicFish
+        Rarity.LEGEND -> legendFish
     }
 
     // ---- 购买 ----

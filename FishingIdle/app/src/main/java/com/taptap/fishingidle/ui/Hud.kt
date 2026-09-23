@@ -1,6 +1,10 @@
 package com.taptap.fishingidle.ui
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -9,23 +13,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taptap.fishingidle.game.AchievementDef
 import com.taptap.fishingidle.game.BobberState
+import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.World
 import com.taptap.fishingidle.game.formatNumber
@@ -33,49 +36,86 @@ import com.taptap.fishingidle.game.formatNumber
 /**
  * 顶部金币栏。
  *
- * [revision] 是外部驱动的刷新计数：GameState 用的是普通 var 而非 Compose State，
- * 必须靠这个每次变化的参数让本组件不可跳过，从而重新读取最新的金币值。
+ * [revision] 每次变化都会让本组件重新读取 [state].money。
+ * 注意：不能依赖 Compose 的自动状态追踪 —— GameState 用的是普通 var，
+ * 所有依赖它的组件都必须显式接收并在函数体内读取这个计数，
+ * 否则会被 Compose 按作用域跳过，出现"金币不实时刷新"的问题。
  */
 @Composable
 fun MoneyBar(state: GameState, revision: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(UITheme.DeepWater.copy(alpha = 0.82f))
-            .border(2.5.dp, UITheme.GoldDark, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("🪙", fontSize = 22.sp)
-        Spacer(Modifier.width(8.dp))
-        Text(
-            formatNumber(state.money),
-            color = UITheme.GoldLight,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-        )
+    @Suppress("UNUSED_EXPRESSION") revision
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(UITheme.DeepWater.copy(alpha = 0.85f))
+                .border(2.5.dp, UITheme.GoldDark, RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🪙", fontSize = 20.sp)
+            Spacer(Modifier.width(7.dp))
+            Text(
+                formatNumber(state.money),
+                color = UITheme.GoldLight,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        // 连击条：有连击时才出现
+        if (state.combo >= 2) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(UITheme.TextGood.copy(alpha = 0.20f))
+                    .border(1.5.dp, UITheme.TextGood.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 9.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${state.combo} 连击",
+                    color = UITheme.TextGood,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "×${String.format("%.2f", state.comboMultiplier)}",
+                    color = UITheme.GoldLight,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
     }
 }
 
-/** 底部操作栏：商店按钮 + 状态提示。 */
+/**
+ * 底部操作栏：商店按钮 + 状态提示。
+ * [revision] 作用同 [MoneyBar] —— 提示依赖 world.bobber.state 这个普通属性。
+ */
 @Composable
 fun BottomBar(
     world: World,
+    revision: Int,
     onOpenShop: () -> Unit,
     onOpenMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    @Suppress("UNUSED_EXPRESSION") revision
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 状态提示
         Box(
             Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(UITheme.DeepWater.copy(alpha = 0.82f))
+                .background(UITheme.DeepWater.copy(alpha = 0.85f))
                 .border(2.dp, UITheme.GoldDark.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
@@ -94,9 +134,10 @@ fun BottomBar(
 }
 
 private fun hintText(world: World): String = when (world.bobber.state) {
-    BobberState.IDLE -> "点击水面抛竿"
+    BobberState.IDLE -> "拖动浏览河面 · 点击水面抛竿"
     BobberState.FLYING -> "浮标飞行中…"
-    BobberState.FLOATING -> "等待鱼儿咬钩…"
+    BobberState.FLOATING ->
+        if (world.bobber.hookedFish != null) "有鱼靠近了，盯紧浮标…" else "这片水域没有鱼，换个位置"
     BobberState.BITE -> "有鱼咬钩！快点击收线"
     BobberState.REELING -> "收线中…连续点击加速"
     BobberState.DONE -> "准备下一竿"
@@ -105,36 +146,72 @@ private fun hintText(world: World): String = when (world.bobber.state) {
 /** 渔获图鉴条：显示已解锁的鱼种。[revision] 作用同 [MoneyBar]。 */
 @Composable
 fun CatchStrip(state: GameState, revision: Int, modifier: Modifier = Modifier) {
+    @Suppress("UNUSED_EXPRESSION") revision
+
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(UITheme.DeepWater.copy(alpha = 0.7f))
+            .background(UITheme.DeepWater.copy(alpha = 0.72f))
             .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        com.taptap.fishingidle.game.FishKind.entries.forEach { kind ->
-            if (state.isUnlocked(kind)) {
+        Rarity.entries.forEach { rarity ->
+            if (state.isUnlocked(rarity)) {
+                val color = when (rarity) {
+                    Rarity.COMMON -> UITheme.RarityCommon
+                    Rarity.RARE -> UITheme.RarityRare
+                    Rarity.EPIC -> UITheme.RarityEpic
+                    Rarity.LEGEND -> UITheme.RarityLegend
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val color = when (kind) {
-                        com.taptap.fishingidle.game.FishKind.COMMON -> UITheme.RarityCommon
-                        com.taptap.fishingidle.game.FishKind.RARE -> UITheme.RarityRare
-                        com.taptap.fishingidle.game.FishKind.EPIC -> UITheme.RarityEpic
-                        com.taptap.fishingidle.game.FishKind.LEGEND -> UITheme.RarityLegend
-                    }
-                    Box(
-                        Modifier
-                            .size(7.dp)
-                            .background(color, RoundedCornerShape(4.dp))
-                    )
+                    Box(Modifier.size(7.dp).background(color, RoundedCornerShape(4.dp)))
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "${kind.displayName}×${state.ownedCount(kind)}",
+                        "${rarity.displayName}×${state.ownedCount(rarity)}",
                         color = color,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                     )
                 }
+            }
+        }
+    }
+}
+
+/** 成就解锁提示条。 */
+@Composable
+fun AchievementToast(achievement: AchievementDef?, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = achievement != null,
+        enter = slideInVertically { -it } + fadeIn(),
+        exit = slideOutVertically { -it } + fadeOut(),
+        modifier = modifier,
+    ) {
+        val def = achievement ?: return@AnimatedVisibility
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(UITheme.Gold.copy(alpha = 0.95f))
+                .border(3.dp, UITheme.Ink, RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🏆", fontSize = 22.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "成就解锁 · ${def.name}",
+                    color = UITheme.Ink,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "${def.desc}  奖励 🪙${formatNumber(def.reward)}",
+                    color = UITheme.Ink.copy(alpha = 0.78f),
+                    fontSize = 11.sp,
+                )
             }
         }
     }

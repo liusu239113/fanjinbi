@@ -35,14 +35,21 @@ import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.Settings
 import com.taptap.fishingidle.game.formatNumber
 
-/** 主菜单：设置 + 玩法说明 + 重置存档。 */
+/**
+ * 设置面板。主菜单和游戏内共用同一套内容。
+ *
+ * [showResume] 为 true 时显示"继续游戏"（游戏内打开）；
+ * 为 false 时显示"返回"（主菜单打开）。
+ */
 @Composable
 fun MenuPanel(
     state: GameState,
     settings: Settings,
     assets: com.taptap.fishingidle.game.Assets,
+    showResume: Boolean = true,
     onVolumeChanged: () -> Unit,
     onReset: () -> Unit,
+    onExitToMainMenu: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     Scrim(onClose) {
@@ -57,7 +64,7 @@ fun MenuPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "钓鱼大师",
+                    "设置",
                     color = UITheme.GoldLight,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
@@ -122,8 +129,16 @@ fun MenuPanel(
                         accent = Color(0xFFB0503C),
                     )
                     GameButton(
-                        "继续游戏", onClose,
+                        if (showResume) "继续游戏" else "返回", onClose,
                         modifier = Modifier.weight(1f),
+                    )
+                }
+
+                if (showResume) {
+                    GameButton(
+                        "返回主菜单", onExitToMainMenu,
+                        modifier = Modifier.fillMaxWidth(),
+                        accent = UITheme.WaterTop,
                     )
                 }
             }

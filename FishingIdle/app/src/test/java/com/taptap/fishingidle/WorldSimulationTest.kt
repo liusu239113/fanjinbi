@@ -3,7 +3,7 @@ package com.taptap.fishingidle
 import com.taptap.fishingidle.game.BobberState
 import com.taptap.fishingidle.game.Content
 import com.taptap.fishingidle.game.Fish
-import com.taptap.fishingidle.game.FishKind
+import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.FishState
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.Space
@@ -29,6 +29,13 @@ class WorldSimulationTest {
         }
     }
 
+
+    /** 抛到离落点最近的鱼身上 —— 真实玩法里玩家就是这么钓的。 */
+    private fun World.castAtNearestFish() {
+        val f = fishes.minByOrNull { kotlin.math.abs(it.x - cameraX) } ?: return
+        castLine(f.x, f.y)
+    }
+
     @Test
     fun `长时间空转不会崩溃`() {
         val state = GameState()
@@ -49,7 +56,7 @@ class WorldSimulationTest {
         var reeled = 0
         repeat(30) {
             if (!world.bobber.isActive) {
-                world.castLine(Space.W / 2f, Space.POND_T + 300f)
+                world.castAtNearestFish()
                 casts++
             }
             // 推进直到这一竿结束
@@ -75,6 +82,7 @@ class WorldSimulationTest {
         val world = World(state)
         world.fishes.clear()
 
+        // 这里没有鱼可参照，直接指定落点
         world.castLine(Space.W / 2f, Space.POND_T + 300f)
         assertTrue("抛竿后浮标应处于活动状态", world.bobber.isActive)
 
@@ -92,7 +100,7 @@ class WorldSimulationTest {
         world.advance(1f)
 
         repeat(40) {
-            if (!world.bobber.isActive) world.castLine(Space.W / 2f, Space.POND_T + 300f)
+            if (!world.bobber.isActive) world.castAtNearestFish()
             var guard = 0
             while (world.bobber.isActive && guard < 2000) {
                 world.update(dt)
@@ -198,7 +206,7 @@ class WorldSimulationTest {
         world.fishes.forEach { it.x = cx; it.y = cy }
 
         world.advance(0.5f)
-        world.castLine(cx, cy)
+        world.castAtNearestFish()
 
         var guard = 0
         while (world.bobber.isActive && guard < 3000) {
@@ -231,7 +239,7 @@ class WorldSimulationTest {
         val state = GameState()
         val world = World(state)
         world.advance(0.5f)
-        world.castLine(Space.W / 2f, Space.POND_T + 200f)
+        world.castAtNearestFish()
 
         var guard = 0
         var reachedReeling = false

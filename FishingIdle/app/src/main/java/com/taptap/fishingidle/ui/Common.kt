@@ -25,25 +25,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale as ComposeContentScale
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import com.taptap.fishingidle.game.Assets
 
 /**
  * 木质面板容器。
- * 优先使用资源里的九宫格木纹图（四角护角不拉伸），
- * 资源缺失时退回程序化渐变，保证任何情况下界面都可用。
+ *
+ * 木纹图按九宫格切片绘制：四角护角保持原始像素尺寸，只有中间区域被拉伸。
+ * 直接把整张图 FillBounds 缩放会把护角压扁（面板越扁越明显），
+ * 所以这里用 Canvas 手工切 9 块。
  */
 @Composable
 fun WoodPanel(
     modifier: Modifier = Modifier,
     assets: Assets? = null,
+    cornerPx: Int = 128,
     content: @Composable () -> Unit,
 ) {
-    val panelBmp = assets?.let { a ->
-        a.raw("wood_panel")?.asImageBitmap()
-    }
+    val bitmap = assets?.let { a -> a.raw("wood_panel")?.asImageBitmap() }
 
     Box(
         modifier = modifier
@@ -56,16 +62,52 @@ fun WoodPanel(
             .border(3.dp, UITheme.Ink, RoundedCornerShape(14.dp))
             .border(1.5.dp, UITheme.GoldDark, RoundedCornerShape(12.dp))
     ) {
-        if (panelBmp != null) {
-            Image(
-                bitmap = panelBmp,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ComposeContentScale.FillBounds,
-                alpha = 0.55f,
-            )
+        if (bitmap != null) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawNinePatch(bitmap, cornerPx)
+            }
         }
         content()
+    }
+}
+
+/**
+ * 九宫格绘制：角块 1:1 保留，边块单向拉伸，中心块双向拉伸。
+ * 角块尺寸按密度换算成像素，避免高 DPI 屏上护角显得过小。
+ */
+private fun DrawScope.drawNinePatch(bitmap: ImageBitmap, cornerPx: Int) {
+    val w = size.width
+    val h = size.height
+    val srcW = bitmap.width.toFloat()
+    val srcH = bitmap.height.toFloat()
+
+    // 源图角块尺寸不能超过源图的一半，目标角块不能超过目标尺寸的一半
+    val srcCx = cornerPx.toFloat().coerceAtMost(srcW / 2f - 1f)
+    val srcCy = cornerPx.toFloat().coerceAtMost(srcH / 2f - 1f)
+    val dstCx = srcCx.coerceAtMost(w / 2f)
+    val dstCy = srcCy.coerceAtMost(h / 2f)
+
+    val srcXs = floatArrayOf(0f, srcCx, srcW - srcCx, srcW)
+    val srcYs = floatArrayOf(0f, srcCy, srcH - srcCy, srcH)
+    val dstXs = floatArrayOf(0f, dstCx, w - dstCx, w)
+    val dstYs = floatArrayOf(0f, dstCy, h - dstCy, h)
+
+    for (r in 0 until 3) {
+        for (c in 0 until 3) {
+            val sw = srcXs[c + 1] - srcXs[c]
+            val sh = srcYs[r + 1] - srcYs[r]
+            val dw = dstXs[c + 1] - dstXs[c]
+            val dh = dstYs[r + 1] - dstYs[r]
+            if (sw <= 0f || sh <= 0f || dw <= 0f || dh <= 0f) continue
+            drawImage(
+                image = bitmap,
+                srcOffset = IntOffset(srcXs[c].toInt(), srcYs[r].toInt()),
+                srcSize = IntSize(sw.toInt().coerceAtLeast(1), sh.toInt().coerceAtLeast(1)),
+                dstOffset = IntOffset(dstXs[c].toInt(), dstYs[r].toInt()),
+                dstSize = IntSize(dw.toInt().coerceAtLeast(1), dh.toInt().coerceAtLeast(1)),
+                filterQuality = FilterQuality.Medium,
+            )
+        }
     }
 }
 
@@ -97,6 +139,20 @@ fun GameButton(
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/** 小标签（稀有度等）。 */
+@Composable
+fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.22f))
+            .border(1.dp, color.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 

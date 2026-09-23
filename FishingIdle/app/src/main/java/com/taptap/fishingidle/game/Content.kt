@@ -201,34 +201,34 @@ object Content {
     // ---------------- 鱼种基础参数 ----------------
 
     /** 咬钩等待时间范围（秒），越大越稀有。 */
-    fun biteDelay(kind: FishKind): ClosedFloatingPointRange<Float> = when (kind) {
-        FishKind.COMMON -> 0.9f..1.8f
-        FishKind.RARE -> 1.4f..2.4f
-        FishKind.EPIC -> 2.0f..3.2f
-        FishKind.LEGEND -> 2.6f..4.0f
+    fun biteDelay(kind: Rarity): ClosedFloatingPointRange<Float> = when (kind) {
+        Rarity.COMMON -> 0.9f..1.8f
+        Rarity.RARE -> 1.4f..2.4f
+        Rarity.EPIC -> 2.0f..3.2f
+        Rarity.LEGEND -> 2.6f..4.0f
     }
 
     /** 收线时长（秒，未计速度倍率）。 */
-    fun reelDuration(kind: FishKind): Float = when (kind) {
-        FishKind.COMMON -> 1.0f
-        FishKind.RARE -> 1.5f
-        FishKind.EPIC -> 2.1f
-        FishKind.LEGEND -> 2.8f
+    fun reelDuration(kind: Rarity): Float = when (kind) {
+        Rarity.COMMON -> 1.0f
+        Rarity.RARE -> 1.5f
+        Rarity.EPIC -> 2.1f
+        Rarity.LEGEND -> 2.8f
     }
 
     /** 脱钩概率：越稀有的鱼越容易跑掉。 */
-    fun escapeChance(kind: FishKind): Float = when (kind) {
-        FishKind.COMMON -> 0.22f
-        FishKind.RARE -> 0.30f
-        FishKind.EPIC -> 0.38f
-        FishKind.LEGEND -> 0.45f
+    fun escapeChance(kind: Rarity): Float = when (kind) {
+        Rarity.COMMON -> 0.22f
+        Rarity.RARE -> 0.30f
+        Rarity.EPIC -> 0.38f
+        Rarity.LEGEND -> 0.45f
     }
 
     /** 鱼在水里游动速度（像素/秒）。 */
-    fun swimSpeed(kind: FishKind): Float = when (kind) {
-        FishKind.COMMON -> 26f
-        FishKind.RARE -> 21f
-        FishKind.EPIC -> 17f
-        FishKind.LEGEND -> 13f
+    fun swimSpeed(kind: Rarity): Float = when (kind) {
+        Rarity.COMMON -> 26f
+        Rarity.RARE -> 21f
+        Rarity.EPIC -> 17f
+        Rarity.LEGEND -> 13f
     }
 }

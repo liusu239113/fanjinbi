@@ -31,13 +31,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.taptap.fishingidle.game.Assets
 import com.taptap.fishingidle.game.AudioManager
+import com.taptap.fishingidle.game.FishingMap
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.GameView
 import com.taptap.fishingidle.game.SaveManager
 import com.taptap.fishingidle.game.Settings
 import com.taptap.fishingidle.game.World
+import com.taptap.fishingidle.ui.AchievementToast
 import com.taptap.fishingidle.ui.BottomBar
 import com.taptap.fishingidle.ui.CatchStrip
+import com.taptap.fishingidle.ui.MainMenu
 import com.taptap.fishingidle.ui.MenuPanel
 import com.taptap.fishingidle.ui.MoneyBar
 import com.taptap.fishingidle.ui.ResetConfirmDialog
@@ -75,12 +78,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 清空存档并把运行时状态恢复到初始。 */
+    private fun doReset() {
+        saveManager.clear()
+        gameState.loadFrom(com.taptap.fishingidle.game.SaveData())
+        world.fishes.clear()
+        world.helpers.clear()
+        world.floatingTexts.clear()
+        world.particles.clear()
+        world.syncFishCount()
+        world.syncHelperCount()
+        saveManager.save(gameState, settings)
+    }
+
     @Composable
     private fun FishingGameScreen() {
+        // 启动先进主菜单，而不是直接进游戏
+        var inGame by remember { mutableStateOf(false) }
         var showShop by remember { mutableStateOf(false) }
         var showMenu by remember { mutableStateOf(false) }
         var showReset by remember { mutableStateOf(false) }
         var gameViewRef by remember { mutableStateOf<GameView?>(null) }
+        val hasSave = remember { saveManager.hasSave() }
         // HUD 刷新计数。GameState 是普通 var，必须靠它变化来驱动重组，
         // 否则金币数字不会更新。
         var revision by remember { mutableIntStateOf(0) }
@@ -92,6 +111,23 @@ class MainActivity : ComponentActivity() {
             while (true) {
                 kotlinx.coroutines.delay(50)
                 revision++
+            }
+        }
+
+        // 成就提示：轮流展示本帧新解锁的成就，每条停留 2.6 秒
+        var toast by remember { mutableStateOf<com.taptap.fishingidle.game.AchievementDef?>(null) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                if (toast == null && world.pendingAchievements.isNotEmpty()) {
+                    val def = world.pendingAchievements.removeAt(0)
+                    toast = def
+                    audio.play("sfx_success", 1.0f)
+                    kotlinx.coroutines.delay(2600)
+                    toast = null
+                    kotlinx.coroutines.delay(260)
+                } else {
+                    kotlinx.coroutines.delay(120)
+                }
             }
         }
 
@@ -116,11 +152,76 @@ class MainActivity : ComponentActivity() {
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
-        // 打开面板时暂停世界模拟
-        LaunchedEffect(showShop, showMenu, showReset) {
-            gameViewRef?.paused = showShop || showMenu || showReset
+        // 打开面板或回到主菜单时暂停世界模拟
+        LaunchedEffect(showShop, showMenu, showReset, inGame) {
+            gameViewRef?.paused = showShop || showMenu || showReset || !inGame
         }
 
+        // ---------------- 主菜单 ----------------
+        if (!inGame) {
+            MainMenu(
+                state = gameState,
+                assets = assets,
+                hasSave = hasSave,
+                onStart = {
+                    audio.play("sfx_click", 0.7f)
+                    inGame = true
+                },
+                onContinue = {
+                    audio.play("sfx_click", 0.7f)
+                    inGame = true
+                },
+                onSettings = {
+                    audio.play("sfx_click", 0.6f)
+                    showMenu = true
+                },
+                onReset = {
+                    audio.play("sfx_click", 0.6f)
+                    showReset = true
+                },
+            )
+
+            if (showMenu) {
+                MenuPanel(
+                    state = gameState,
+                    settings = settings,
+                    assets = assets,
+                    showResume = false,
+                    onVolumeChanged = {
+                        audio.refreshVolumes()
+                        saveManager.save(gameState, settings)
+                    },
+                    onReset = { showReset = true },
+                    onExitToMainMenu = {
+                        audio.play("sfx_click", 0.6f)
+                        saveManager.save(gameState, settings)
+                        showMenu = false
+                        inGame = false
+                    },
+                    onClose = {
+                        audio.play("sfx_click", 0.6f)
+                        saveManager.save(gameState, settings)
+                        showMenu = false
+                    },
+                )
+            }
+
+            if (showReset) {
+                ResetConfirmDialog(
+                    assets = assets,
+                    onConfirm = {
+                        doReset()
+                        showReset = false
+                        showMenu = false
+                        revision++
+                    },
+                    onDismiss = { showReset = false },
+                )
+            }
+            return@FishingGameScreen
+        }
+
+        // ---------------- 游戏内 ----------------
         Box(Modifier.fillMaxSize().background(UITheme.DeepWater)) {
             // 游戏画面
             AndroidView(
@@ -165,10 +266,14 @@ class MainActivity : ComponentActivity() {
                     CatchStrip(gameState, revision)
                 }
 
+                Spacer(Modifier.height(8.dp))
+                AchievementToast(toast)
+
                 Spacer(Modifier.weight(1f))
 
                 BottomBar(
                     world = world,
+                    revision = revision,
                     onOpenShop = {
                         audio.play("sfx_click", 0.6f)
                         showShop = true
@@ -185,6 +290,18 @@ class MainActivity : ComponentActivity() {
                 ShopPanel(
                     state = gameState,
                     assets = assets,
+                    world = world,
+                    onUnlockMap = { map ->
+                        val ok = gameState.unlockMap(map)
+                        if (ok) {
+                            audio.play("sfx_buy", 0.95f)
+                            world.switchMap(map)
+                            saveManager.save(gameState, settings)
+                        } else {
+                            audio.play("sfx_cant_buy", 0.7f)
+                        }
+                        revision++
+                    },
                     onBuy = { def ->
                         val ok = gameState.buy(def)
                         if (ok) {
@@ -227,13 +344,7 @@ class MainActivity : ComponentActivity() {
                 ResetConfirmDialog(
                     assets = assets,
                     onConfirm = {
-                        saveManager.clear()
-                        gameState.loadFrom(com.taptap.fishingidle.game.SaveData())
-                        world.fishes.clear()
-                        world.helpers.clear()
-                        world.syncFishCount()
-                        world.syncHelperCount()
-                        saveManager.save(gameState, settings)
+                        doReset()
                         showReset = false
                         showMenu = false
                         revision++

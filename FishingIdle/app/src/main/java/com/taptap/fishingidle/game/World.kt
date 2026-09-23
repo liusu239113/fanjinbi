@@ -6,24 +6,36 @@ import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** 设计空间尺寸，渲染时等比缩放到屏幕。 */
+/**
+ * 世界尺寸。宽度远大于一屏 —— 钓场是一条横向延展的河流，
+ * 镜头可以左右拖动，这样鱼群、钓手才有地方铺开。
+ */
 object Space {
-    const val W = 1000f
+    /** 世界总宽度（世界单位）。约等于 3~4 屏。 */
+    const val W = 3000f
+
+    /** 世界高度，正好铺满一屏高度。 */
     const val H = 1500f
 
-    /** 水面线：上方是船，下方是水下钓场。 */
-    const val SURFACE_Y = 300f
+    /** 水面线。上方是天空与船，下方是水下的钓场。 */
+    const val SURFACE_Y = 330f
 
     /** 鱼群活动区域。 */
-    const val POND_L = 80f
-    const val POND_R = W - 80f
-    const val POND_T = SURFACE_Y + 110f
-    const val POND_B = H - 110f
+    const val POND_L = 90f
+    const val POND_R = W - 90f
+    const val POND_T = SURFACE_Y + 130f
+    const val POND_B = H - 120f
+
+    /** 抛竿离最近鱼的最大有效距离，超出则没有鱼来咬钩。 */
+    const val MAX_BITE_RANGE = 420f
 }
 
 enum class FishState { SWIMMING, APPROACHING, BITING, HOOKED, CAUGHT, ESCAPED }
 
-class Fish(val kind: FishKind, var x: Float, var y: Float) {
+class Fish(val species: Species, var x: Float, var y: Float) {
+    /** 该鱼所属的稀有度档位，决定经济曲线。 */
+    val kind: Rarity get() = species.rarity
+
     var vx = 0f
     var vy = 0f
     var state = FishState.SWIMMING
@@ -34,7 +46,7 @@ class Fish(val kind: FishKind, var x: Float, var y: Float) {
     var facing = 1f
     var wiggle = Random.nextFloat() * 6.2832f
     var stateTime = 0f
-    var scale = kind.scale * (0.9f + Random.nextFloat() * 0.25f)
+    var scale = species.scale * (0.9f + Random.nextFloat() * 0.25f)
     var targetX = 0f
     var targetY = 0f
 
@@ -48,7 +60,7 @@ class Fish(val kind: FishKind, var x: Float, var y: Float) {
         when (state) {
             FishState.SWIMMING -> {
                 if (Random.nextFloat() < dt * 0.8f) {
-                    val speed = Content.swimSpeed(kind)
+                    val speed = Content.swimSpeed(species.rarity)
                     val ang = Random.nextFloat() * 6.2832f
                     vx = cos(ang) * speed
                     vy = sin(ang) * speed * 0.55f
@@ -66,7 +78,7 @@ class Fish(val kind: FishKind, var x: Float, var y: Float) {
                 if (d < 24f) {
                     state = FishState.BITING
                 } else {
-                    val speed = Content.swimSpeed(kind) * 2.2f
+                    val speed = Content.swimSpeed(kind) * 2.4f
                     x += dx / d * speed * dt
                     y += dy / d * speed * dt
                     facing = if (dx > 0f) 1f else -1f
@@ -85,7 +97,6 @@ class Fish(val kind: FishKind, var x: Float, var y: Float) {
             }
 
             FishState.CAUGHT -> {
-                // 被拉向小船
                 x += vx * dt
                 y += vy * dt
                 vx *= 0.95f
@@ -97,6 +108,13 @@ class Fish(val kind: FishKind, var x: Float, var y: Float) {
                 y += vy * dt
                 vx *= 0.95f
                 vy *= 0.95f
+                // 逃脱的鱼必须回到可钓状态，否则鱼群会被逐渐掏空，
+                // 玩家在没有鱼之后再也无法获得任何收益。
+                if (stateTime >= ESCAPE_RECOVER_TIME) {
+                    state = FishState.SWIMMING
+                    vx = 0f
+                    vy = 0f
+                }
             }
         }
     }
@@ -111,6 +129,11 @@ class Fish(val kind: FishKind, var x: Float, var y: Float) {
         if (x > Space.POND_R) { x = Space.POND_R; vx = -abs(vx) }
         if (y < Space.POND_T) { y = Space.POND_T; vy = abs(vy) }
         if (y > Space.POND_B) { y = Space.POND_B; vy = -abs(vy) }
+    }
+
+    companion object {
+        /** 逃脱后多久重新回到可钓状态（秒）。 */
+        const val ESCAPE_RECOVER_TIME = 1.2f
     }
 }
 
@@ -191,7 +214,7 @@ class Bobber {
             }
 
             BobberState.REELING -> {
-                val duration = Content.reelDuration(hookedFish?.kind ?: FishKind.COMMON) /
+                val duration = Content.reelDuration(hookedFish?.kind ?: Rarity.COMMON) /
                     reelSpeed.toFloat().coerceAtLeast(0.2f)
                 reelProgress += (1f / duration) * dt + taps * TAP_BONUS
                 y = targetY + 16f + sin(stateTime * 14f) * 10f
@@ -207,7 +230,7 @@ class Bobber {
         return null
     }
 
-    /** 玩家点击浮标：咬钩→开始收线。返回 true 表示点击被消费。 */
+    /** 玩家点击：咬钩→开始收线。返回 true 表示点击被消费。 */
     fun onTap(): Boolean = when (state) {
         BobberState.BITE -> { state = BobberState.REELING; true }
         BobberState.REELING -> true
@@ -217,7 +240,7 @@ class Bobber {
     val isActive: Boolean get() = state != BobberState.DONE && state != BobberState.IDLE
 
     companion object {
-        const val BITE_WINDOW = 1.5f
+        const val BITE_WINDOW = 2.2f
         const val TAP_BONUS = 0.055f
         const val FLY_DURATION = 0.42f
 
@@ -229,9 +252,16 @@ class Bobber {
 enum class BobberEvent { Landed, Bite, Missed, Reeled, Empty }
 
 /** 自动钓手状态。 */
-enum class HelperState { IDLE, MOVING, CASTING }
+enum class HelperState { IDLE, ROWING, CASTING }
 
-class Helper(var x: Float, var y: Float) {
+/**
+ * 自动钓手：一条漂在水面上的小船，会划到目标鱼上方抛线把它钓上来。
+ * 船始终在水面（SURFACE_Y），钓线垂到水下的鱼身上 —— 与玩家自己的钓法一致。
+ */
+class Helper(var x: Float) {
+    /** 船始终浮在水面。 */
+    var y = Space.SURFACE_Y - 24f
+
     var state = HelperState.IDLE
         set(value) {
             field = value
@@ -242,19 +272,25 @@ class Helper(var x: Float, var y: Float) {
     var targetFish: Fish? = null
     var facing = 1f
     var wiggle = Random.nextFloat() * 6.2832f
+    /** 钓线终点（目标鱼的位置）。 */
     var lineX = x
-    var lineY = y
+    var lineY = Space.SURFACE_Y
+    /** 划船时的上下浮动相位。 */
+    private var bobPhase = Random.nextFloat() * 6.2832f
 
     fun update(dt: Float, gameState: GameState, world: World) {
         stateTime += dt
         wiggle += dt * 3.2f
+        bobPhase += dt * 2.4f
+        y = Space.SURFACE_Y - 24f + sin(bobPhase) * 5f
+
         when (state) {
             HelperState.IDLE -> {
                 if (stateTime >= idleDuration) {
                     val t = world.pickTargetForHelper(this)
                     if (t != null) {
                         targetFish = t
-                        state = HelperState.MOVING
+                        state = HelperState.ROWING
                     } else {
                         stateTime = 0f
                         idleDuration = 0.5f
@@ -262,7 +298,7 @@ class Helper(var x: Float, var y: Float) {
                 }
             }
 
-            HelperState.MOVING -> {
+            HelperState.ROWING -> {
                 val f = targetFish
                 if (f == null || f.state != FishState.SWIMMING) {
                     world.releaseClaim(this)
@@ -271,15 +307,14 @@ class Helper(var x: Float, var y: Float) {
                     idleDuration = 0.3f
                 } else {
                     val dx = f.x - x
-                    val dy = f.y - y
-                    val d = hypot(dx, dy)
-                    val speed = 215f * gameState.helperEfficiency.toFloat()
-                    if (d < 42f) {
+                    val speed = 260f * gameState.helperEfficiency.toFloat()
+                    if (abs(dx) < 24f) {
                         state = HelperState.CASTING
-                        lineX = f.x; lineY = f.y
+                        lineX = f.x
+                        lineY = f.y
                     } else {
-                        x += dx / d * speed * dt
-                        y += dy / d * speed * dt
+                        x += (if (dx > 0f) 1f else -1f) * speed * dt
+                        x = x.coerceIn(Space.POND_L, Space.POND_R)
                         facing = if (dx > 0f) 1f else -1f
                     }
                 }
@@ -310,50 +345,104 @@ class World(val gameState: GameState) {
     val particles = mutableListOf<Particle>()
     val bobber = Bobber()
 
+    /**
+     * 环境气泡。让水下看起来一直在动，而不是一张静止的贴图。
+     * 数量按世界宽度铺开，位置随机但只在初始化时生成一次。
+     */
+    val bubbles = mutableListOf<Bubble>()
+
+    init {
+        spawnAmbientBubbles()
+    }
+
+    private fun spawnAmbientBubbles() {
+        val count = (Space.W / 130f).toInt()
+        repeat(count) {
+            bubbles.add(
+                Bubble(
+                    x = Random.nextFloat() * Space.W,
+                    y = Random.nextFloat() * (Space.POND_B - Space.POND_T) + Space.POND_T,
+                    radius = 2.5f + Random.nextFloat() * 5.5f,
+                    speed = 18f + Random.nextFloat() * 34f,
+                    phase = Random.nextFloat() * 6.2832f,
+                )
+            )
+        }
+    }
+
     /** 本帧待播放的音效事件，由 UI 层消费。 */
     val pendingSounds = mutableListOf<String>()
 
     var time = 0f
-    /** 手动抛竿的落点。 */
-    var castX = Space.W / 2f
-    var castY = Space.POND_T + 220f
+
+    /** 镜头横向位置（世界坐标）。玩家的船跟随镜头。 */
+    var cameraX = Space.W / 2f
+        private set
+
+    /** 当前视野宽度（世界单位），由渲染层回填。 */
+    var viewHalfWidth = 500f
+
     /** 收线期间累计的点击加力，每帧清零。 */
     private var tapsThisFrame = 0
-    /** 自动收线（智能浮标）的悬停目标。 */
     var hoverFish: Fish? = null
     var autoReelCooldown = 0f
+    var pendingAutoRecast = false
+
+    /**
+     * 当前钓场地图。**必须在 init 之前声明** —— init 里的 syncFishCount()
+     * 会读它来抽鱼种，声明在 init 之后的话此刻还是 null。
+     */
+    var currentMap: FishingMap = gameState.currentMap
 
     init {
         syncFishCount()
         syncHelperCount()
     }
 
+    // ---------------- 镜头 ----------------
+
+    fun scrollCamera(dx: Float) {
+        val half = viewHalfWidth
+        val minX = half
+        val maxX = (Space.W - half).coerceAtLeast(half)
+        cameraX = (cameraX + dx).coerceIn(minX, maxX)
+    }
+
+    /** 玩家船的位置：始终跟随镜头水平中心。 */
+    val boatX: Float get() = cameraX
+
     // ---------------- 数量同步 ----------------
 
-    private fun countOf(kind: FishKind) = fishes.count { it.kind == kind }
+    private fun countOf(rarity: Rarity) = fishes.count { it.kind == rarity }
 
-    /** 让鱼群数量与 GameState 一致（多退少补）。 */
+    /**
+     * 让鱼群数量与 GameState 一致（多退少补）。
+     *
+     * 新鱼从**当前地图的鱼种池**里按权重抽取，所以换地图后
+     * 钓场里游的就都是那片水域该有的鱼。
+     */
     fun syncFishCount() {
-        for (kind in FishKind.entries) {
-            val want = gameState.ownedCount(kind)
-            val have = countOf(kind)
+        for (rarity in Rarity.entries) {
+            val want = gameState.ownedCount(rarity)
+            val have = countOf(rarity)
             if (have < want) {
                 repeat(want - have) {
+                    val pool = currentMap.species.filter { it.rarity == rarity }
+                    if (pool.isEmpty()) return@repeat
                     fishes.add(
                         Fish(
-                            kind,
+                            pool.random(),
                             Random.nextFloat() * (Space.POND_R - Space.POND_L) + Space.POND_L,
                             Random.nextFloat() * (Space.POND_B - Space.POND_T) + Space.POND_T,
                         )
                     )
                 }
             } else if (have > want) {
-                // 移除多余的（优先移除空闲的）
                 var toRemove = have - want
                 val iter = fishes.iterator()
                 while (iter.hasNext() && toRemove > 0) {
                     val f = iter.next()
-                    if (f.kind == kind && f.state == FishState.SWIMMING) {
+                    if (f.kind == rarity && f.state == FishState.SWIMMING) {
                         iter.remove(); toRemove--
                     }
                 }
@@ -361,36 +450,50 @@ class World(val gameState: GameState) {
         }
     }
 
+    /** 切换地图：清空现有鱼群，按新地图重新铺满。 */
+    fun switchMap(map: FishingMap) {
+        currentMap = map
+        fishes.clear()
+        syncFishCount()
+    }
+
     fun syncHelperCount() {
         val want = gameState.helpers
         while (helpers.size < want) {
-            helpers.add(
-                Helper(
-                    Random.nextFloat() * (Space.POND_R - Space.POND_L) + Space.POND_L,
-                    Random.nextFloat() * (Space.POND_B - Space.POND_T) * 0.5f + Space.POND_T,
-                )
-            )
+            // 沿河面均匀铺开，避免全挤在一处
+            val slot = helpers.size
+            val spread = (Space.POND_R - Space.POND_L)
+            val x = Space.POND_L + (spread * ((slot * 0.618f) % 1f))
+            helpers.add(Helper(x))
         }
         while (helpers.size > want) helpers.removeAt(helpers.size - 1)
     }
 
     // ---------------- 玩家操作 ----------------
 
-    /** 手动抛竿。返回是否成功。 */
+    /**
+     * 手动抛竿。
+     *
+     * 只有落点附近 [Space.MAX_BITE_RANGE] 内**有鱼**时才会有鱼来咬钩，
+     * 否则空竿收回 —— 这样"抛到鱼群边上"才有意义。
+     */
     fun castLine(tx: Float, ty: Float): Boolean {
         if (bobber.isActive) return false
-        castX = tx.coerceIn(Space.POND_L, Space.POND_R)
-        castY = ty.coerceIn(Space.POND_T, Space.POND_B)
+        val cx = tx.coerceIn(Space.POND_L, Space.POND_R)
+        val cy = ty.coerceIn(Space.POND_T, Space.POND_B)
 
-        // 随机挑一条空闲的鱼咬钩
-        val candidates = fishes.filter { it.state == FishState.SWIMMING }
-        val fish = if (candidates.isEmpty()) null else candidates.random()
+        // 挑落点附近的空闲鱼，太远的够不着
+        val fish = fishes
+            .filter { it.state == FishState.SWIMMING }
+            .filter { hypot(it.x - cx, it.y - cy) <= Space.MAX_BITE_RANGE }
+            .minByOrNull { hypot(it.x - cx, it.y - cy) }
+
         fish?.let {
-            it.setTarget(castX, castY)
+            it.setTarget(cx, cy)
             it.state = FishState.APPROACHING
         }
 
-        bobber.cast(Space.W / 2f, Space.SURFACE_Y - 40f, castX, castY)
+        bobber.cast(boatX, Space.SURFACE_Y - 70f, cx, cy)
         bobber.hookedFish = fish
         if (fish != null) {
             val range = Content.biteDelay(fish.kind)
@@ -403,7 +506,7 @@ class World(val gameState: GameState) {
     /**
      * 把已钓上来的鱼"放回"水里。
      * 鱼群是钓场的常驻居民，数量由 GameState 决定；被钓起只是播放一段上岸动画，
-     * 随后在同位置重新入水，这样玩家的钓场规模不会被慢慢掏空。
+     * 随后重新入水，这样玩家的钓场规模不会被慢慢掏空。
      */
     private fun returnToPond(f: Fish) {
         f.state = FishState.SWIMMING
@@ -412,22 +515,28 @@ class World(val gameState: GameState) {
         f.y = Random.nextFloat() * (Space.POND_B - Space.POND_T) * 0.8f + Space.POND_T
         val ang = Random.nextFloat() * 6.2832f
         val speed = Content.swimSpeed(f.kind)
-        f.vx = kotlin.math.cos(ang) * speed
-        f.vy = kotlin.math.sin(ang) * speed * 0.55f
+        f.vx = cos(ang) * speed
+        f.vy = sin(ang) * speed * 0.55f
     }
 
-    /** 点击屏幕：命中浮标则推进状态；否则（智能浮标已解锁）收线悬停的鱼。 */
+    /**
+     * 点击屏幕推进钓鱼流程。
+     *
+     * 咬钩/收线阶段**不再要求点中浮标**：手机上浮标只有几十像素，
+     * 要求精确点击会让玩家频繁失手，误以为游戏坏了。
+     * 只要浮标处于活动状态，点哪里都算数。
+     */
     fun onTap(wx: Float, wy: Float): Boolean {
-        if (bobber.isActive) {
-            val d = hypot(wx - bobber.x, wy - bobber.y)
-            if (d < 130f || bobber.state == BobberState.REELING) {
+        if (!bobber.isActive) return false
+        when (bobber.state) {
+            BobberState.BITE, BobberState.REELING -> {
                 if (bobber.onTap()) {
                     tapsThisFrame++
                     if (bobber.state == BobberState.REELING) pendingSounds.add("reel")
                     return true
                 }
             }
-            return false
+            else -> Unit
         }
         return false
     }
@@ -438,10 +547,10 @@ class World(val gameState: GameState) {
     fun pickTargetForHelper(helper: Helper): Fish? {
         val reachable = fishes.filter { f ->
             f.state == FishState.SWIMMING && f.claimedBy == null && when (f.kind) {
-                FishKind.COMMON -> true
-                FishKind.RARE -> gameState.helperCanRare
-                FishKind.EPIC -> gameState.helperCanEpic
-                FishKind.LEGEND -> gameState.helperCanLegend
+                Rarity.COMMON -> true
+                Rarity.RARE -> gameState.helperCanRare
+                Rarity.EPIC -> gameState.helperCanEpic
+                Rarity.LEGEND -> gameState.helperCanLegend
             }
         }
         val target = reachable.minByOrNull { hypot(it.x - helper.x, it.y - helper.y) } ?: return null
@@ -456,7 +565,7 @@ class World(val gameState: GameState) {
 
     /** 钓手钓上一条鱼，立即结算，随后鱼回到水里。 */
     fun helperCatch(helper: Helper, fish: Fish) {
-        val value = gameState.catchValue(fish.kind)
+        val value = gameState.catchValue(fish.species, currentMap)
         award(fish, value, Source.HELPER, fish.x, fish.y)
         spawnSplash(fish.x, fish.y, fish.kind)
         returnToPond(fish)
@@ -469,7 +578,6 @@ class World(val gameState: GameState) {
 
         for (f in fishes) f.update(dt)
 
-        // 浮标状态机
         val ev = bobber.update(dt, currentReelSpeed(), tapsThisFrame)
         tapsThisFrame = 0
         ev?.let { handleBobberEvent(it) }
@@ -477,7 +585,6 @@ class World(val gameState: GameState) {
         // 清理失效预定：目标已不再空闲时释放，让钓手重新选目标
         fishes.forEach { if (it.claimedBy != null && it.state != FishState.SWIMMING) it.claimedBy = null }
 
-        // 钓手
         for (h in helpers) h.update(dt, gameState, this)
 
         // 自动收线：悬停在小鱼上时自动抛竿（智能浮标）
@@ -493,15 +600,15 @@ class World(val gameState: GameState) {
         // 清理已完成的鱼（游出画面的）
         fishes.removeAll { it.state == FishState.CAUGHT && it.y < Space.POND_T - 200f }
 
-        // 浮动文字与粒子
         for (t in floatingTexts) t.update(dt)
         floatingTexts.removeAll { it.dead }
         for (p in particles) p.update(dt)
         particles.removeAll { it.dead }
+        for (b in bubbles) b.update(dt, time)
     }
 
     private fun currentReelSpeed(): Double {
-        val kind = bobber.hookedFish?.kind ?: FishKind.COMMON
+        val kind = bobber.hookedFish?.kind ?: Rarity.COMMON
         return gameState.reelSpeed(kind)
     }
 
@@ -523,21 +630,25 @@ class World(val gameState: GameState) {
                 }
                 pendingSounds.add("fail")
                 spawnText(bobber.x, bobber.y - 40f, "跑掉了…", Palette.TEXT_BAD, 0.9f)
+                if (gameState.combo > 0) {
+                    spawnText(bobber.x, bobber.y - 80f, "连击中断", Palette.TEXT_BAD, 0.75f)
+                }
+                gameState.onCatchFail()
                 bobber.hookedFish = null
             }
 
             BobberEvent.Reeled -> {
                 val f = bobber.hookedFish
                 if (f != null) {
-                    // 稀有鱼有概率在收线最后一刻挣脱
                     if (Random.nextFloat() < Content.escapeChance(f.kind) * 0.35f) {
                         f.state = FishState.ESCAPED
                         f.vx = if (Random.nextBoolean()) 110f else -110f
                         f.vy = 70f
                         pendingSounds.add("fail")
                         spawnText(bobber.x, bobber.y - 40f, "线断了！", Palette.TEXT_BAD, 1.0f)
+                        gameState.onCatchFail()
                     } else {
-                        val value = gameState.catchValue(f.kind)
+                        val value = gameState.catchValue(f.species, currentMap)
                         award(f, value, Source.MANUAL, bobber.x, bobber.y)
                         spawnSplash(bobber.x, bobber.y, f.kind)
                         returnToPond(f)
@@ -554,8 +665,6 @@ class World(val gameState: GameState) {
         }
     }
 
-    var pendingAutoRecast = false
-
     /** 连锁反应：惊动周围鱼群，最多 8 条。 */
     private fun triggerChain(x: Float, y: Float, origin: Fish) {
         val nearby = fishes
@@ -563,7 +672,7 @@ class World(val gameState: GameState) {
             .sortedBy { hypot(it.x - x, it.y - y) }
             .take(8)
         for (f in nearby) {
-            val value = gameState.catchValue(f.kind)
+            val value = gameState.catchValue(f.species, currentMap)
             f.state = FishState.CAUGHT
             f.vy = -90f
             f.vx = (f.x - x) * 0.8f
@@ -572,22 +681,54 @@ class World(val gameState: GameState) {
         }
     }
 
-    /** 结算一次渔获：加钱、记录、生成表现。 */
-    private fun award(fish: Fish, value: Double, source: Source, x: Float, y: Float) {
-        gameState.money += value
-        gameState.recordEarning(fish.kind, source, value)
-        gameState.recordCatch(value)
+    /** 本帧新解锁的成就，供 UI 弹提示。 */
+    val pendingAchievements = mutableListOf<AchievementDef>()
 
-        // 用"典型渔获价值"做归一化，而不是历史最高值 —— 后者会随进度膨胀，
-        // 导致浮动文字越来越小。
-        val typical = gameState.catchValue(FishKind.COMMON).coerceAtLeast(1.0)
-        val scale = (value / typical).toFloat().let {
-            // 对数压缩，避免大鱼文字夸张到撑满屏幕
+    /**
+     * 结算一次渔获：加钱、记录、生成表现。
+     *
+     * 手动收线才有连击加成与成就推进 —— 自动钓手是挂机收益，不该刷连击。
+     */
+    private fun award(fish: Fish, value: Double, source: Source, x: Float, y: Float) {
+        val manual = source == Source.MANUAL || source == Source.CHAIN
+        var finalValue = value
+
+        if (manual) {
+            gameState.onCatchSuccess()
+            finalValue *= gameState.comboMultiplier
+        }
+
+        // 图鉴收集：钓到就记一笔
+        gameState.recordSpecies(fish.species.id)
+
+        gameState.money += finalValue
+        gameState.recordEarning(fish.kind, source, finalValue)
+        gameState.recordCatch(finalValue)
+
+        val typical = gameState.catchValue(Rarity.COMMON).coerceAtLeast(1.0)
+        val scale = (finalValue / typical).toFloat().let {
             (0.9f + kotlin.math.ln(1f + it) * 0.22f).coerceIn(0.9f, 2.4f)
         }
-        spawnText(x, y - 30f, "+${formatNumber(value)}", Palette.TEXT_GOLD, scale)
+        spawnText(x, y - 30f, "+${formatNumber(finalValue)}", Palette.TEXT_GOLD, scale)
+
+        // 连击提示
+        if (manual && gameState.combo >= 3) {
+            spawnText(
+                x, y - 78f,
+                "${gameState.combo} 连击  ×${String.format("%.2f", gameState.comboMultiplier)}",
+                Palette.TEXT_GOOD, 0.85f,
+            )
+        }
+
         spawnCoinBurst(x, y)
-        pendingSounds.add(if (value >= 100) "success" else "coin")
+        pendingSounds.add(if (finalValue >= 100) "success" else "coin")
+
+        // 成就检查
+        val newly = Achievements.checkUnlocks(gameState)
+        if (newly.isNotEmpty()) {
+            pendingAchievements.addAll(newly)
+            pendingSounds.add("success")
+        }
     }
 
     // ---------------- 表现 ----------------
@@ -597,12 +738,12 @@ class World(val gameState: GameState) {
         floatingTexts.add(FloatingText(x, y, text, color, scale))
     }
 
-    fun spawnSplash(x: Float, y: Float, kind: FishKind) {
+    fun spawnSplash(x: Float, y: Float, kind: Rarity) {
         val color = when (kind) {
-            FishKind.COMMON -> Palette.SPLASH
-            FishKind.RARE -> Palette.SPLASH_GREEN
-            FishKind.EPIC -> Palette.SPLASH_GOLD
-            FishKind.LEGEND -> Palette.SPLASH_PURPLE
+            Rarity.COMMON -> Palette.SPLASH
+            Rarity.RARE -> Palette.SPLASH_GREEN
+            Rarity.EPIC -> Palette.SPLASH_GOLD
+            Rarity.LEGEND -> Palette.SPLASH_PURPLE
         }
         repeat(9) {
             particles.add(

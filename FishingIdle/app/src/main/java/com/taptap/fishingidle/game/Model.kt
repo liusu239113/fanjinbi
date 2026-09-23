@@ -2,14 +2,7 @@ package com.taptap.fishingidle.game
 
 import kotlin.math.floor
 import kotlin.math.pow
-
-/** 鱼种。对应原版的三种金币：小鱼 / 鲤鱼 / 锦鲤，外加最高级的深海巨口鱼。 */
-enum class FishKind(val displayName: String, val sprite: String, val scale: Float) {
-    COMMON("小鱼", "fish_common", 0.72f),
-    RARE("鲤鱼", "fish_rare", 0.86f),
-    EPIC("锦鲤", "fish_epic", 1.00f),
-    LEGEND("巨口鱼", "fish_legend", 1.18f),
-}
+import kotlin.math.sin
 
 /**
  * 可购买项。价格公式与原版一致：price(n) = floor(base^n * multiplier + flatOffset)
@@ -86,6 +79,27 @@ class FloatingText(
 
     /** 淡出系数。 */
     val alpha: Float get() = if (progress < 0.6f) 1f else (1f - (progress - 0.6f) / 0.4f).coerceIn(0f, 1f)
+}
+
+/** 环境气泡：缓慢上浮，到水面后从水底重新冒出。 */
+class Bubble(
+    var x: Float,
+    var y: Float,
+    val radius: Float,
+    val speed: Float,
+    val phase: Float,
+) {
+    fun update(dt: Float, time: Float) {
+        y -= speed * dt
+        // 左右轻微摆动，避免笔直上浮显得死板
+        if (y < Space.POND_T) {
+            y = Space.POND_B
+            x = kotlin.random.Random.nextFloat() * Space.W
+        }
+    }
+
+    /** 横向摆动的当前偏移。 */
+    fun swayX(time: Float): Float = sin(time * 1.6f + phase) * 6f
 }
 
 /** 水花 / 金币爆开粒子。 */

@@ -59,6 +59,9 @@ class SaveManager(context: Context) {
         }
     }
 
+    /** 是否存在有效存档（用于主菜单区分"开始游戏"与"继续游戏"）。 */
+    fun hasSave(): Boolean = prefs.contains(KEY)
+
     fun clear() {
         prefs.edit().remove(KEY).apply()
     }

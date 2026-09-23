@@ -50,34 +50,62 @@ class Assets(context: Context) {
             it.eraseColor(android.graphics.Color.MAGENTA)
         }
 
+    /**
+     * 读取动画图集的配置（列数、行数）。
+     * 由 tools/build_animations.py 生成，用于把精灵表切成单帧。
+     */
+    fun frameConfig(name: String): Pair<Int, Int>? {
+        return try {
+            appContext.assets.open("art/${name}.json").use { input ->
+                val text = input.bufferedReader().readText()
+                val cols = Regex("\"columns\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toInt()
+                val rows = Regex("\"rows\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toInt()
+                if (cols != null && rows != null) cols to rows else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun evict() {
         cache.clear()
     }
 }
 
 /**
- * 缩放绘制辅助：把设计空间 (1000x1500) 映射到屏幕。
- * 保持宽高比，按宽度铺满，纵向居中裁切。
+ * 屏幕 ↔ 世界坐标转换。
+ *
+ * 世界是 3000×1500 的横向长条，屏幕只显示其中一段。
+ * 缩放以**高度**为基准：保证世界高度正好铺满一屏（水面、河床位置固定），
+ * 横向能看多宽则取决于屏幕宽高比 —— 宽屏看到更多，窄屏看到更少。
+ *
+ * 传入的 x 坐标一律是**镜头相对坐标**（世界 x - cameraX）。
  */
 class ViewTransform(val screenW: Float, val screenH: Float) {
-    val scale = screenW / Space.W
+    val scale = screenH / Space.H
     val offsetX = 0f
-    val offsetY = (screenH - Space.H * scale) / 2f
+    val offsetY = 0f
 
-    fun toScreenX(x: Float) = offsetX + x * scale
+    fun toScreenX(camRelativeX: Float) = offsetX + camRelativeX * scale
     fun toScreenY(y: Float) = offsetY + y * scale
 
+    /** 屏幕 x 转世界 x（不含镜头偏移，调用方需自行加上 cameraX）。 */
     fun toWorldX(sx: Float) = (sx - offsetX) / scale
     fun toWorldY(sy: Float) = (sy - offsetY) / scale
 
-    /** 世界坐标点是否在屏幕可见范围内。 */
-    fun isVisible(y: Float) = toScreenY(y) > -200f && toScreenY(y) < screenH + 200f
+    /** 当前视野宽度（世界单位）。 */
+    val worldViewWidth: Float get() = screenW / scale
 }
 
 /** 精灵绘制封装：以中心点绘制，支持水平翻转与透明度。 */
 object SpriteDraw {
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val tintedPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
+    /**
+     * [tintMatrix] 是 4x5 颜色矩阵；传 null 表示原色。
+     * 用 ColorMatrixColorFilter 换色不产生新位图，几十种鱼共用一张精灵。
+     */
     fun draw(
         canvas: Canvas,
         bmp: Bitmap?,
@@ -87,8 +115,17 @@ object SpriteDraw {
         alpha: Int = 255,
         flipX: Boolean = false,
         rotation: Float = 0f,
+        tintMatrix: FloatArray? = null,
     ) {
         if (bmp == null || alpha <= 0) return
+        val paint = if (tintMatrix != null) {
+            // 每次按需构造滤镜：ColorMatrixColorFilter 不可变，无法就地改矩阵。
+            // 调用点按精灵缓存了 matrix 数组，这里的分配开销可以忽略。
+            tintedPaint.colorFilter = android.graphics.ColorMatrixColorFilter(tintMatrix)
+            tintedPaint
+        } else {
+            this.paint
+        }
         paint.alpha = alpha
         val w = bmp.width * scale
         val h = bmp.height * scale

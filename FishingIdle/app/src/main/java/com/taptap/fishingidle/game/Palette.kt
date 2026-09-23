@@ -31,11 +31,11 @@ object Palette {
     val PANEL_EDGE = Color.rgb(232, 180, 70)
     val OVERLAY = Color.argb(190, 10, 18, 22)
 
-    val RARITY: Map<FishKind, Int> = mapOf(
-        FishKind.COMMON to Color.rgb(196, 210, 220),
-        FishKind.RARE to Color.rgb(150, 214, 150),
-        FishKind.EPIC to Color.rgb(255, 206, 110),
-        FishKind.LEGEND to Color.rgb(198, 156, 246),
+    val RARITY: Map<Rarity, Int> = mapOf(
+        Rarity.COMMON to Color.rgb(196, 210, 220),
+        Rarity.RARE to Color.rgb(150, 214, 150),
+        Rarity.EPIC to Color.rgb(255, 206, 110),
+        Rarity.LEGEND to Color.rgb(198, 156, 246),
     )
 }
 

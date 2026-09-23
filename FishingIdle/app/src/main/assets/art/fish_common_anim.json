@@ -1,0 +1,8 @@
+{
+  "image": "fish_common_anim.png",
+  "frameWidth": 135,
+  "frameHeight": 81,
+  "columns": 4,
+  "rows": 2,
+  "frameCount": 8
+}

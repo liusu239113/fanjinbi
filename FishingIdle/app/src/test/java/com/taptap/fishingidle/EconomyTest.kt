@@ -1,7 +1,7 @@
 package com.taptap.fishingidle
 
 import com.taptap.fishingidle.game.Content
-import com.taptap.fishingidle.game.FishKind
+import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.SaveData
 import org.junit.Assert.assertEquals
@@ -23,7 +23,7 @@ class EconomyTest {
         assertEquals(0.0, s.money, 0.001)
         assertEquals(1, s.commonFish)
         assertEquals(0, s.rareFish)
-        assertEquals(1.0, s.catchValue(FishKind.COMMON), 0.001)
+        assertEquals(1.0, s.catchValue(Rarity.COMMON), 0.001)
     }
 
     @Test
@@ -106,11 +106,11 @@ class EconomyTest {
         s.money = 1e9
         // 小鱼：base 1 + add 1*N，再乘倍率
         repeat(3) { s.buy(def("value_add_common")) }
-        assertEquals(4.0, s.catchValue(FishKind.COMMON), 0.001)  // (1+3)*1
+        assertEquals(4.0, s.catchValue(Rarity.COMMON), 0.001)  // (1+3)*1
 
         repeat(2) { s.buy(def("value_mul_common")) }
         // (1 + 3) * (1 + 0.2*2) = 4 * 1.4 = 5.6
-        assertEquals(5.6, s.catchValue(FishKind.COMMON), 0.001)
+        assertEquals(5.6, s.catchValue(Rarity.COMMON), 0.001)
     }
 
     @Test
@@ -162,7 +162,7 @@ class EconomyTest {
         assertEquals(original.chainReaction, restored.chainReaction)
 
         // 派生值必须完全一致
-        for (kind in FishKind.entries) {
+        for (kind in Rarity.entries) {
             assertEquals(
                 "渔获价值不一致: $kind",
                 original.catchValue(kind), restored.catchValue(kind), 0.001,
@@ -213,7 +213,7 @@ class EconomyTest {
         repeat(50) { assertTrue(s.buy(def("value_add_common"))) }   // +1 × 50
         repeat(20) { assertTrue(s.buy(def("value_mul_common"))) }   // +0.2 × 20 = ×5
         // (1 + 50) * 5 = 255
-        assertEquals(255.0, s.catchValue(FishKind.COMMON), 0.001)
+        assertEquals(255.0, s.catchValue(Rarity.COMMON), 0.001)
     }
 
     @Test

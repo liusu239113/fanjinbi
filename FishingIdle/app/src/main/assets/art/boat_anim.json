@@ -1,0 +1,8 @@
+{
+  "image": "boat_anim.png",
+  "frameWidth": 141,
+  "frameHeight": 109,
+  "columns": 4,
+  "rows": 2,
+  "frameCount": 8
+}
