@@ -1,0 +1,78 @@
+package com.taptap.fishingidle.game
+
+import android.content.Context
+import android.content.SharedPreferences
+import org.json.JSONObject
+
+/** 存档读写。只保存购买次数与金钱类数值，其余靠重放重建。 */
+class SaveManager(context: Context) {
+
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("fishing_idle_save", Context.MODE_PRIVATE)
+
+    fun save(state: GameState, settings: Settings) {
+        val root = JSONObject()
+        root.put("version", SAVE_VERSION)
+        root.put("money", state.money)
+        root.put("totalMoney", state.totalMoney)
+        root.put("highestMoney", state.highestMoney)
+        root.put("highestCatch", state.highestCatch)
+
+        val purchases = JSONObject()
+        for ((k, v) in state.purchases) purchases.put(k, v)
+        root.put("purchases", purchases)
+
+        val opts = JSONObject()
+        opts.put("master", settings.masterVolume.toDouble())
+        opts.put("sfx", settings.sfxVolume.toDouble())
+        opts.put("bgm", settings.bgmVolume.toDouble())
+        opts.put("hideText", settings.hideFloatingText)
+        root.put("options", opts)
+
+        prefs.edit().putString(KEY, root.toString()).apply()
+    }
+
+    fun load(state: GameState, settings: Settings): Boolean {
+        val raw = prefs.getString(KEY, null) ?: return false
+        return try {
+            val root = JSONObject(raw)
+            val data = SaveData()
+            data.money = root.optDouble("money", 0.0)
+            data.totalMoney = root.optDouble("totalMoney", 0.0)
+            data.highestMoney = root.optDouble("highestMoney", 0.0)
+            data.highestCatch = root.optDouble("highestCatch", 0.0)
+
+            root.optJSONObject("purchases")?.let { p ->
+                for (key in p.keys()) data.purchases[key] = p.optInt(key, 0)
+            }
+            state.loadFrom(data)
+
+            root.optJSONObject("options")?.let { o ->
+                settings.masterVolume = o.optDouble("master", 0.8).toFloat()
+                settings.sfxVolume = o.optDouble("sfx", 0.8).toFloat()
+                settings.bgmVolume = o.optDouble("bgm", 0.5).toFloat()
+                settings.hideFloatingText = o.optBoolean("hideText", false)
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun clear() {
+        prefs.edit().remove(KEY).apply()
+    }
+
+    private companion object {
+        const val KEY = "save_json"
+        const val SAVE_VERSION = 1
+    }
+}
+
+/** 玩家设置。 */
+class Settings {
+    var masterVolume: Float = 0.8f
+    var sfxVolume: Float = 0.8f
+    var bgmVolume: Float = 0.5f
+    var hideFloatingText: Boolean = false
+}

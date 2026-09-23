@@ -1,0 +1,2 @@
+-dontwarn androidx.**
+-keep class com.taptap.fishingidle.** { *; }

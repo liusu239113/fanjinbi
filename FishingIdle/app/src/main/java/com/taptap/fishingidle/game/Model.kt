@@ -1,0 +1,127 @@
+package com.taptap.fishingidle.game
+
+import kotlin.math.floor
+import kotlin.math.pow
+
+/** 鱼种。对应原版的三种金币：小鱼 / 鲤鱼 / 锦鲤，外加最高级的深海巨口鱼。 */
+enum class FishKind(val displayName: String, val sprite: String, val scale: Float) {
+    COMMON("小鱼", "fish_common", 0.72f),
+    RARE("鲤鱼", "fish_rare", 0.86f),
+    EPIC("锦鲤", "fish_epic", 1.00f),
+    LEGEND("巨口鱼", "fish_legend", 1.18f),
+}
+
+/**
+ * 可购买项。价格公式与原版一致：price(n) = floor(base^n * multiplier + flatOffset)
+ * 其中 n 为已购买次数。
+ */
+data class PurchasableDef(
+    val id: String,
+    val attribute: Attribute,
+    val name: String,
+    val desc: String,
+    val icon: String,
+    val priceBase: Double,
+    val priceMultiplier: Double,
+    val flatOffset: Double = 0.0,
+    val increaseAmount: Double = 1.0,
+    val maxPurchases: Int = 1,
+    /** 满足该条件才在商店可见。参数为当前游戏状态。 */
+    val visibleWhen: (GameState) -> Boolean = { true },
+    /** 满足该条件才能购买。 */
+    val buyableWhen: (GameState) -> Boolean = { true },
+) {
+    fun price(owned: Int): Double {
+        if (priceBase <= 0.0) return flatOffset
+        return floor(priceBase.pow(owned) * priceMultiplier + flatOffset)
+    }
+
+    fun isMaxed(owned: Int): Boolean = owned >= maxPurchases
+}
+
+/** 购买项影响的属性。沿用原版枚举语义。 */
+enum class Attribute {
+    COMMON_FISH, RARE_FISH, EPIC_FISH, LEGEND_FISH,
+    HELPER,
+    COMMON_VALUE_ADD, RARE_VALUE_ADD, EPIC_VALUE_ADD, LEGEND_VALUE_ADD,
+    COMMON_VALUE_MUL, RARE_VALUE_MUL, EPIC_VALUE_MUL, LEGEND_VALUE_MUL,
+    COMMON_REEL_SPEED, RARE_REEL_SPEED, EPIC_REEL_SPEED, LEGEND_REEL_SPEED,
+    HELPER_EFFICIENCY,
+    AUTO_REEL_CHANCE,
+    AUTO_REEL_UNLOCK,
+    HELPER_CAN_RARE,
+    HELPER_CAN_EPIC,
+    HELPER_CAN_LEGEND,
+    CHAIN_REACTION,
+}
+
+/** 收益来源，用于统计面板。 */
+enum class Source(val displayName: String) {
+    MANUAL("手动收线"),
+    HELPER("自动钓手"),
+    CHAIN("鱼群骚动"),
+    AUTO("自动收线"),
+}
+
+/** 浮动文字。 */
+class FloatingText(
+    var x: Float,
+    var y: Float,
+    val text: String,
+    val color: Int,
+    val scale: Float,
+) {
+    var age = 0f
+    val lifetime = 1.6f
+    var dead = false
+
+    fun update(dt: Float) {
+        age += dt
+        y -= 46f * dt
+        if (age >= lifetime) dead = true
+    }
+
+    /** 0→1 的生命进度。 */
+    val progress: Float get() = (age / lifetime).coerceIn(0f, 1f)
+
+    /** 淡出系数。 */
+    val alpha: Float get() = if (progress < 0.6f) 1f else (1f - (progress - 0.6f) / 0.4f).coerceIn(0f, 1f)
+}
+
+/** 水花 / 金币爆开粒子。 */
+class Particle(
+    var x: Float,
+    var y: Float,
+    var vx: Float,
+    var vy: Float,
+    val radius: Float,
+    val color: Int,
+    val lifetime: Float,
+) {
+    var age = 0f
+    var dead = false
+
+    fun update(dt: Float) {
+        age += dt
+        x += vx * dt
+        y += vy * dt
+        vy += 260f * dt      // 重力
+        vx *= 0.99f
+        if (age >= lifetime) dead = true
+    }
+
+    val alpha: Float get() = (1f - age / lifetime).coerceIn(0f, 1f)
+}
+
+/** 存档数据。只保存购买次数与金钱类数值，属性靠重放购买来重建（与原版一致）。 */
+class SaveData {
+    var money: Double = 0.0
+    var totalMoney: Double = 0.0
+    var highestMoney: Double = 0.0
+    var highestCatch: Double = 0.0
+    var purchases: MutableMap<String, Int> = mutableMapOf()
+    var masterVolume: Float = 0.8f
+    var sfxVolume: Float = 0.8f
+    var bgmVolume: Float = 0.5f
+    var hideFloatingText: Boolean = false
+}
