@@ -25,6 +25,11 @@ class GameRenderer(
     private val gameState: GameState,
     private val settings: Settings,
 ) {
+    private companion object {
+        /** 玩家小船在世界坐标下的宽度。按世界单位给，避免随屏幕像素放大。 */
+        const val BOAT_WORLD_W = 260f
+    }
+
     // 稀有度颜色在构造时查表一次，避免每帧对每条鱼做 Map 查找
     private val rarityColor: Map<Rarity, Int> = mapOf(
         Rarity.COMMON to Palette.SPLASH,
@@ -49,15 +54,25 @@ class GameRenderer(
 
     private var bmpWater: Bitmap? = null
     private var bmpRiverbed: Bitmap? = null
-    private var bmpBoat: Bitmap? = null
     private var bmpBobber: Bitmap? = null
     private var bmpRod: Bitmap? = null
     private var bmpHelper: Bitmap? = null
-    private val bmpFish = HashMap<String, Bitmap>()
 
-    // 水下装饰：海草用帧动画，随机分布在水底
+    /** 每种鱼的逐帧动画。key 为精灵名（不含 _anim 后缀）。 */
+    private val fishFrames = HashMap<String, List<Bitmap>>()
+    /** 每种鱼每帧的播放时长（秒）。 */
+    private val fishFrameDuration = HashMap<String, Float>()
+
+    /** 船的逐帧动画（随波起伏）。 */
+    private var boatFrames: List<Bitmap> = emptyList()
+    private var boatFrameDuration = 0.12f
+
+    /** 水下装饰：海草用帧动画，随机分布在水底。 */
     private var seaweedFrames: List<Bitmap> = emptyList()
     private var seaweedSpots: List<Triple<Float, Float, Float>> = emptyList()
+
+    /** 天空的云（两种形状轮流用）。 */
+    private var cloudFrames: List<Bitmap> = emptyList()
 
     private var waterShader: Shader? = null
     private var riverbedShader: Shader? = null
@@ -72,44 +87,66 @@ class GameRenderer(
         lastScreenH = h
         val t = ViewTransform(w, h)
         bmpWater = assets.scaled("water_tile", (512 * t.scale).toInt().coerceIn(256, 768))
-        bmpRiverbed = assets.scaled("riverbed", (512 * t.scale).toInt().coerceIn(256, 768))
-        bmpBoat = assets.scaled("boat", (150 * t.scale).toInt().coerceAtLeast(32))
+        // 河床用侧视条带素材（原来那张俯视的 riverbed 拉出来是绿色竖条）
+        bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
         bmpBobber = assets.scaled("bobber", (60 * t.scale).toInt().coerceAtLeast(16))
         bmpRod = assets.scaled("rod", (110 * t.scale).toInt().coerceAtLeast(24))
         bmpHelper = assets.scaled("helper_boat", (96 * t.scale).toInt().coerceAtLeast(20))
-        bmpFish.clear()
+        fishFrames.clear()
+        fishFrameDuration.clear()
         // 一张精灵可能被多个稀有度档复用，取其中最高的档决定目标尺寸
         val spriteRarity = Bestiary.allSpecies
             .groupBy { it.sprite }
             .mapValues { (_, list) -> list.maxByOrNull { it.rarity.ordinal }!!.rarity }
         for ((sprite, rarity) in spriteRarity) {
             val base = when (rarity) {
-                Rarity.COMMON -> 128f
+                Rarity.COMMON -> 130f
                 Rarity.RARE -> 155f
-                Rarity.EPIC -> 190f
-                Rarity.LEGEND -> 235f
+                Rarity.EPIC -> 185f
+                Rarity.LEGEND -> 220f
             }
-            bmpFish[sprite] = assets.scaled(sprite, (base * t.scale).toInt().coerceAtLeast(24))
-                ?: continue
+            val frames = loadAnimation(sprite, (base * t.scale).toInt().coerceAtLeast(24))
+            if (frames.isEmpty()) continue
+            fishFrames[sprite] = frames
+            // 小鱼摆尾快、大鱼慢，看起来更自然
+            fishFrameDuration[sprite] = when (rarity) {
+                Rarity.COMMON -> 0.070f
+                Rarity.RARE -> 0.085f
+                Rarity.EPIC -> 0.100f
+                Rarity.LEGEND -> 0.115f
+            }
         }
+        // 船：侧视小船，逐帧随波起伏。尺寸按世界单位给，不再被屏幕像素放大
+        boatFrames = loadAnimation("boat", (BOAT_WORLD_W * t.scale).toInt().coerceAtLeast(32))
+        boatFrameDuration = 0.13f
+
         loadSeaweed(t)
+
+        // 云：两种形状，按屏幕宽度预缩放
+        cloudFrames = listOfNotNull(
+            assets.scaled("cloud_a", (300 * t.scale).toInt().coerceAtLeast(48)),
+            assets.scaled("cloud_b", (260 * t.scale).toInt().coerceAtLeast(40)),
+        )
+
         waterShader = null
         riverbedShader = null
     }
 
-    /** 把水草精灵表切成单帧，并沿水底撒点。 */
-    private fun loadSeaweed(t: ViewTransform) {
-        val sheet = assets.scaled("seaweed_anim", (150 * t.scale).toInt().coerceAtLeast(32))
-        if (sheet == null) {
-            seaweedFrames = emptyList()
-            return
-        }
-        val cfg = assets.frameConfig("seaweed_anim")
-        val cols = cfg?.first ?: 4
-        val rows = cfg?.second ?: 2
+    /**
+     * 把 `<name>_anim.png` 精灵表按配置切成单帧。
+     *
+     * 之前这里直接读 `<name>.png`（单帧图），而实际素材是 `_anim` 后缀的
+     * 动画图集，文件名对不上 → 加载失败 → 每张图退化成洋红方块。
+     */
+    private fun loadAnimation(name: String, targetW: Int): List<Bitmap> {
+        val sheet = assets.scaled("${name}_anim", targetW) ?: return emptyList()
+        val cfg = assets.frameConfig("${name}_anim") ?: return emptyList()
+        val (cols, rows) = cfg
+        if (cols <= 0 || rows <= 0) return emptyList()
         val fw = sheet.width / cols
         val fh = sheet.height / rows
-        val frames = mutableListOf<Bitmap>()
+        if (fw <= 0 || fh <= 0) return emptyList()
+        val frames = ArrayList<Bitmap>(cols * rows)
         for (r in 0 until rows) {
             for (c in 0 until cols) {
                 val x = c * fw
@@ -119,16 +156,31 @@ class GameRenderer(
                 }
             }
         }
-        seaweedFrames = frames
+        return frames
+    }
+
+    /** 取当前应显示的帧。 */
+    private fun frameAt(frames: List<Bitmap>, duration: Float, phase: Float): Bitmap? {
+        if (frames.isEmpty()) return null
+        val cycle = duration * frames.size
+        val t = ((world.time / cycle) + phase) % 1f
+        return frames[(t * frames.size).toInt().coerceIn(0, frames.size - 1)]
+    }
+
+    /** 把水草精灵表切成单帧，并沿水底撒点。 */
+    private fun loadSeaweed(t: ViewTransform) {
+        seaweedFrames = loadAnimation("seaweed", (130 * t.scale).toInt().coerceAtLeast(32))
+        if (seaweedFrames.isEmpty()) return
 
         // 沿水底均匀撒点，加点随机抖动避免看起来像栅栏
         val spots = mutableListOf<Triple<Float, Float, Float>>()
-        val count = (Space.W / 260f).toInt()
+        val count = (Space.W / 320f).toInt()
         val rnd = kotlin.random.Random(20260924)
         for (i in 0 until count) {
             val x = Space.POND_L + (Space.POND_R - Space.POND_L) * (i + 0.5f) / count +
-                (rnd.nextFloat() - 0.5f) * 130f
-            val y = Space.POND_B - 10f + (rnd.nextFloat() - 0.5f) * 30f
+                (rnd.nextFloat() - 0.5f) * 160f
+            // 让水草根部扎在河床上
+            val y = Space.H - 60f + (rnd.nextFloat() - 0.5f) * 20f
             val scale = 0.75f + rnd.nextFloat() * 0.6f
             spots.add(Triple(x, y, scale))
         }
@@ -172,21 +224,22 @@ class GameRenderer(
         canvas.drawRect(0f, top, t.screenW, surfaceY, fillPaint)
         fillPaint.shader = null
 
-        // 远处的云，随镜头缓慢平移（视差）
-        paint.color = Color.argb(26, 255, 255, 255)
-        val parallax = camX * 0.25f
-        for (i in 0 until 6) {
-            val wx = ((i * 620f) - parallax) % (Space.W * 0.6f)
-            val cx = t.toScreenX(wx + 300f)
-            if (cx < -200f || cx > t.screenW + 200f) continue
-            val cy = t.toScreenY(90f + (i % 3) * 55f)
-            canvas.drawOval(
-                RectF(cx - 110f * t.scale, cy - 26f * t.scale, cx + 110f * t.scale, cy + 26f * t.scale),
-                paint
-            )
-            canvas.drawOval(
-                RectF(cx - 60f * t.scale, cy - 42f * t.scale, cx + 60f * t.scale, cy + 20f * t.scale),
-                paint
+        // 云朵：用真实素材，随镜头视差平移
+        if (cloudFrames.isEmpty()) return
+        val parallax = camX * 0.22f
+        val spacing = 900f
+        val count = 8
+        for (i in 0 until count) {
+            val bmp = cloudFrames[i % cloudFrames.size]
+            val wx = i * spacing - parallax
+            val wrapped = ((wx % (spacing * count)) + spacing * count) % (spacing * count) - spacing
+            val cx = t.toScreenX(wrapped)
+            if (cx < -400f || cx > t.screenW + 400f) continue
+            val cy = t.toScreenY(70f + (i % 3) * 62f)
+            SpriteDraw.draw(
+                canvas, bmp, cx, cy,
+                scale = t.scale * (0.75f + (i % 3) * 0.22f),
+                alpha = 120,
             )
         }
     }
@@ -208,45 +261,44 @@ class GameRenderer(
         canvas.drawRect(0f, surfaceY, t.screenW, bottom, fillPaint)
         fillPaint.shader = null
 
-        // 水纹：用 Matrix 平铺，避免手写循环产生的接缝与残块
+        // 水纹：BitmapShader 平铺。
+        // 关键点：矩阵必须用「平移 + 缩放」一起设，只设平移的话
+        // 屏幕宽度变化后平铺尺寸与画布对不上，会切出一道道竖直分块。
         val water = bmpWater
         if (water != null) {
-            if (waterShader == null) {
-                val m = Matrix()
-                m.setScale(1f, 1f)
-                val s = android.graphics.BitmapShader(water, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-                val mm = Matrix()
-                mm.setScale(1f, 1f)
-                s.setLocalMatrix(mm)
-                waterShader = s
-            }
-            val scrollX = -camX * t.scale + world.time * 8f
-            val scrollY = -surfaceY + sin(world.time * 0.6f) * 4f
+            val shader = android.graphics.BitmapShader(
+                water, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT
+            )
             val m = Matrix()
-            m.setTranslate(scrollX, scrollY)
-            (waterShader as android.graphics.BitmapShader).setLocalMatrix(m)
-            tilePaint.shader = waterShader
-            tilePaint.alpha = 40
+            // 世界坐标 → 屏幕坐标：先按相机平移，再按缩放铺开
+            m.postScale(t.scale, t.scale)
+            m.postTranslate(
+                -camX * t.scale + world.time * 10f,
+                sin(world.time * 0.6f) * 5f,
+            )
+            shader.setLocalMatrix(m)
+            tilePaint.shader = shader
+            tilePaint.alpha = 42
             canvas.drawRect(0f, surfaceY, t.screenW, bottom, tilePaint)
             tilePaint.alpha = 255
             tilePaint.shader = null
         }
 
-        // 水底河床
+        // 水底河床：只贴在屏幕最底部一条，保持原始宽高比横向平铺，
+        // 不再纵向拉伸（之前拉成绿色竖条就是这个原因）。
         val bed = bmpRiverbed
         if (bed != null) {
-            val bedTop = t.screenH - bed.height * 0.9f
-            if (riverbedShader == null) {
-                riverbedShader = android.graphics.BitmapShader(
-                    bed, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP
-                )
-            }
+            val shader = android.graphics.BitmapShader(
+                bed, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP
+            )
             val m = Matrix()
-            m.setTranslate(-camX * t.scale % bed.width, 0f)
-            (riverbedShader as android.graphics.BitmapShader).setLocalMatrix(m)
-            tilePaint.shader = riverbedShader
-            tilePaint.alpha = 150
-            canvas.drawRect(0f, bedTop, t.screenW, t.screenH, tilePaint)
+            m.postScale(t.scale, t.scale)
+            m.postTranslate(-camX * t.scale % (bed.width * t.scale), 0f)
+            shader.setLocalMatrix(m)
+            tilePaint.shader = shader
+            tilePaint.alpha = 170
+            val bedH = bed.height * t.scale
+            canvas.drawRect(0f, bottom - bedH, t.screenW, bottom, tilePaint)
             tilePaint.alpha = 255
             tilePaint.shader = null
         }
@@ -347,7 +399,12 @@ class GameRenderer(
             // 视锥裁剪：镜头外 ± 半屏的鱼不画
             if (abs(f.x - camX) > halfView + 260f) continue
 
-            val bmp = bmpFish[f.species.sprite] ?: continue
+            val frames = fishFrames[f.species.sprite] ?: continue
+            val bmp = frameAt(
+                frames,
+                fishFrameDuration[f.species.sprite] ?: 0.09f,
+                f.wiggle * 0.16f,   // 用各自的 wiggle 做相位，整池鱼不会同步摆尾
+            ) ?: continue
             val depth = ((f.y - Space.POND_T) / (Space.POND_B - Space.POND_T)).coerceIn(0f, 1f)
             val depthScale = 0.72f + depth * 0.55f
             val alpha = (150 + (depth * 105)).toInt().coerceIn(60, 255)
@@ -490,21 +547,29 @@ class GameRenderer(
 
     // ---------------- 玩家的船（停在水面）----------------
 
+    /**
+     * 玩家的船：**侧视**小船，骑在水面线上。
+     *
+     * 之前这里用的是俯视贴图、还按屏幕像素放大到 150px，结果船巨大且方向不对。
+     * 现在统一用侧视动画，尺寸按世界单位 [BOAT_WORLD_W] 换算，
+     * 保证在任何分辨率下都占画面里固定的比例。
+     */
     private fun drawPlayerBoat(canvas: Canvas, t: ViewTransform, camX: Float) {
-        val bmp = bmpBoat ?: return
+        val bmp = frameAt(boatFrames, boatFrameDuration, 0f) ?: return
         val cx = t.toScreenX(world.boatX - camX)
-        val bob = sin(world.time * 1.4f) * 6f * t.scale
-        // 船体骑在水面线上：吃水线以下被水遮住
-        val cy = t.toScreenY(Space.SURFACE_Y) - bmp.height * 0.30f + bob
+        // 船底正好压在水面线上，吃水线以下被水色盖住
+        val cy = t.toScreenY(Space.SURFACE_Y) - bmp.height * t.scale * 0.34f
         SpriteDraw.draw(canvas, bmp, cx, cy, scale = t.scale)
 
+        // 鱼竿从船头伸出，跟着船体轻微摆动
         val rod = bmpRod
         if (rod != null) {
             SpriteDraw.draw(
                 canvas, rod,
-                cx + 44f * t.scale, cy - 6f * t.scale,
-                scale = t.scale * 0.85f,
-                rotation = -22f + sin(world.time * 1.4f) * 2.5f,
+                cx + bmp.width * t.scale * 0.34f,
+                cy - bmp.height * t.scale * 0.28f,
+                scale = t.scale * 0.62f,
+                rotation = -20f + sin(world.time * 1.4f) * 2.5f,
             )
         }
     }

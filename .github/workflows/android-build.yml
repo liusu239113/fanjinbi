@@ -53,8 +53,10 @@ jobs:
       - name: 运行单元测试
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
-      - name: 构建 Release / Debug APK
-        run: ./gradlew :app:assembleRelease :app:assembleDebug --no-daemon --stacktrace
+      # 只出正式签名包：release 用 build.gradle.kts 里配置的 keystore 签名，
+      # 不再产出 debug 包。
+      - name: 构建 Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: 校验签名
         run: |
@@ -71,9 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fishing-idle-apk-${{ github.run_number }}
-          path: |
-            FishingIdle/app/build/outputs/apk/release/*.apk
-            FishingIdle/app/build/outputs/apk/debug/*.apk
+          path: FishingIdle/app/build/outputs/apk/release/*.apk
           retention-days: 90
 
       # tag 固定为 latest-<分支>：每次构建覆盖更新同一个 Release，

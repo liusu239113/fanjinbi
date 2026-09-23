@@ -12,9 +12,9 @@ enum class Rarity(
     val weight: Float,
 ) {
     COMMON("常见", 1.0, 100f),
-    RARE("稀有", 20.0, 34f),
-    EPIC("史诗", 300.0, 9f),
-    LEGEND("传说", 5000.0, 2f),
+    RARE("稀有", 15.0, 34f),
+    EPIC("史诗", 120.0, 9f),
+    LEGEND("传说", 1000.0, 2f),
 }
 
 /**
@@ -164,7 +164,7 @@ object Bestiary {
     // ---------------- 2. 芦苇荡 ----------------
     val REED_MARSH = FishingMap(
         "marsh", "芦苇荡", "水草丰茂，鱼肥水美。",
-        7.0, 6_000.0,
+        3_840.0, 1_150_000.0,
         listOf(
             sp("jiyu2", "肥鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.05),
             sp("niqiu2", "大泥鳅", Rarity.COMMON, "fw_niqiu", 1.3, 0.95),
@@ -181,7 +181,7 @@ object Bestiary {
     // ---------------- 3. 深山碧潭 ----------------
     val DEEP_POOL = FishingMap(
         "pool", "深山碧潭", "潭深水冷，藏着年岁久远的老鱼。",
-        50.0, 150_000.0,
+        14_700_000.0, 4_420_000_000.0,
         listOf(
             sp("jiyu3", "潭鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.10, tint = FishTint.JADE),
             sp("niqiu3", "潭鳅", Rarity.COMMON, "fw_niqiu", 1.4, 0.95, tint = FishTint.DARK),
@@ -198,7 +198,7 @@ object Bestiary {
     // ---------------- 4. 急流险滩 ----------------
     val RAPIDS = FishingMap(
         "rapids", "急流险滩", "水流湍急，只有强健的鱼能立足。",
-        380.0, 4_000_000.0,
+        5.66e10, 1.70e13,
         species = listOf(
             sp("jiyu4", "溪鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.00, tint = FishTint.AZURE),
             sp("baitiao3", "急流白条", Rarity.COMMON, "fish_common", 1.5, 0.85, tint = FishTint.SILVER),
@@ -215,7 +215,7 @@ object Bestiary {
     // ---------------- 5. 月牙湖 ----------------
     val CRESCENT_LAKE = FishingMap(
         "lake", "月牙湖", "月圆之夜，湖底会浮起金光。",
-        2_600.0, 100_000_000.0,
+        2.17e14, 6.52e16,
         listOf(
             sp("jiyu5", "湖鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.05, tint = FishTint.SILVER),
             sp("baitiao4", "月华白条", Rarity.COMMON, "fish_common", 1.7, 0.85, tint = FishTint.AZURE),
@@ -232,7 +232,7 @@ object Bestiary {
     // ---------------- 6. 龙渊秘境 ----------------
     val DRAGON_ABYSS = FishingMap(
         "abyss", "龙渊秘境", "传说中龙潜之渊，凡鱼皆已成精。",
-        18_000.0, 2_500_000_000.0,
+        8.35e17, 2.50e20,
         listOf(
             sp("jiyu6", "灵鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.10, tint = FishTint.PURPLE),
             sp("niqiu6", "玉泥鳅", Rarity.COMMON, "fw_niqiu", 1.8, 0.95, tint = FishTint.JADE),

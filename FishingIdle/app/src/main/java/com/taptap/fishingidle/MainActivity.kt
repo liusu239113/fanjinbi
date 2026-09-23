@@ -1,8 +1,13 @@
 package com.taptap.fishingidle
 
 import android.os.Bundle
+import android.view.View
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +66,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 全屏沉浸：隐藏状态栏与导航栏，游戏画面铺满整屏
+        enableImmersiveMode()
+
         assets = Assets(this)
         settings = Settings()
         audio = AudioManager(this, settings)
@@ -75,6 +84,31 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             FishingGameScreen()
+        }
+    }
+
+    /**
+     * 开启全屏沉浸模式，并在用户从边缘划出系统栏后自动重新隐藏。
+     * 注意：不要用 WindowCompat.setDecorFitsSystemWindows(true)，
+     * 那样内容会被系统栏顶下去，游戏画面就不是铺满的了。
+     */
+    private fun enableImmersiveMode() {
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        )
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        // 部分 ROM 在切换前后会重新显示系统栏，这里补一次
+        window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
+            if (visibility and View.SYSTEM_UI_FLAG_FULLSCREEN == 0) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -137,13 +171,21 @@ class MainActivity : ComponentActivity() {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_PAUSE -> {
+                        // 切后台：暂停世界、停 BGM、并把音效通道整体静音，
+                        // 否则退到桌面后仍会听到钓鱼音效。
                         gameViewRef?.paused = true
+                        audio.muted = true
                         audio.stopBgm()
                         saveManager.save(gameState, settings)
                     }
                     Lifecycle.Event.ON_RESUME -> {
-                        if (!showShop && !showMenu) gameViewRef?.paused = false
+                        audio.muted = false
+                        if (!showShop && !showMenu && !showReset && inGame) {
+                            gameViewRef?.paused = false
+                        }
                         audio.playBgm(context, "bgm_main")
+                        // 回到前台时系统栏可能被重新显示，这里再收一次
+                        enableImmersiveMode()
                     }
                     else -> Unit
                 }
@@ -158,7 +200,11 @@ class MainActivity : ComponentActivity() {
         }
 
         // ---------------- 主菜单 ----------------
+        // 用 key 把主菜单和游戏内两套 UI 隔离开：
+        // 否则两者共享 showMenu/showReset 状态，从游戏内返回主菜单时
+        // 面板会被另一分支的渲染逻辑吃掉，表现为"返回失灵"。
         if (!inGame) {
+            key("main_menu") {
             MainMenu(
                 state = gameState,
                 assets = assets,
@@ -218,6 +264,7 @@ class MainActivity : ComponentActivity() {
                     onDismiss = { showReset = false },
                 )
             }
+            }   // key("main_menu")
             return@FishingGameScreen
         }
 

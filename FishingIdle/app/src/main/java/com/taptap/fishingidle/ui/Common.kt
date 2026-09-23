@@ -49,7 +49,8 @@ fun WoodPanel(
     cornerPx: Int = 128,
     content: @Composable () -> Unit,
 ) {
-    val bitmap = assets?.let { a -> a.raw("wood_panel")?.asImageBitmap() }
+    val panelBitmap = assets?.let { a -> a.raw("panel_bg")?.asImageBitmap() }
+    val borderBitmap = assets?.let { a -> a.raw("wood_panel")?.asImageBitmap() }
 
     Box(
         modifier = modifier
@@ -62,12 +63,45 @@ fun WoodPanel(
             .border(3.dp, UITheme.Ink, RoundedCornerShape(14.dp))
             .border(1.5.dp, UITheme.GoldDark, RoundedCornerShape(12.dp))
     ) {
-        if (bitmap != null) {
+        // 木纹底：用可平铺的纹理整块铺满，不再拉伸整张带护角的图
+        if (panelBitmap != null) {
             Canvas(Modifier.fillMaxSize()) {
-                drawNinePatch(bitmap, cornerPx)
+                drawTiled(panelBitmap)
+            }
+        }
+        // 边框：用九宫格，四角护角保持原始尺寸
+        if (borderBitmap != null) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawNinePatch(borderBitmap, cornerPx)
             }
         }
         content()
+    }
+}
+
+/** 把位图按原始尺寸平铺铺满整个区域。 */
+private fun DrawScope.drawTiled(bitmap: ImageBitmap) {
+    val tileW = bitmap.width.toFloat()
+    val tileH = bitmap.height.toFloat()
+    if (tileW <= 0f || tileH <= 0f) return
+    var y = 0f
+    while (y < size.height) {
+        var x = 0f
+        while (x < size.width) {
+            drawImage(
+                image = bitmap,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(bitmap.width, bitmap.height),
+                dstOffset = IntOffset(x.toInt(), y.toInt()),
+                dstSize = IntSize(
+                    minOf(tileW, size.width - x).toInt().coerceAtLeast(1),
+                    minOf(tileH, size.height - y).toInt().coerceAtLeast(1),
+                ),
+                filterQuality = FilterQuality.Low,
+            )
+            x += tileW
+        }
+        y += tileH
     }
 }
 

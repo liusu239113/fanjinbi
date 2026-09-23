@@ -45,7 +45,12 @@ class AudioManager(context: Context, private val settings: Settings) {
         }
     }
 
+    /** 应用退到后台时置为 true，屏蔽一切音效输出。 */
+    @Volatile
+    var muted: Boolean = false
+
     fun play(name: String, volumeScale: Float = 1f, minIntervalMs: Long = 45) {
+        if (muted) return
         val id = soundIds[name] ?: return
         val now = System.currentTimeMillis()
         val last = lastPlayed[name] ?: 0L
