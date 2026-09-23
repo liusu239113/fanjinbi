@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Purchasable" load_steps=4 format=3 uid="uid://xv5o3tm3x60h"]
+
+[ext_resource type="Texture2D" uid="uid://cg4yxp2tip8ip" path="res://assets/images/helper_sprite_sheet.png" id="1"]
+[ext_resource type="Script" uid="uid://cvdya1ja2f1e7" path="res://purchasables/purchasable.gd" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_vvxl6"]
+atlas = ExtResource("1")
+region = Rect2(224, 32, 32, 32)
+
+[resource]
+script = ExtResource("2")
+attribute_to_upgrade_or_unlock = 11
+icon = SubResource("AtlasTexture_vvxl6")
+name_key = "HELPER_NAME"
+description_key = "HELPER_DESC"
+requirement_to_see_expression_key = "requirement_to_see_helper"
+price_expression_key = "price_expression_helper"
+increase_amount_key = "increase_amount_helper"
+max_purchase_amount_key = "max_purchase_amount_helper"
+requirement_to_buy_expression_key = "requirement_to_buy_helper"
+increase_is_percentage = false

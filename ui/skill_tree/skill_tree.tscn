@@ -1,0 +1,168 @@
+[gd_scene load_steps=20 format=4 uid="uid://df7rx0vhjtbce"]
+
+[ext_resource type="Texture2D" uid="uid://2y4uqxyjkjsn" path="res://assets/images/nebula.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://d1j1gmr8xgkx0" path="res://assets/images/stars.png" id="2"]
+[ext_resource type="Script" uid="uid://bf55jdbtinge5" path="res://ui/skill_tree/skill_tree.gd" id="3"]
+[ext_resource type="Texture2D" uid="uid://dgjafntynm0fc" path="res://assets/images/skill_tree_sprites.png" id="4"]
+[ext_resource type="Script" uid="uid://btaf8256csaye" path="res://ui/skill_tree/finish_button.gd" id="5"]
+[ext_resource type="Script" uid="uid://byfb6np7p214o" path="res://ui/skill_tree/remaining_points_label.gd" id="6"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_85a8p"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_w5y6o"]
+blend_mode = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gdo5q"]
+bg_color = Color(0, 0, 0, 0.501961)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_35xcv"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_5ey0h"]
+atlas = ExtResource("4")
+region = Rect2(0, 80, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_sgb02"]
+atlas = ExtResource("4")
+region = Rect2(80, 80, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_85a8p"]
+atlas = ExtResource("4")
+region = Rect2(80, 40, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_fn1xa"]
+atlas = ExtResource("4")
+region = Rect2(40, 40, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ubys1"]
+atlas = ExtResource("4")
+region = Rect2(40, 80, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_gdo5q"]
+atlas = ExtResource("4")
+region = Rect2(0, 40, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_w5y6o"]
+atlas = ExtResource("4")
+region = Rect2(120, 40, 40, 40)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_lfut3"]
+atlas = ExtResource("4")
+region = Rect2(120, 80, 40, 40)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_85a8p"]
+bg_color = Color(0, 0, 0, 0.129412)
+expand_margin_left = 12.0
+expand_margin_top = 4.0
+expand_margin_right = 12.0
+expand_margin_bottom = 4.0
+
+[node name="Control" type="CanvasLayer"]
+
+[node name="NebulaParallax" type="Parallax2D" parent="."]
+z_index = -1
+z_as_relative = false
+scroll_offset = Vector2(-131, -123)
+repeat_size = Vector2(512, 512)
+autoscroll = Vector2(5.333, 5.333)
+repeat_times = 4
+
+[node name="NebulaSprite" type="Sprite2D" parent="NebulaParallax"]
+position = Vector2(481, 221)
+scale = Vector2(4, 4)
+texture = ExtResource("1")
+
+[node name="StarParallax" type="Parallax2D" parent="."]
+z_index = -1
+z_as_relative = false
+material = SubResource("CanvasItemMaterial_85a8p")
+scroll_offset = Vector2(-131, -123)
+repeat_size = Vector2(512, 512)
+repeat_times = 4
+
+[node name="StarSprite" type="Sprite2D" parent="StarParallax"]
+material = SubResource("CanvasItemMaterial_w5y6o")
+position = Vector2(131, 123)
+scale = Vector2(4, 4)
+texture = ExtResource("2")
+
+[node name="SkillTree" type="GraphEdit" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/selection_stroke = Color(0, 0, 0, 0)
+theme_override_colors/selection_fill = Color(0, 0, 0, 0)
+theme_override_styles/menu_panel = SubResource("StyleBoxFlat_gdo5q")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_35xcv")
+show_grid = false
+grid_pattern = 1
+snapping_enabled = false
+minimap_enabled = false
+show_menu = false
+show_zoom_buttons = false
+show_grid_buttons = false
+show_minimap_button = false
+show_arrange_button = false
+script = ExtResource("3")
+image_data = {
+"skill_chain_reaction": SubResource("AtlasTexture_5ey0h"),
+"skill_coffee_lover": SubResource("AtlasTexture_sgb02"),
+"skill_coin_bounce": SubResource("AtlasTexture_85a8p"),
+"skill_directional_flip": SubResource("AtlasTexture_fn1xa"),
+"skill_gooey_glue": SubResource("AtlasTexture_ubys1"),
+"skill_money_maker": SubResource("AtlasTexture_gdo5q"),
+"skill_return_from_death": SubResource("AtlasTexture_w5y6o"),
+"skill_runner": SubResource("AtlasTexture_lfut3")
+}
+
+[node name="FinishButton" type="Button" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -110.5
+offset_top = -65.0
+offset_right = 110.5
+offset_bottom = -25.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "FINISH"
+script = ExtResource("5")
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -127.0
+offset_top = 7.0
+offset_right = 127.0
+offset_bottom = 62.0
+grow_horizontal = 2
+metadata/_edit_group_ = true
+
+[node name="MarginContainer" type="MarginContainer" parent="CenterContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="Panel" type="PanelContainer" parent="CenterContainer/MarginContainer"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_85a8p")
+
+[node name="RemainingPointsLabel" type="RichTextLabel" parent="CenterContainer/MarginContainer"]
+unique_name_in_owner = true
+clip_contents = false
+layout_mode = 2
+theme_override_constants/outline_size = 15
+theme_override_font_sizes/normal_font_size = 36
+bbcode_enabled = true
+text = "0 REMAINING POINTS"
+fit_content = true
+autowrap_mode = 0
+script = ExtResource("6")
+
+[connection signal="pressed" from="FinishButton" to="FinishButton" method="_on_pressed"]

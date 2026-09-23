@@ -1,0 +1,8 @@
+[gd_resource type="AudioStreamRandomizer" load_steps=2 format=4 uid="uid://caxuqo05p8ydn"]
+
+[ext_resource type="AudioStream" uid="uid://bfraq7pbawo2w" path="res://assets/sounds/coin_flung.wav" id="1"]
+
+[resource]
+random_pitch = 1.2999999523162842
+streams_count = 1
+stream_0/stream = ExtResource("1")

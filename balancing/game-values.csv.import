@@ -1,0 +1,17 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://clf5m0fto87kf"
+
+[deps]
+
+files=["res://balancing/game-values. value.translation"]
+
+source_file="res://balancing/game-values.csv"
+dest_files=["res://balancing/game-values. value.translation"]
+
+[params]
+
+compress=true
+delimiter=0

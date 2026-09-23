@@ -1,0 +1,17 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://b00rcuwq48wn0"
+
+[deps]
+
+files=["res://balancing/price-expressions.base.translation", "res://balancing/price-expressions.multiplier.translation", "res://balancing/price-expressions.flat.translation"]
+
+source_file="res://balancing/price-expressions.csv"
+dest_files=["res://balancing/price-expressions.base.translation", "res://balancing/price-expressions.multiplier.translation", "res://balancing/price-expressions.flat.translation"]
+
+[params]
+
+compress=true
+delimiter=0

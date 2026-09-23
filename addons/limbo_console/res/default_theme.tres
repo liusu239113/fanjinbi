@@ -1,0 +1,174 @@
+[gd_resource type="Theme" load_steps=23 format=4 uid="uid://dq4nntds66bix"]
+
+[ext_resource type="FontFile" uid="uid://dbbw833hg2v7o" path="res://addons/limbo_console/res/fonts/monaspace_argon_bold.otf" id="1"]
+[ext_resource type="FontFile" uid="uid://dmeyp84repfbw" path="res://addons/limbo_console/res/fonts/monaspace_argon_bold_italic.otf" id="2"]
+[ext_resource type="FontFile" uid="uid://dhm45nttm5i3s" path="res://addons/limbo_console/res/fonts/monaspace_argon_italic.otf" id="3"]
+[ext_resource type="FontFile" uid="uid://ds7dvyquauqub" path="res://addons/limbo_console/res/fonts/monaspace_argon_medium.otf" id="4"]
+[ext_resource type="FontFile" uid="uid://d4js20k8kslqt" path="res://addons/limbo_console/res/fonts/monaspace_argon_regular.otf" id="5"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yia2g"]
+content_margin_left = 6.0
+content_margin_top = 4.0
+content_margin_right = 6.0
+content_margin_bottom = 4.0
+bg_color = Color(0.147, 0.168, 0.203, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 3
+anti_aliasing = false
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_bt363"]
+content_margin_left = 2.0
+content_margin_top = 4.0
+content_margin_right = 2.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_txn37"]
+content_margin_left = 2.0
+content_margin_top = 4.0
+content_margin_right = 2.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ypc4n"]
+content_margin_left = 2.0
+content_margin_top = 4.0
+content_margin_right = 2.0
+content_margin_bottom = 4.0
+bg_color = Color(0, 0, 0, 0)
+border_width_top = 1
+border_color = Color(0.211765, 0.239216, 0.290196, 1)
+
+[sub_resource type="Image" id="Image_qcm0s"]
+data = {
+"data": PackedByteArray("////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////A////yn///9D////Q////yj///8D////AP///wD///8A////AP///wD///8A////Kf///0r///9K////Sv///0r///8o////AP///wD///8A////AP///wD///8A////Q////0r///9K////Sv///0r///9D////AP///wD///8A////AP///wD///8A////Q////0r///9K////Sv///0r///9D////AP///wD///8A////AP///wD///8A////KP///0r///9K////Sv///0r///8o////AP///wD///8A////AP///wD///8A////A////yj///9D////Q////yj///8D////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A"),
+"format": "RGBA8",
+"height": 12,
+"mipmaps": false,
+"width": 12
+}
+
+[sub_resource type="ImageTexture" id="ImageTexture_utg8u"]
+image = SubResource("Image_qcm0s")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_xismo"]
+content_margin_left = 7.0
+content_margin_top = 7.0
+content_margin_right = 7.0
+content_margin_bottom = 7.0
+texture = SubResource("ImageTexture_utg8u")
+texture_margin_left = 6.0
+texture_margin_top = 6.0
+texture_margin_right = 6.0
+texture_margin_bottom = 6.0
+
+[sub_resource type="Image" id="Image_6fkoj"]
+data = {
+"data": PackedByteArray("////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////Bvj4+Gb5+fmo+fn5qPj4+GXV1dUG////AP///wD///8A////AP///wD///8A+Pj4Zvn5+br5+fm6+fn5uvn5+br4+Phl////AP///wD///8A////AP///wD///8A+fn5qPn5+br5+fm6+fn5uvn5+br5+fmo////AP///wD///8A////AP///wD///8A+fn5qPn5+br5+fm6+fn5uvn5+br4+Pio////AP///wD///8A////AP///wD///8A+Pj4Zfn5+br5+fm6+fn5uvn5+br6+vpj////AP///wD///8A////AP///wD///8A1dXVBvj4+GX5+fmo+Pj4qPr6+mPV1dUG////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A"),
+"format": "RGBA8",
+"height": 12,
+"mipmaps": false,
+"width": 12
+}
+
+[sub_resource type="ImageTexture" id="ImageTexture_foc76"]
+image = SubResource("Image_6fkoj")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_oajxf"]
+content_margin_left = 6.0
+content_margin_top = 6.0
+content_margin_right = 6.0
+content_margin_bottom = 6.0
+texture = SubResource("ImageTexture_foc76")
+texture_margin_left = 5.0
+texture_margin_top = 5.0
+texture_margin_right = 5.0
+texture_margin_bottom = 5.0
+
+[sub_resource type="Image" id="Image_vigmk"]
+data = {
+"data": PackedByteArray("////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A1dXVBrS0tGa1tbWotbW1qLOzs2WqqqoG////AP///wD///8A////AP///wD///8AtLS0ZrS0tLq0tLS6tLS0urS0tLqzs7Nl////AP///wD///8A////AP///wD///8AtbW1qLS0tLq0tLS6tLS0urS0tLq1tbWo////AP///wD///8A////AP///wD///8AtbW1qLS0tLq0tLS6tLS0urS0tLqzs7Oo////AP///wD///8A////AP///wD///8As7OzZbS0tLq0tLS6tLS0urS0tLq1tbVj////AP///wD///8A////AP///wD///8AqqqqBrOzs2W1tbWos7OzqLW1tWOqqqoG////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A"),
+"format": "RGBA8",
+"height": 12,
+"mipmaps": false,
+"width": 12
+}
+
+[sub_resource type="ImageTexture" id="ImageTexture_alomt"]
+image = SubResource("Image_vigmk")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ev3il"]
+content_margin_left = 7.0
+content_margin_top = 7.0
+content_margin_right = 7.0
+content_margin_bottom = 7.0
+texture = SubResource("ImageTexture_alomt")
+texture_margin_left = 6.0
+texture_margin_top = 6.0
+texture_margin_right = 6.0
+texture_margin_bottom = 6.0
+
+[sub_resource type="Image" id="Image_k8rdt"]
+data = {
+"data": PackedByteArray("////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wf///8T////E////wf///8A////AP///wD///8A////AP///wD///8A////AP///xP///8V////Ff///xP///8A////AP///wD///8A////AP///wD///8A////AP///xP///8V////Ff///xP///8A////AP///wD///8A////AP///wD///8A////AP///wf///8T////E////wb///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A"),
+"format": "RGBA8",
+"height": 12,
+"mipmaps": false,
+"width": 12
+}
+
+[sub_resource type="ImageTexture" id="ImageTexture_lun2q"]
+image = SubResource("Image_k8rdt")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_lk88d"]
+content_margin_left = 6.0
+content_margin_top = 0.0
+content_margin_right = 6.0
+content_margin_bottom = 0.0
+texture = SubResource("ImageTexture_lun2q")
+texture_margin_left = 5.0
+texture_margin_top = 5.0
+texture_margin_right = 5.0
+texture_margin_bottom = 5.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_4ui4a"]
+content_margin_left = 6.0
+content_margin_top = 6.0
+content_margin_right = 6.0
+content_margin_bottom = 6.0
+texture = SubResource("ImageTexture_lun2q")
+texture_margin_left = 5.0
+texture_margin_top = 5.0
+texture_margin_right = 5.0
+texture_margin_bottom = 5.0
+
+[resource]
+default_font = ExtResource("5")
+default_font_size = 18
+ConsoleColors/colors/entry_command_found_color = Color(0.729412, 0.901961, 0.494118, 1)
+ConsoleColors/colors/entry_command_not_found_color = Color(1, 0.2, 0.2, 1)
+ConsoleColors/colors/entry_hint_color = Color(0.439216, 0.478431, 0.54902, 1)
+ConsoleColors/colors/entry_text_color = Color(0.796078, 0.8, 0.776471, 1)
+ConsoleColors/colors/output_command_color = Color(0.729412, 0.901961, 0.494118, 1)
+ConsoleColors/colors/output_command_mention_color = Color(0.584314, 0.901961, 0.796078, 1)
+ConsoleColors/colors/output_debug_color = Color(0.439216, 0.478431, 0.54902, 1)
+ConsoleColors/colors/output_error_color = Color(1, 0.2, 0.2, 1)
+ConsoleColors/colors/output_text_color = Color(0.796078, 0.8, 0.776471, 1)
+ConsoleColors/colors/output_warning_color = Color(1, 0.654902, 0.34902, 1)
+Panel/styles/panel = SubResource("StyleBoxFlat_yia2g")
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_yia2g")
+RichTextLabel/fonts/bold_font = ExtResource("1")
+RichTextLabel/fonts/bold_italics_font = ExtResource("2")
+RichTextLabel/fonts/italics_font = ExtResource("3")
+RichTextLabel/fonts/mono_font = ExtResource("4")
+RichTextLabel/fonts/normal_font = ExtResource("5")
+RichTextLabel/styles/focus = SubResource("StyleBoxEmpty_bt363")
+RichTextLabel/styles/normal = SubResource("StyleBoxEmpty_txn37")
+TextEdit/styles/focus = SubResource("StyleBoxFlat_ypc4n")
+TextEdit/styles/normal = SubResource("StyleBoxFlat_ypc4n")
+VScrollBar/styles/grabber = SubResource("StyleBoxTexture_xismo")
+VScrollBar/styles/grabber_highlight = SubResource("StyleBoxTexture_oajxf")
+VScrollBar/styles/grabber_pressed = SubResource("StyleBoxTexture_ev3il")
+VScrollBar/styles/scroll = SubResource("StyleBoxTexture_lk88d")
+VScrollBar/styles/scroll_focus = SubResource("StyleBoxTexture_4ui4a")

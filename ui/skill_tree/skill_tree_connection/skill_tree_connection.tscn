@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=4 uid="uid://c8pnaid3dcwya"]
+
+[ext_resource type="Script" uid="uid://bj41xxka15uuo" path="res://ui/skill_tree/skill_tree_connection/skill_tree_connection.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://dp7f2pbramax3" path="res://assets/images/skill_tree_connection_inactive.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://br0x5axcxv84o" path="res://assets/images/skill_tree_connection.png" id="3"]
+
+[node name="SkillTreeConnection" type="GraphElement"]
+z_index = -1
+script = ExtResource("1")
+texture_invalid = ExtResource("2")
+texture_valid = ExtResource("3")
+
+[node name="Line2D" type="Line2D" parent="."]
+points = PackedVector2Array(0, 0, 0, 0)
+texture = ExtResource("3")
+texture_mode = 2

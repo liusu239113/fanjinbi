@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=4 uid="uid://cjy3xbo3h7t5q"]
+
+[ext_resource type="Script" uid="uid://cfw3tge3fly57" path="res://object_pool/object_pool.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://dms6o0gk13gla" path="res://ui/floating_text/floating_text.tscn" id="2"]
+
+[node name="FloatingTextObjectPool" type="Node"]
+script = ExtResource("1")
+packed_scene = ExtResource("2")

@@ -1,0 +1,176 @@
+[gd_scene load_steps=40 format=4 uid="uid://dncs1sw4trcf2"]
+
+[ext_resource type="Texture2D" uid="uid://0cpjgi1ci0v4" path="res://assets/images/shop_background_panel_tiled.png" id="1"]
+[ext_resource type="Script" uid="uid://wk2aena8juka" path="res://ui/shop_sidebar/shop_sidebar.gd" id="2"]
+[ext_resource type="Resource" uid="uid://cq50vyj5c24g0" path="res://purchasables/items/small_coin.tres" id="3"]
+[ext_resource type="Resource" uid="uid://i5ih22nxwquk" path="res://purchasables/items/medium_coin.tres" id="4"]
+[ext_resource type="Resource" uid="uid://da5klojvlqeck" path="res://purchasables/items/large_coin.tres" id="5"]
+[ext_resource type="Resource" uid="uid://xv5o3tm3x60h" path="res://purchasables/items/helper.tres" id="6"]
+[ext_resource type="Resource" uid="uid://e8jy8uu6nr5x" path="res://purchasables/upgrades/additional_coin_value_small.tres" id="7"]
+[ext_resource type="Resource" uid="uid://b7m3ljq0i05vb" path="res://purchasables/upgrades/additional_coin_value_medium.tres" id="8"]
+[ext_resource type="Resource" uid="uid://pm7exbnbqfq3" path="res://purchasables/upgrades/additional_coin_value_large.tres" id="9"]
+[ext_resource type="Resource" uid="uid://cl7mpk6ocbjlm" path="res://purchasables/upgrades/additional_coin_value_multiplier_small.tres" id="10"]
+[ext_resource type="Resource" uid="uid://bv8im1wb0eqmv" path="res://purchasables/upgrades/additional_coin_value_multiplier_medium.tres" id="11"]
+[ext_resource type="Resource" uid="uid://dm7ndlu84y7k6" path="res://purchasables/upgrades/additional_coin_value_multiplier_large.tres" id="12"]
+[ext_resource type="Resource" uid="uid://cjp4uhn6tplhb" path="res://purchasables/upgrades/coin_flip_speed_small.tres" id="13"]
+[ext_resource type="Resource" uid="uid://1pr7qj16my1w" path="res://purchasables/upgrades/coin_flip_speed_medium.tres" id="14"]
+[ext_resource type="Resource" uid="uid://gw6su3h8ouvx" path="res://purchasables/upgrades/coin_flip_speed_large.tres" id="15"]
+[ext_resource type="Resource" uid="uid://bu3mdmv1xs3ax" path="res://purchasables/upgrades/hover_small_coins.tres" id="16"]
+[ext_resource type="Resource" uid="uid://b3ynqa4fujrya" path="res://purchasables/upgrades/reflip_chance.tres" id="17"]
+[ext_resource type="Resource" uid="uid://dsxp6hslu1kdo" path="res://purchasables/upgrades/coins_trigger_coins.tres" id="18"]
+[ext_resource type="Resource" uid="uid://b1klycnptnff8" path="res://purchasables/upgrades/helper_trigger_medium_coins.tres" id="19"]
+[ext_resource type="Resource" uid="uid://bu3ausoahcrbg" path="res://purchasables/upgrades/helper_trigger_large_coins.tres" id="20"]
+[ext_resource type="Resource" uid="uid://bnwvx451wcxi1" path="res://purchasables/upgrades/helper_efficiency.tres" id="21"]
+[ext_resource type="Script" uid="uid://djkuuy5kveaqg" path="res://rooms/play_room/stats_tree.gd" id="22"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_xxg1u"]
+texture = ExtResource("1")
+texture_margin_left = 22.0
+texture_margin_top = 22.0
+texture_margin_right = 22.0
+texture_margin_bottom = 22.0
+expand_margin_left = 3.0
+expand_margin_top = 3.0
+expand_margin_right = 3.0
+expand_margin_bottom = 3.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_bcs0m"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_myveo"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_yqypp"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3n6fi"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_650uw"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_rsg5q"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_u06rt"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xxg1u"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_n7r07"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dctdf"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_5j25e"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_er0wq"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_co06w"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_6rdul"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_p1w8k"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_6ektl"]
+
+[node name="Shop" type="TabContainer"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -246.0
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/side_margin = 0
+theme_override_styles/panel = SubResource("StyleBoxTexture_xxg1u")
+tab_alignment = 1
+current_tab = 0
+tab_focus_mode = 0
+script = ExtResource("2")
+item_purchasables = [ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6")]
+upgrade_purchasables = [ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15"), ExtResource("16"), ExtResource("17"), ExtResource("18"), ExtResource("19"), ExtResource("20"), ExtResource("21")]
+
+[node name="SHOP_TAB_ITEMS" type="TabBar" parent="."]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 0
+
+[node name="ScrollContainer" type="ScrollContainer" parent="SHOP_TAB_ITEMS"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="SHOP_TAB_ITEMS/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SHOP_TAB_ITEMS/ScrollContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="SHOP_TAB_UPGRADES" type="TabBar" parent="."]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="SHOP_TAB_UPGRADES"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="SHOP_TAB_UPGRADES/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SHOP_TAB_UPGRADES/ScrollContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="SHOP_TAB_INFO" type="Tree" parent="."]
+visible = false
+layout_mode = 2
+theme_override_constants/inner_item_margin_bottom = 8
+theme_override_constants/inner_item_margin_left = 8
+theme_override_constants/inner_item_margin_right = 8
+theme_override_constants/inner_item_margin_top = 8
+theme_override_styles/title_button_hover = SubResource("StyleBoxEmpty_bcs0m")
+theme_override_styles/title_button_pressed = SubResource("StyleBoxEmpty_myveo")
+theme_override_styles/title_button_normal = SubResource("StyleBoxEmpty_yqypp")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_3n6fi")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_650uw")
+theme_override_styles/hovered = SubResource("StyleBoxEmpty_rsg5q")
+theme_override_styles/hovered_dimmed = SubResource("StyleBoxEmpty_u06rt")
+theme_override_styles/selected = SubResource("StyleBoxEmpty_xxg1u")
+theme_override_styles/selected_focus = SubResource("StyleBoxEmpty_n7r07")
+theme_override_styles/cursor = SubResource("StyleBoxEmpty_dctdf")
+theme_override_styles/cursor_unfocused = SubResource("StyleBoxEmpty_5j25e")
+theme_override_styles/button_hover = SubResource("StyleBoxEmpty_er0wq")
+theme_override_styles/custom_button_pressed = SubResource("StyleBoxEmpty_co06w")
+theme_override_styles/custom_button_hover = SubResource("StyleBoxEmpty_6rdul")
+theme_override_styles/custom_button = SubResource("StyleBoxEmpty_p1w8k")
+theme_override_styles/button_pressed = SubResource("StyleBoxEmpty_6ektl")
+columns = 2
+allow_search = false
+hide_root = true
+select_mode = 1
+auto_tooltip = false
+script = ExtResource("22")
+metadata/_tab_index = 2
+
+[node name="StatsTreeUpdateTimer" type="Timer" parent="SHOP_TAB_INFO"]
+autostart = true
+ignore_time_scale = true
+
+[connection signal="tab_changed" from="." to="." method="_on_tab_changed"]
+[connection signal="timeout" from="SHOP_TAB_INFO/StatsTreeUpdateTimer" to="SHOP_TAB_INFO" method="_on_stats_tree_update_timer_timeout"]

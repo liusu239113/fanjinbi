@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=4 uid="uid://bf7wgj0praep7"]
+
+[ext_resource type="Script" uid="uid://1l2l0brnpiw8" path="res://contexts/stats_context/stats_context.gd" id="1"]
+
+[node name="StatsContext" type="Node"]
+script = ExtResource("1")

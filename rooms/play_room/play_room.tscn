@@ -1,0 +1,154 @@
+[gd_scene load_steps=13 format=3 uid="uid://dji6tdg6ku1xb"]
+
+[ext_resource type="Script" uid="uid://dqahrrr6r6kg3" path="res://rooms/play_room/play_room.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://can5eils5trad" path="res://assets/images/background_marmor.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://dg0rshb2a5i6b" path="res://assets/images/background.png" id="3"]
+[ext_resource type="PackedScene" uid="uid://c6w84rshktxt8" path="res://ui/coin_background/coin_background.tscn" id="4"]
+[ext_resource type="PackedScene" uid="uid://dncs1sw4trcf2" path="res://ui/shop_sidebar/shop_sidebar.tscn" id="5"]
+[ext_resource type="Texture2D" uid="uid://0buwwpljst5j" path="res://assets/images/background_poker.png" id="5_uefhv"]
+[ext_resource type="PackedScene" uid="uid://brm41gx2euml2" path="res://ui/dice_combination_display/dice_combination_display.tscn" id="6"]
+[ext_resource type="Script" uid="uid://17wf54x815pf" path="res://rooms/play_room/prestige_button.gd" id="7"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a54t0"]
+bg_color = Color(0, 0, 0, 0.807843)
+
+[sub_resource type="InputEventKey" id="InputEventKey_a54t0"]
+device = -1
+keycode = 4194305
+
+[sub_resource type="Shortcut" id="Shortcut_f8flj"]
+events = [SubResource("InputEventKey_a54t0")]
+
+[sub_resource type="Environment" id="Environment_uefhv"]
+background_mode = 3
+reflected_light_source = 1
+tonemap_mode = 1
+ssao_radius = 9.32
+glow_enabled = true
+glow_levels/3 = 0.0
+glow_normalized = true
+glow_intensity = 0.28
+glow_strength = 1.29
+glow_blend_mode = 0
+adjustment_enabled = true
+adjustment_brightness = 0.95
+adjustment_contrast = 1.09
+
+[node name="PlayRoom" type="Node2D"]
+script = ExtResource("1")
+table_sprites = Dictionary[String, Texture2D]({
+"marmor": ExtResource("2"),
+"normal": ExtResource("3")
+})
+
+[node name="CoinBackground" parent="." instance=ExtResource("4")]
+unique_name_in_owner = true
+
+[node name="Table" type="Sprite2D" parent="."]
+unique_name_in_owner = true
+position = Vector2(578, 324)
+texture = ExtResource("5_uefhv")
+
+[node name="Interactables" type="Node2D" parent="."]
+unique_name_in_owner = true
+y_sort_enabled = true
+position = Vector2(486, 324)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(578, 324)
+zoom = Vector2(1.5, 1.5)
+process_callback = 0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="CenterContainer" type="CenterContainer" parent="UI"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 179.0
+offset_top = 6.0
+offset_right = -415.0
+offset_bottom = 56.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="HSplitContainer" type="HSplitContainer" parent="UI/CenterContainer"]
+layout_mode = 2
+mouse_filter = 2
+dragger_visibility = 1
+
+[node name="Money" type="RichTextLabel" parent="UI/CenterContainer/HSplitContainer"]
+clip_contents = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/normal_font_size = 46
+bbcode_enabled = true
+text = "0"
+fit_content = true
+autowrap_mode = 0
+
+[node name="MoneySymbol" type="RichTextLabel" parent="UI/CenterContainer/HSplitContainer"]
+clip_contents = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.890408, 0.58563, 1.15514e-06, 1)
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/normal_font_size = 46
+bbcode_enabled = true
+text = "CURRENCY"
+fit_content = true
+autowrap_mode = 0
+
+[node name="Shop" parent="UI" instance=ExtResource("5")]
+anchors_preset = 11
+offset_left = -272.0
+offset_top = 6.0
+offset_right = -6.0
+offset_bottom = -6.0
+
+[node name="DiceCombinationDisplay" parent="UI" instance=ExtResource("6")]
+visible = false
+offset_left = 7.0
+offset_top = 588.0
+offset_right = 136.0
+offset_bottom = 639.0
+
+[node name="OptionsButton" type="Button" parent="UI"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 6.0
+offset_top = -33.0
+offset_right = 58.0
+offset_bottom = -7.0
+grow_vertical = 0
+theme_override_styles/normal = SubResource("StyleBoxFlat_a54t0")
+shortcut = SubResource("Shortcut_f8flj")
+text = "OPTIONS"
+
+[node name="PrestigeButton" type="Button" parent="UI"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -210.0
+offset_top = 137.0
+offset_right = -8.0
+offset_bottom = 177.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "SACRIFICE"
+script = ExtResource("7")
+
+[node name="Timer" type="Timer" parent="UI/PrestigeButton"]
+autostart = true
+ignore_time_scale = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_uefhv")
+
+[connection signal="sold_something" from="UI/Shop" to="." method="_on_shop_sold_something"]
+[connection signal="pressed" from="UI/OptionsButton" to="." method="_on_options_button_pressed"]
+[connection signal="pressed" from="UI/PrestigeButton" to="UI/PrestigeButton" method="_on_pressed"]
+[connection signal="timeout" from="UI/PrestigeButton/Timer" to="UI/PrestigeButton" method="_on_timer_timeout"]

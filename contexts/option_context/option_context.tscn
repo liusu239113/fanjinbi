@@ -1,0 +1,17 @@
+[gd_scene load_steps=5 format=4 uid="uid://c7huc4caqn7tu"]
+
+[ext_resource type="Script" uid="uid://vereibytt1jr" path="res://contexts/option_context/option_context.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://bjgieen3srsb4" path="res://assets/images/cursor_spritesheet.png" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_n6ouu"]
+atlas = ExtResource("2")
+region = Rect2(0, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_brqiw"]
+atlas = ExtResource("2")
+region = Rect2(32, 0, 32, 32)
+
+[node name="OptionContext" type="Node"]
+script = ExtResource("1")
+mouse_cursor_normal = SubResource("AtlasTexture_n6ouu")
+mouse_cusor_pressed = SubResource("AtlasTexture_brqiw")

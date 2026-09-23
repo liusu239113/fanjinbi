@@ -1,0 +1,53 @@
+[gd_scene load_steps=7 format=4 uid="uid://c6w84rshktxt8"]
+
+[ext_resource type="Script" uid="uid://bmlakflwlpm7p" path="res://ui/coin_background/coin_background.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://bts5cofgb04oh" path="res://assets/images/repeating_small_coing.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://cnnneblyhkbsj" path="res://assets/images/repeating_medium_coins.png" id="3"]
+[ext_resource type="Texture2D" uid="uid://cq54vturxb4p7" path="res://assets/images/repeating_large_coins.png" id="4"]
+[ext_resource type="Shader" uid="uid://dmagjs1ncxm2s" path="res://rooms/play_room/wave.gdshader" id="5"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_a54t0"]
+shader = ExtResource("5")
+shader_parameter/waveAmplitude = 0.021
+shader_parameter/correctVertex = false
+shader_parameter/waveFrequency = 58.668
+shader_parameter/verticalWave = true
+shader_parameter/keepTransparency = false
+shader_parameter/useTime = true
+shader_parameter/waveSpeed = 0.5
+shader_parameter/progress = 0.0
+shader_parameter/firstHalf = 0.5
+shader_parameter/secondHalf = 0.5
+shader_parameter/freezeFirstHalf = false
+shader_parameter/freezeSecondHalf = false
+
+[node name="CoinBackground" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1")
+small_coin_texture = ExtResource("2")
+medium_coin_texture = ExtResource("3")
+large_coin_texture = ExtResource("4")
+
+[node name="Parallax2D" type="Parallax2D" parent="."]
+unique_name_in_owner = true
+modulate = Color(0.253599, 0.248334, 0.234076, 1)
+scroll_offset = Vector2(85, -4)
+repeat_size = Vector2(36, 33)
+autoscroll = Vector2(4, 4)
+repeat_times = 20
+
+[node name="Sprite" type="Sprite2D" parent="Parallax2D"]
+unique_name_in_owner = true
+position = Vector2(607, 355.5)
+texture = ExtResource("2")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_a54t0")
+layout_mode = 0
+offset_left = 137.0
+offset_top = 79.0
+offset_right = 1015.0
+offset_bottom = 578.0

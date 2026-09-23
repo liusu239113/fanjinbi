@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Purchasable" load_steps=4 format=3 uid="uid://bnwvx451wcxi1"]
+
+[ext_resource type="Texture2D" uid="uid://dx7lurcncfoc5" path="res://assets/images/upgrade_icons.png" id="1"]
+[ext_resource type="Script" uid="uid://cvdya1ja2f1e7" path="res://purchasables/purchasable.gd" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_4upds"]
+atlas = ExtResource("1")
+region = Rect2(0, 128, 32, 32)
+
+[resource]
+script = ExtResource("2")
+attribute_to_upgrade_or_unlock = 14
+icon = SubResource("AtlasTexture_4upds")
+name_key = "HELPER_EFFICIENCY_NAME"
+description_key = "HELPER_EFFICIENCY_DESC"
+requirement_to_see_expression_key = "requirement_to_see_helper_efficiency"
+price_expression_key = "price_expression_helper_efficiency"
+increase_amount_key = "increase_amount_helper_efficiency"
+max_purchase_amount_key = "max_purchase_amount_helper_efficiency"
+requirement_to_buy_expression_key = "requirement_to_buy_helper_efficiency"
+increase_is_percentage = true

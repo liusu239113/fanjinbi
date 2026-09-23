@@ -1,0 +1,99 @@
+key, value
+small_coin_base_value, 1
+medium_coin_base_value, 20
+large_coin_base_value,  300
+
+requirement_to_buy_additional_coin_value_large,large_coins > 0
+requirement_to_see_additional_coin_value_large,large_coins > 0
+increase_amount_additional_coin_value_large, 30.0
+max_purchase_amount_additional_coin_value_large, 50
+
+requirement_to_buy_additional_coin_value_medium,medium_coins > 0
+requirement_to_see_additional_coin_value_medium,medium_coins > 0
+increase_amount_additional_coin_value_medium, 5.0
+max_purchase_amount_additional_coin_value_medium, 50
+
+requirement_to_buy_additional_coin_value_small,small_coins > 0
+requirement_to_see_additional_coin_value_small,small_coins > 0
+increase_amount_additional_coin_value_small, 1.0
+max_purchase_amount_additional_coin_value_small, 50
+
+requirement_to_buy_additional_coin_value_multiplier_large,large_coins >= 5
+requirement_to_see_additional_coin_value_multiplier_large,large_coins >= 5
+increase_amount_additional_coin_value_multiplier_large, 0.2
+max_purchase_amount_additional_coin_value_multiplier_large, 20
+
+requirement_to_buy_additional_coin_value_multiplier_medium,medium_coins >= 10
+requirement_to_see_additional_coin_value_multiplier_medium,medium_coins >= 10
+increase_amount_additional_coin_value_multiplier_medium, 0.2
+max_purchase_amount_additional_coin_value_multiplier_medium, 20
+
+requirement_to_buy_additional_coin_value_multiplier_small,small_coins >= 20
+requirement_to_see_additional_coin_value_multiplier_small,small_coins >= 20
+increase_amount_additional_coin_value_multiplier_small, 0.2
+max_purchase_amount_additional_coin_value_multiplier_small, 20
+
+requirement_to_buy_coins_trigger_coins,large_coins > 0
+requirement_to_see_coins_trigger_coins,large_coins > 0
+increase_amount_coins_trigger_coins, 1.0
+max_purchase_amount_coins_trigger_coins, 1
+
+requirement_to_buy_coin_flip_speed_large,large_coins >= 5
+requirement_to_see_coin_flip_speed_large,large_coins >= 5
+increase_amount_coin_flip_speed_large, 0.2
+max_purchase_amount_coin_flip_speed_large, 20
+
+requirement_to_buy_coin_flip_speed_medium,medium_coins >= 10
+requirement_to_see_coin_flip_speed_medium,medium_coins >= 10
+increase_amount_coin_flip_speed_medium, 0.15
+max_purchase_amount_coin_flip_speed_medium, 20
+
+requirement_to_buy_coin_flip_speed_small,small_coins >= 2
+requirement_to_see_coin_flip_speed_small,small_coins >= 20
+increase_amount_coin_flip_speed_small, 0.1
+max_purchase_amount_coin_flip_speed_small, 20
+
+requirement_to_buy_helper_efficiency,helpers > 0
+requirement_to_see_helper_efficiency,helpers > 0
+increase_amount_helper_efficiency, 0.15
+max_purchase_amount_helper_efficiency, 20
+
+requirement_to_buy_helper_trigger_large_coins,large_coins > 0 && helpers > 0
+requirement_to_see_helper_trigger_large_coins,large_coins > 0 && helpers > 0
+increase_amount_helper_trigger_large_coins, 1.0
+max_purchase_amount_helper_trigger_large_coins, 1
+
+requirement_to_buy_helper_trigger_medium_coins,medium_coins > 0 && helpers > 0
+requirement_to_see_helper_trigger_medium_coins,medium_coins > 0 && helpers > 0
+increase_amount_helper_trigger_medium_coins, 1.0
+max_purchase_amount_helper_trigger_medium_coins, 1
+
+requirement_to_buy_hover_small_coins,small_coins > 0
+requirement_to_see_hover_small_coins,small_coins > 0
+increase_amount_hover_small_coins, 1.0
+max_purchase_amount_hover_small_coins, 1
+
+requirement_to_buy_reflip_chance,medium_coins > 0
+requirement_to_see_reflip_chance,medium_coins > 0
+increase_amount_reflip_chance, 0.05
+max_purchase_amount_reflip_chance, 15
+
+requirement_to_buy_small_coin,""
+requirement_to_see_small_coin,""
+increase_amount_small_coin, 1.0
+max_purchase_amount_small_coin, 100
+
+requirement_to_buy_medium_coin,""
+requirement_to_see_medium_coin,""
+increase_amount_medium_coin, 1.0
+max_purchase_amount_medium_coin, 50
+
+requirement_to_buy_large_coin,medium_coins > 0
+requirement_to_see_large_coin,medium_coins > 0
+increase_amount_large_coin, 1.0
+max_purchase_amount_large_coin, 30
+
+requirement_to_buy_helper,""
+requirement_to_see_helper,""
+increase_amount_helper, 1.0
+max_purchase_amount_helper, 30

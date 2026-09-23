@@ -1,0 +1,64 @@
+[gd_scene load_steps=5 format=4 uid="uid://dbh6jrpcqwj76"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_i4kne"]
+
+[sub_resource type="GDScript" id="GDScript_1dpdc"]
+resource_name = "Tooltip"
+script/source = "extends PanelContainer
+class_name Tooltip
+
+@onready var description_label_rich_text : RichTextLabel = $MarginContainer/PaddingContainer/RichTextLabel
+
+func set_description(content: String):
+	description_label_rich_text.text = content
+"
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_3037n"]
+bg_color = Color(0, 0, 0, 0.905882)
+corner_radius_top_left = 32
+corner_radius_top_right = 32
+corner_radius_bottom_right = 32
+corner_radius_bottom_left = 32
+
+[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_apk2k"]
+
+[node name="Tooltip" type="PanelContainer"]
+offset_right = 500.0
+offset_bottom = 55.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_i4kne")
+script = SubResource("GDScript_1dpdc")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="Panel" type="Panel" parent="MarginContainer"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_3037n")
+
+[node name="NinePatchRect" type="NinePatchRect" parent="MarginContainer"]
+visible = false
+layout_mode = 2
+texture = SubResource("PlaceholderTexture2D_apk2k")
+
+[node name="PaddingContainer" type="MarginContainer" parent="MarginContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 12
+
+[node name="RichTextLabel" type="RichTextLabel" parent="MarginContainer/PaddingContainer"]
+clip_contents = false
+layout_mode = 2
+mouse_filter = 2
+bbcode_enabled = true
+text = "This is an example text for an example component."
+fit_content = true
+scroll_active = false

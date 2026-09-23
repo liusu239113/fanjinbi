@@ -1,0 +1,96 @@
+[gd_scene load_steps=18 format=4 uid="uid://bbp4glt7ob7h1"]
+
+[ext_resource type="Script" uid="uid://jhl446ngtvr1" path="res://items/interactables/dice/dice.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://brvib6f8vn5xp" path="res://assets/images/light.png" id="2"]
+[ext_resource type="Material" uid="uid://wuu7m4jlcagq" path="res://items/interactables/dice/dice_texture_material.tres" id="3"]
+[ext_resource type="AudioStream" uid="uid://dwup0lu2a207v" path="res://assets/sounds/shake_dice_12.wav" id="4"]
+[ext_resource type="AudioStream" uid="uid://fxrk3p42ay50" path="res://assets/sounds/roll_dice_single_16.wav" id="5"]
+[ext_resource type="AudioStream" uid="uid://y4phkj7wgxnc" path="res://assets/sounds/roll_dice_single05.wav" id="6"]
+[ext_resource type="AudioStream" uid="uid://brfrw1x2mlwd2" path="res://assets/sounds/roll_dice_single_08.wav" id="7"]
+[ext_resource type="AudioStream" uid="uid://2m5ya3i80i4g" path="res://assets/sounds/swing2.wav" id="8"]
+[ext_resource type="AudioStream" uid="uid://mkdyiwh3c6w3" path="res://assets/sounds/swing3.wav" id="9"]
+[ext_resource type="AudioStream" uid="uid://duvo3nfwvv3kr" path="res://assets/sounds/swing.wav" id="10"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_86dv1"]
+blend_mode = 2
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_s7y03"]
+size = Vector2(32, 32)
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_8lgdg"]
+viewport_path = NodePath("SubViewport")
+
+[sub_resource type="BoxMesh" id="BoxMesh_h5ayo"]
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_4aghu"]
+random_pitch = 1.2999999523162842
+streams_count = 1
+stream_0/stream = ExtResource("4")
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_v8t0m"]
+random_pitch = 1.25
+streams_count = 3
+stream_0/stream = ExtResource("5")
+stream_1/stream = ExtResource("6")
+stream_2/stream = ExtResource("7")
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_785oj"]
+random_pitch = 1.2999999523162842
+streams_count = 3
+stream_0/stream = ExtResource("8")
+stream_1/stream = ExtResource("9")
+stream_2/stream = ExtResource("10")
+
+[node name="Dice" type="Area2D"]
+script = ExtResource("1")
+throw_strength = 10.0
+rotation_speed_multiplier = 20.0
+
+[node name="ShadowSprite" type="Sprite2D" parent="."]
+modulate = Color(1, 1, 1, 0.0352941)
+material = SubResource("CanvasItemMaterial_86dv1")
+position = Vector2(0, 6)
+scale = Vector2(0.126097, 0.12327)
+texture = ExtResource("2")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_s7y03")
+
+[node name="DiceSprite" type="Sprite2D" parent="."]
+scale = Vector2(0.460938, 0.460938)
+texture = SubResource("ViewportTexture_8lgdg")
+
+[node name="SubViewport" type="SubViewport" parent="."]
+own_world_3d = true
+transparent_bg = true
+size = Vector2i(64, 64)
+size_2d_override = Vector2i(32, 32)
+
+[node name="Node3D" type="Node3D" parent="SubViewport"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="SubViewport/Node3D"]
+material_override = ExtResource("3")
+cast_shadow = 0
+mesh = SubResource("BoxMesh_h5ayo")
+skeleton = NodePath("")
+
+[node name="Camera3D" type="Camera3D" parent="SubViewport/Node3D"]
+transform = Transform3D(1, 0, 0, 0, 0.936739, -0.350028, 0, 0.350028, 0.936739, 0, -3.07684, 8.3971)
+fov = 11.0
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="SubViewport/Node3D/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 0.98988, 0.141903, 0, -0.141903, 0.98988, 0, -0.500931, -6.6838)
+
+[node name="ShakeSound" type="AudioStreamPlayer2D" parent="."]
+stream = SubResource("AudioStreamRandomizer_4aghu")
+volume_db = 4.0
+
+[node name="LandSound" type="AudioStreamPlayer2D" parent="."]
+stream = SubResource("AudioStreamRandomizer_v8t0m")
+volume_db = 5.0
+
+[node name="JumpStartSound" type="AudioStreamPlayer2D" parent="."]
+stream = SubResource("AudioStreamRandomizer_785oj")
+volume_db = -5.0
+
+[connection signal="mouse_clicked" from="." to="." method="_on_mouse_clicked"]

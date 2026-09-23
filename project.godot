@@ -1,0 +1,106 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[addons]
+
+resources_spreadsheet_view/array_color_tint=100.0
+resources_spreadsheet_view/color_rows=true
+resources_spreadsheet_view/array_min_width=128.0
+resources_spreadsheet_view/resource_preview_size=32.0
+resources_spreadsheet_view/clip_headers=false
+resources_spreadsheet_view/dupe_arrays=true
+resources_spreadsheet_view/context_menu_on_leftclick=false
+resources_spreadsheet_view/fold_docks=true
+resources_spreadsheet_view/resource_cell_label_mode=1
+
+[application]
+
+config/name="Gamblers Table"
+config/version="0.3.0"
+run/main_scene="res://rooms/play_room/play_room.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://assets/images/icon.svg"
+
+[audio]
+
+buses/default_bus_layout="uid://b1nrkdo1fmbib"
+
+[autoload]
+
+SaveContext="*res://contexts/save_context/save_context.tscn"
+TooltipOverlay="*res://godot_tooltip_component_by_greenpixels/lib/core/tooltip_overlay/tooltip_overlay.tscn"
+StatsContext="*res://contexts/stats_context/stats_context.tscn"
+FloatingTextObjectPool="*res://ui/floating_text/floating_text_object_pool.tscn"
+OptionContext="*res://contexts/option_context/option_context.tscn"
+GameValuesContext="*res://contexts/game_values_context/game_values_context.gd"
+LimboConsole="*res://addons/limbo_console/limbo_console.gd"
+LimboManager="*res://autoload/limbo_manager/limbo_manager.gd"
+AutomationContext="*res://contexts/automation_context/automation_context.tscn"
+OptionsMenu="*res://ui/options_menu/options_menu.tscn"
+AudioManager="*res://autoload/audio_manager/audio_manager.tscn"
+TransitionHandler="*res://addons/greenpixels-simple-transition/transition_handler.tscn"
+DisableFocus="*res://autoload/disable_focus/disable_focus.gd"
+
+[display]
+
+window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/limbo_console/plugin.cfg", "res://addons/resources_spreadsheet_view/plugin.cfg")
+
+[global_group]
+
+tooltip_trigger=""
+small_coins=""
+medium_and_small_coins=""
+
+[gui]
+
+theme/custom="uid://bmceb367p3pue"
+theme/custom_font="res://assets/jersey10-regular.ttf"
+
+[input]
+
+limbo_console_toggle={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194332,"physical_keycode":0,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+limbo_auto_complete_reverse={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":0,"window_id":0,"alt_pressed":false,"shift_pressed":true,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194306,"physical_keycode":0,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+trigger_coin={
+"deadzone": 0.2,
+"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":1,"position":Vector2(263, 14),"global_position":Vector2(272, 62),"factor":1.0,"button_index":1,"canceled":false,"pressed":true,"double_click":false,"script":null)
+, Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":32,"key_label":0,"unicode":32,"location":0,"echo":false,"script":null)
+]
+}
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://localization/localized_misc.de.translation", "res://localization/localized_misc.en.translation", "res://localization/localized_purchasables.de.translation", "res://localization/localized_purchasables.en.translation", "res://localization/localized_shop.de.translation", "res://localization/localized_shop.en.translation", "res://localization/localized_options.de.translation", "res://localization/localized_options.en.translation", "res://localization/localized_stats_overview.de.translation", "res://localization/localized_stats_overview.en.translation")
+
+[layer_names]
+
+2d_physics/layer_1="coins"
+2d_physics/layer_2="helper"
+
+[physics]
+
+common/physics_ticks_per_second=20
+common/physics_jitter_fix=0.0
+common/physics_interpolation=true
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0

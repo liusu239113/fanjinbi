@@ -1,0 +1,92 @@
+GDRE Tools v0.9.0-beta.4
+Windows 10.0.19045, AMD Radeon RX 6600, opengl3
+Opening file: D:\Downloads\gamblers-table-windows\gamblers-table.pck
+Verified 514 files, no errors detected!
+Extracted 514 files, no errors detected!
+WARNING: Converting lossy imports, you may lose fidelity for indicated assets when re-importing upon loading the project
+   at: ImportExporter::_export_imports (modules\gdsdecomp\utility\import_exporter.cpp:241)
+Script version 4.3.0-stable (rev 0x77af6ca) detected
+Recreating plugin configs...
+WARNING: Failed to recreate plugin.cfg for GodotBigNumberClass
+   at: ImportExporter::recreate_plugin_configs (modules\gdsdecomp\utility\import_exporter.cpp:647)
+WARNING: Failed to recreate plugin.cfg for godot_big_number_class
+   at: ImportExporter::recreate_plugin_configs (modules\gdsdecomp\utility\import_exporter.cpp:647)
+WARNING: Failed to recreate plugin.cfg for greenpixels-simple-transition
+   at: ImportExporter::recreate_plugin_configs (modules\gdsdecomp\utility\import_exporter.cpp:647)
+Exporting resources in parallel...
+Loading resource strings, this may take a while!!
+Resource strings loaded!
+Saved project config project.godot.
+
+
+********************************EXPORT REPORT********************************
+
+Totals:                                 
+Decompiled scripts:                     96
+Failed scripts:                         0
+Imported resources for export session:  153
+Successfully converted:                 153
+Lossy:                                  8
+Rewrote metadata:                       64
+Non-importable conversions:             2
+Not converted:                          0
+Failed conversions:                     0
+-------------
+
+
+The following files were converted from an import that was stored lossy.
+You may lose fidelity when re-importing these files upon loading the project.
+res://.godot/imported/Stone_Hit_01.wav-8bc0efd329070a90fdb6dbfc0e594803.sample to res://assets/sounds/Stone_Hit_01.wav
+res://.godot/imported/Stone_Hit_07.wav-5194715ef508335999e52f784f67b7ed.sample to res://assets/sounds/Stone_Hit_07.wav
+res://.godot/imported/coin_flung.wav-e3815415aa3e591e5c1b35bfd268cb93.sample to res://assets/sounds/coin_flung.wav
+res://.godot/imported/stone_hit_01.wav-25ad7fdfec0eb57d00113b92a8ce3689.sample to res://assets/sounds/stone_hit_01.wav
+res://.godot/imported/stone_hit_07.wav-7f3f1940e1585649ab320e1b39724896.sample to res://assets/sounds/stone_hit_07.wav
+res://.godot/imported/swing.wav-a80cafcb45f4e22620b8de3319159d54.sample to res://assets/sounds/swing.wav
+res://.godot/imported/swing2.wav-5bee522397ce0473c781d7e9168a5c1b.sample to res://assets/sounds/swing2.wav
+res://.godot/imported/swing3.wav-bafb5897e0f83278870f06b6f2dbab3f.sample to res://assets/sounds/swing3.wav
+------
+
+The following plugins failed to have their plugin.cfg regenerated:
+GodotBigNumberClass
+godot_big_number_class
+greenpixels-simple-transition
+------
+
+The following files were converted and saved to a non-original path, but did not have their import data rewritten.
+These files will not be re-imported when loading the project.
+res://.godot/imported/icon.svg-2a379f463509f41fc5e90a1cd52fdb6b.ctex to res://.assets/assets/images/icon.png
+res://localization/localized_stats_overview.*.translation to res://.assets/localization/localized_stats_overview.csv
+
+
+
+---------------------------------IMPORTANT NOTES----------------------------------
+
+
+Translation Export Incomplete:
+WARNING: Could not recover 1 keys for res://localization/localized_options.csv
+WARNING: Could not recover 2 keys for res://localization/localized_purchasables.csv
+WARNING: Could not recover 7 keys for res://localization/localized_stats_overview.csv
+Saved localized_stats_overview.csv to res://.assets/localization/localized_stats_overview.csv
+
+
+------
+Incomplete Plugin Export:
+The following addons failed to have their plugin.cfg regenerated
+You may encounter editor errors due to this.
+Tip: Try finding the plugin in the Godot Asset Library or Github.
+
+ - GodotBigNumberClass
+ - godot_big_number_class
+ - greenpixels-simple-transition
+
+
+
+------------------------------------------------------------------------------------
+
+Use Godot editor version 4.4.0 to edit the project.
+Note: the project may be using a custom version of Godot. Detection for this has not been implemented yet.
+If you find that you have many non-import errors upon opening the project 
+(i.e. scripts or shaders have many errors), use the original game's binary as the export template.
+
+*******************************************************************************
+

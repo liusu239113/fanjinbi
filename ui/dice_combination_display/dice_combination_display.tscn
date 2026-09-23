@@ -1,0 +1,131 @@
+[gd_scene load_steps=10 format=4 uid="uid://brm41gx2euml2"]
+
+[ext_resource type="Script" uid="uid://dimgcektkmqi6" path="res://ui/dice_combination_display/dice_combination_display.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://cagovk47ijuxn" path="res://assets/images/dice.png" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_pphi2"]
+atlas = ExtResource("2")
+region = Rect2(0, 0, 22, 22)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_xttxn"]
+atlas = ExtResource("2")
+region = Rect2(22, 22, 22, 22)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_66ci5"]
+atlas = ExtResource("2")
+region = Rect2(44, 0, 22, 22)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_n460j"]
+atlas = ExtResource("2")
+region = Rect2(44, 22, 22, 22)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_8x40j"]
+atlas = ExtResource("2")
+region = Rect2(0, 22, 22, 22)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mh0a4"]
+atlas = ExtResource("2")
+region = Rect2(22, 0, 22, 22)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_n7cba"]
+atlas = ExtResource("2")
+region = Rect2(0, 0, 22, 22)
+
+[node name="DiceCombinationDisplay" type="PanelContainer"]
+script = ExtResource("1")
+dice_faces = [SubResource("AtlasTexture_pphi2"), SubResource("AtlasTexture_xttxn"), SubResource("AtlasTexture_66ci5"), SubResource("AtlasTexture_n460j"), SubResource("AtlasTexture_8x40j"), SubResource("AtlasTexture_mh0a4")]
+
+[node name="FloatingTextSpawn" type="Node2D" parent="."]
+position = Vector2(72, -5)
+
+[node name="VSplitContainer" type="VSplitContainer" parent="."]
+layout_mode = 2
+dragger_visibility = 2
+
+[node name="MarginContainer2" type="MarginContainer" parent="VSplitContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 2
+
+[node name="RichTextLabel" type="RichTextLabel" parent="VSplitContainer/MarginContainer2"]
+layout_mode = 2
+text = "DICE_COMBINATION_LABEL"
+fit_content = true
+autowrap_mode = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="VSplitContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VSplitContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="CenterContainer" type="CenterContainer" parent="VSplitContainer/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="FirstDice" type="TextureRect" parent="VSplitContainer/MarginContainer/HBoxContainer/CenterContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(21, 21)
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_n7cba")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CenterContainer2" type="CenterContainer" parent="VSplitContainer/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="SecondDice" type="TextureRect" parent="VSplitContainer/MarginContainer/HBoxContainer/CenterContainer2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(21, 21)
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_n7cba")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CenterContainer3" type="CenterContainer" parent="VSplitContainer/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ThirdDice" type="TextureRect" parent="VSplitContainer/MarginContainer/HBoxContainer/CenterContainer3"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(21, 21)
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_n7cba")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CenterContainer4" type="CenterContainer" parent="VSplitContainer/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="FourthDice" type="TextureRect" parent="VSplitContainer/MarginContainer/HBoxContainer/CenterContainer4"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(21, 21)
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_n7cba")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CenterContainer5" type="CenterContainer" parent="VSplitContainer/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="FifthDice" type="TextureRect" parent="VSplitContainer/MarginContainer/HBoxContainer/CenterContainer5"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(21, 21)
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_n7cba")
+expand_mode = 1
+stretch_mode = 5

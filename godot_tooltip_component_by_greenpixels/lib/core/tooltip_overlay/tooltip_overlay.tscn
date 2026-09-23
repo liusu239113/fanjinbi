@@ -1,0 +1,204 @@
+[gd_scene load_steps=14 format=4 uid="uid://dbu7cb0h10jdt"]
+
+[ext_resource type="Script" uid="uid://d15ib6snxn55r" path="res://godot_tooltip_component_by_greenpixels/lib/core/resources/tooltip_highlighted_key.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://c5oisy2lojesk" path="res://items/interactables/coin/small_coin/small_coin_icon.tres" id="2"]
+[ext_resource type="Texture2D" uid="uid://b2thaw67bi12c" path="res://items/interactables/coin/medium_coin/medium_coin_icon.tres" id="3"]
+[ext_resource type="Texture2D" uid="uid://kdnhqyc6lkjv" path="res://items/interactables/coin/large_coin/large_coin_icon.tres" id="4"]
+[ext_resource type="PackedScene" uid="uid://dbh6jrpcqwj76" path="res://godot_tooltip_component_by_greenpixels/lib/core/tooltip/tooltip.tscn" id="5"]
+
+[sub_resource type="GDScript" id="GDScript_5jax0"]
+resource_name = "TooltipOverlay"
+script/source = "extends CanvasLayer
+
+@onready var layout_wrapper = %LayoutWrapper
+@onready var tooltip_container = %TooltipContainer
+@onready var main_tooltip = %MainTooltip
+@onready var tooltip_loading_bar = %TooltipLoadingBar
+@onready var tooltip_scene = preload(\"res://godot_tooltip_component_by_greenpixels/lib/core/tooltip/tooltip.tscn\")
+@export var highlighted_keys : Array[TooltipHighlightedKey]
+@export var explanations_delay = 1.25
+@export var tooltip_transition_type : Tween.TransitionType = Tween.TRANS_ELASTIC
+@export var tooltip_easing_type : Tween.EaseType = Tween.EASE_OUT
+var explanations : Array[Node] = []
+#var id = 0
+
+func _ready():
+	layout_wrapper.scale = Vector2(0, 1)
+	get_tree().tree_changed.connect(
+		func():
+			if !get_tree(): return
+			for node in get_tree().get_nodes_in_group(\"tooltip_trigger\"):
+				if node is Control:
+					var already_connected = false
+					for connection in (node.focus_exited as Signal).get_connections():
+						if connection.callable.get_method() == conceal.get_method():
+							already_connected = true
+					if not already_connected:
+						node.focus_exited.connect(conceal)
+						node.mouse_exited.connect(conceal)	
+	)
+
+func conceal():
+	# tooltip_container.reset_size()
+	TweenHelper.tween(\"tooltip_container_scale\", layout_wrapper).tween_property(layout_wrapper, \"scale\", Vector2(0, 1), 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func describe(origin_node: Control, content: String, show_extra_explanation = false):
+	if LimboManager.should_hide_tooltips: return
+	var origin_x_position = 0
+	if origin_node:
+		origin_x_position = origin_node.global_position.x
+	var viewport_center_position =  get_viewport().get_visible_rect().size.x / 2
+	tooltip_loading_bar.value = 0
+	TweenHelper.tween(\"load_progress\", tooltip_loading_bar).tween_property(tooltip_loading_bar, \"value\", 0, 0)
+	__cleanup()
+	main_tooltip.set_description(apply_bbcode_for_common_keys(content, show_extra_explanation))
+	if not explanations.is_empty():
+		TweenHelper.tween(\"load_progress\", tooltip_loading_bar).tween_property(tooltip_loading_bar, \"value\", 100, explanations_delay)
+	
+	for explanation in explanations:
+		var current_modulate = explanation.modulate
+		explanation.modulate.a = 0
+		TweenHelper.tween(\"fade_in\", explanation).tween_property(explanation, \"modulate\", current_modulate, 0.15).set_delay(explanations_delay)
+	
+	 
+	if origin_x_position > viewport_center_position:
+		#tooltip_container.set_anchors_preset(Control.PRESET_BOTTOM_LEFT, true)
+		layout_wrapper.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_KEEP_WIDTH)
+	else:
+		layout_wrapper.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_WIDTH)
+	#tooltip_container.pivot_offset = Vector2(100, 0)#
+	#main_tooltip.reset_size()
+	#tooltip_container.size.x = 1000
+	tooltip_container.scale = Vector2(1, 1)
+	layout_wrapper.scale = Vector2(0,1)
+	TweenHelper.tween(\"tooltip_container_scale\", layout_wrapper).tween_property(layout_wrapper, \"scale\", Vector2(1, 1), 0.25).set_trans(tooltip_transition_type).set_ease(tooltip_easing_type)
+	#return id
+	
+func apply_bbcode_for_common_keys(content: String, show_explanations: bool) -> String:
+	if show_explanations:
+		for highlighted_key in highlighted_keys:
+			if highlighted_key.explanation:
+				content = add_explanation(content, \"{\" + highlighted_key.key + \"}\", highlighted_key.explanation.explanation_tr_key, highlighted_key.explanation.should_remove_key)
+		
+	for highlighted_key in highlighted_keys:
+		var replacement_bbcode_builder : BBCodeHelper = BBCodeHelper.build(tr(highlighted_key.tr_key).capitalize())
+		if highlighted_key.icon:
+			replacement_bbcode_builder = replacement_bbcode_builder.add_icon(highlighted_key.icon)
+		replacement_bbcode_builder.color(\"#\" + highlighted_key.color.to_html(true))
+		content = content.format({highlighted_key.key: replacement_bbcode_builder.result()})
+	content.strip_edges()
+
+	return content
+
+func add_explanation(current_content: String, key_to_replace: StringName, explanation: String, should_remove_key = false, title: String = \"\") -> String:
+	if not current_content.contains(key_to_replace): return current_content
+	if title.is_empty(): title = key_to_replace
+	var popover : Control = tooltip_scene.instantiate()
+	popover.set_description(
+		apply_bbcode_for_common_keys(title, false) +
+		\"\\n\\n\" +
+		apply_bbcode_for_common_keys(explanation, false)
+	)
+	
+	explanations.push_back(popover)
+	tooltip_container.add_child(popover)
+	tooltip_container.move_child(popover, 0)
+	if should_remove_key: current_content = current_content.replace(key_to_replace, \"\")
+	return current_content
+
+func __cleanup():
+	for node in explanations:
+		node.queue_free()
+	explanations = []
+"
+
+[sub_resource type="Resource" id="Resource_c6qqo"]
+script = ExtResource("1")
+key = "currency"
+icon = null
+color = Color(0.905521, 0.575046, 3.85046e-07, 1)
+tr_key = "CURRENCY"
+explanation = null
+
+[sub_resource type="Resource" id="Resource_1svhy"]
+script = ExtResource("1")
+key = "small_coin"
+icon = ExtResource("2")
+color = Color(0.894118, 0.713726, 0.498039, 1)
+tr_key = "SMALL_COIN_NAME"
+explanation = null
+
+[sub_resource type="Resource" id="Resource_agcpr"]
+script = ExtResource("1")
+key = "medium_coin"
+icon = ExtResource("3")
+color = Color(0.839216, 0.870588, 0.937255, 1)
+tr_key = "MEDIUM_COIN_NAME"
+explanation = null
+
+[sub_resource type="Resource" id="Resource_1n0sx"]
+script = ExtResource("1")
+key = "large_coin"
+icon = ExtResource("4")
+color = Color(0.976471, 0.882353, 0.380392, 1)
+tr_key = "LARGE_COIN_NAME"
+explanation = null
+
+[sub_resource type="Resource" id="Resource_l5jvc"]
+script = ExtResource("1")
+key = "coins"
+icon = null
+color = Color(0.958026, 0.673786, 3.85046e-07, 1)
+tr_key = "COINS_NAME"
+explanation = null
+
+[sub_resource type="Resource" id="Resource_b1rbg"]
+script = ExtResource("1")
+key = "dice"
+icon = null
+color = Color(0.899948, 0.799997, 0.83726, 1)
+tr_key = "DICE_NAME"
+explanation = null
+
+[sub_resource type="Resource" id="Resource_4y2op"]
+script = ExtResource("1")
+key = "helper"
+icon = null
+color = Color(0.438742, 0.773065, 1, 1)
+tr_key = "HELPER_NAME"
+explanation = null
+
+[node name="TooltipOverlay" type="CanvasLayer"]
+layer = 5
+script = SubResource("GDScript_5jax0")
+highlighted_keys = [SubResource("Resource_c6qqo"), SubResource("Resource_1svhy"), SubResource("Resource_agcpr"), SubResource("Resource_1n0sx"), SubResource("Resource_l5jvc"), SubResource("Resource_b1rbg"), SubResource("Resource_4y2op")]
+
+[node name="LayoutWrapper" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -401.0
+offset_top = -101.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+metadata/_edit_group_ = true
+
+[node name="TooltipContainer" type="VBoxContainer" parent="LayoutWrapper"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 8
+mouse_filter = 2
+
+[node name="MainTooltip" parent="LayoutWrapper/TooltipContainer" instance=ExtResource("5")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="TooltipLoadingBar" type="ProgressBar" parent="LayoutWrapper/TooltipContainer/MainTooltip"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+show_percentage = false

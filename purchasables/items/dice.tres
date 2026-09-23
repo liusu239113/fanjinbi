@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Purchasable" load_steps=5 format=3 uid="uid://dmnb03xfnjfa4"]
+
+[ext_resource type="Texture2D" uid="uid://cagovk47ijuxn" path="res://assets/images/dice.png" id="1"]
+[ext_resource type="Script" uid="uid://cvdya1ja2f1e7" path="res://purchasables/purchasable.gd" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_6h3g6"]
+atlas = ExtResource("1")
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_82s18"]
+atlas = SubResource("AtlasTexture_6h3g6")
+region = Rect2(0, 0, 22, 22)
+
+[resource]
+script = ExtResource("2")
+attribute_to_upgrade_or_unlock = 6
+icon = SubResource("AtlasTexture_82s18")
+name_key = "DICE_NAME"
+description_key = "DICE_DESC"
+requirement_to_see_expression_key = "NO_KEY "
+price_expression_key = "NO_KEY"
+increase_amount_key = "NO_KEY"
+max_purchase_amount_key = "NO_KEY"
+requirement_to_buy_expression_key = "NO_KEY"
+increase_is_percentage = false

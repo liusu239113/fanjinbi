@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=4 uid="uid://bsg7twuhgc1bg"]
+
+[ext_resource type="Script" uid="uid://dxdqiap2pybi3" path="res://addons/greenpixels-simple-transition/transition_handler.gd" id="1"]
+
+[node name="TransitionHandler" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1")

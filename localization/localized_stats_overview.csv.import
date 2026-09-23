@@ -1,0 +1,15 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bndnd5nkv6xen"
+path="res://localization/localized_stats_overview.de.translation"
+
+[deps]
+
+source_file="res://localization/localized_stats_overview.csv"
+dest_files=["res://localization/localized_stats_overview.de.translation", "res://localization/localized_stats_overview.en.translation"]
+
+[params]
+
+dummy_value_ignore_me=0

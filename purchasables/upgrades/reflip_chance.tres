@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Purchasable" load_steps=4 format=3 uid="uid://b3ynqa4fujrya"]
+
+[ext_resource type="Texture2D" uid="uid://dx7lurcncfoc5" path="res://assets/images/upgrade_icons.png" id="1"]
+[ext_resource type="Script" uid="uid://cvdya1ja2f1e7" path="res://purchasables/purchasable.gd" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_t8rgx"]
+atlas = ExtResource("1")
+region = Rect2(0, 96, 32, 32)
+
+[resource]
+script = ExtResource("2")
+attribute_to_upgrade_or_unlock = 3
+icon = SubResource("AtlasTexture_t8rgx")
+name_key = "REFLIP_CHANCE_NAME"
+description_key = "REFLIP_CHANCE_DESC"
+requirement_to_see_expression_key = "requirement_to_see_reflip_chance"
+price_expression_key = "price_expression_reflip_chance"
+increase_amount_key = "increase_amount_reflip_chance"
+max_purchase_amount_key = "max_purchase_amount_reflip_chance"
+requirement_to_buy_expression_key = "requirement_to_buy_reflip_chance"
+increase_is_percentage = true

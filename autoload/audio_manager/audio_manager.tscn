@@ -1,0 +1,27 @@
+[gd_scene load_steps=11 format=4 uid="uid://cb1h10j5d82q1"]
+
+[ext_resource type="Script" uid="uid://dhb08tdp634nr" path="res://autoload/audio_manager/audio_manager.gd" id="1"]
+[ext_resource type="AudioStream" uid="uid://bwom5lrmf83dn" path="res://assets/sounds/bgm_main.ogg" id="2"]
+[ext_resource type="AudioStream" uid="uid://cwij0wypkkclu" path="res://assets/sounds/bgm_skill_tree.ogg" id="3"]
+[ext_resource type="AudioStream" uid="uid://qt6aw5hea4xs" path="res://autoload/audio_manager/streams/buy_sound.tres" id="4"]
+[ext_resource type="AudioStream" uid="uid://ddkjtj65vrxh0" path="res://autoload/audio_manager/streams/cant_buy_sound.tres" id="5"]
+[ext_resource type="AudioStream" uid="uid://qfes175o2ukj" path="res://autoload/audio_manager/streams/flip_end_sound.tres" id="6"]
+[ext_resource type="AudioStream" uid="uid://bluwbemhs0yfv" path="res://autoload/audio_manager/streams/flip_fail_sound.tres" id="7"]
+[ext_resource type="AudioStream" uid="uid://7os2arlxy4cd" path="res://autoload/audio_manager/streams/flip_start_sound.tres" id="8"]
+[ext_resource type="AudioStream" uid="uid://b7t16b4ocipy8" path="res://autoload/audio_manager/streams/jump_end_sound.tres" id="9"]
+[ext_resource type="AudioStream" uid="uid://caxuqo05p8ydn" path="res://autoload/audio_manager/streams/jump_start_sound.tres" id="10"]
+
+[node name="AudioManager" type="Node"]
+process_mode = 3
+script = ExtResource("1")
+audio_data = {
+"bgm_main": ExtResource("2"),
+"bgm_skill_tree": ExtResource("3"),
+"buy_sound": ExtResource("4"),
+"cant_buy_sound": ExtResource("5"),
+"flip_end_sound": ExtResource("6"),
+"flip_fail_sound": ExtResource("7"),
+"flip_start_sound": ExtResource("8"),
+"jump_end_sound": ExtResource("9"),
+"jump_start_sound": ExtResource("10")
+}

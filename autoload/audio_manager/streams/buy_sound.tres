@@ -1,0 +1,7 @@
+[gd_resource type="AudioStreamRandomizer" load_steps=2 format=4 uid="uid://qt6aw5hea4xs"]
+
+[ext_resource type="AudioStream" uid="uid://b2tuoqphaxhba" path="res://assets/sounds/cash-register-fake-88639.wav" id="1"]
+
+[resource]
+streams_count = 1
+stream_0/stream = ExtResource("1")

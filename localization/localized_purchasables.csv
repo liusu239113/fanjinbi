@@ -1,0 +1,44 @@
+﻿key,de,en
+SMALL_COIN_FLIP_SPEED_NAME,Schneller Kupfer,Quick Copper
+SMALL_COIN_DESC,Gibt {increase_amount}{currency} pro erfolgreichem Wurf auf Zahl. Münzen sind das Herzstück deines Einkommens.,Grants {increase_amount}{currency} per successful flip to tails. Coins are the backbone of your earnings.
+COINS_TRIGGER_COINS_NAME,Schockwelle,Shockwave
+HOVER_SMALL_COINS_DESC,"{small_coin} wird beim Draufzeigen automatisch geworfen, wodurch Klicks überflüssig werden.","{small_coin} can now be flipped just by hovering over them, making clicks a thing of the past."
+HELPER_TRIGGER_LARGE_COINS_NAME,Muskeln,Muscles
+SMALL_COIN_NAME,Kupfermünze,Copper Coin
+LARGE_ADDITIONAL_COIN_VALUE_DESC,"{large_coin} geben +{increase_amount}{currency}, was ihren Gesamtwert und ihre Effizienz steigert.","{large_coin} gives +{increase_amount}{currency}, enhancing their overall value and efficiency."
+HOVER_SMALL_COINS_NAME,Fixer Wurf,Quick Flip
+HELPER_TRIGGER_LARGE_COINS_DESC,{helper} kann jetzt {large_coin} werfen und mühelos auch die schwersten Münzen handhaben.,"{helper} can now flip {large_coin}, handling even the heaviest coins with ease."
+HELPER_EFFICIENCY_DESC,"{helper} ist {increase_amount}% effizienter, indem er weniger rumwartet und sich schneller bewegt.",{helper} is {increase_amount}% more efficient by waiting less and moving quicker
+COINS_NAME,Münzen,Coins
+MEDIUM_ADDITIONAL_COIN_VALUE_DESC,"{medium_coin} geben +{increase_amount}{currency}, was ihren Gesamtwert und ihre Effizienz steigert.","{medium_coin} gives +{increase_amount}{currency}, enhancing their overall value and efficiency."
+SMALL_COIN_FLIP_SPEED_DESC,Erhöht die Geschwindigkeit von {small_coin} um {increase_amount}%,Increases the speed of {small_coin} by {increase_amount}%
+LARGE_ADDITIONAL_COIN_VALUE_MULTIPLIER_NAME,Goldene Infusion,Golden Infusion
+DICE_NAME,Würfel,Dice
+SMALL_ADDITIONAL_COIN_VALUE_DESC,"{small_coin} geben +{increase_amount}{currency}, was ihren Gesamtwert und ihre Effizienz steigert.","{small_coin} gives +{increase_amount}{currency}, enhancing their overall value and efficiency."
+HELPER_TRIGGER_MEDIUM_COINS_NAME,Große Hände,Bigger Hands
+LARGE_COIN_FLIP_SPEED_NAME,Goldene Geschwindigkeit,Golden Velocity
+HELPER_DESC,"Aktiviert eigenständig {small_coin}, um das Verdienen zu erleichtern.",Automatically activates {small_coin} to make earning effortless.
+LARGE_COIN_FLIP_SPEED_DESC,Erhöht die Geschwindigkeit von {large_coin} um {increase_amount}%,Increases the speed of {large_coin} by {increase_amount}%
+MEDIUM_ADDITIONAL_COIN_VALUE_NAME,Silberladung,Silver Charge
+MEDIUM_COIN_FLIP_SPEED_DESC,Erhöht die Geschwindigkeit von {medium_coin} um {increase_amount}%,Increases the speed of {medium_coin} by {increase_amount}%
+SMALL_ADDITIONAL_COIN_VALUE_MULTIPLIER_DESC,"{small_coin} geben +{increase_amount}% mehr {currency}, was ihren Wert erheblich steigert.","{small_coin} gives +{increase_amount}% more {currency}, dramatically increasing their worth."
+HELPER_EFFICIENCY_NAME,Starker Arbeiter,Hard Worker
+LARGE_COIN_NAME,Goldmünze,Gold Coin
+COINS_TRIGGER_COINS_DESC,{large_coin} und {medium_coin} werfen beim Aufkommen kleinere {coins} und erzeugt eine Kaskade von Würfen und Einnahmen.,"{large_coin} and {medium_coin} trigger smaller {coins} upon landing, creating a cascade of flips and revenue."
+REFLIP_CHANCE_NAME,Zufalls-Echo,Lucky Echo
+DICE_DESC,Gibt {increase_amount}{currency} pro Auge auf der gewürfelten Seite. Teste dein Glück bei jedem Wurf.,Grants {increase_amount}{currency} for every pip rolled. Test your luck with every throw.
+MEDIUM_COIN_NAME,Silbermünze,Silver Coin
+REFLIP_CHANCE_DESC,"Gewährt eine {increase_amount}%-Chance, {coins} automatisch erneut zu werfen.",Grants a +{increase_amount}% chance to automatically flip {coins} again.
+MEDIUM_ADDITIONAL_COIN_VALUE_MULTIPLIER_NAME,Silbertransmutation,Silver Transmutation
+"<!MissingKey:{helper} can throw {dice}, adding a touch of chance to your automated strategy.>",{helper} kann {dice} werfen und deinem automatisierten Spiel eine Prise Glück hinzufügen.,"{helper} can throw {dice}, adding a touch of chance to your automated strategy."
+SMALL_ADDITIONAL_COIN_VALUE_NAME,Kupferwelle,Copper Surge
+MEDIUM_COIN_DESC,"Gibt {increase_amount}{currency} pro erfolgreichem Wurf auf Zahl. Eine glänzendere Methode, um dein Einkommen zu steigern.",Grants {increase_amount}{currency} per successful flip to tails. A shinier way to boost your revenue.
+HELPER_NAME,Helfer,Helper
+MEDIUM_COIN_FLIP_SPEED_NAME,Silberstreifen,Silver Streak
+SMALL_ADDITIONAL_COIN_VALUE_MULTIPLIER_NAME,Kupferalchemie,Copper Alchemy
+<!MissingKey:Better Grip>,Besserer Griff,Better Grip
+MEDIUM_ADDITIONAL_COIN_VALUE_MULTIPLIER_DESC,"{medium_coin} geben +{increase_amount}% mehr {currency}, was ihren Wert erheblich steigert.","{medium_coin} gives +{increase_amount}% more {currency}, dramatically increasing their worth."
+LARGE_COIN_DESC,Gibt {increase_amount}{currency} pro erfolgreichem Wurf auf Zahl. Die ultimative Münze für erstklassige Einnahmen.,Grants {increase_amount}{currency} per successful flip to tails. The ultimate coin for top-tier earnings.
+HELPER_TRIGGER_MEDIUM_COINS_DESC,"{helper} kann jetzt {medium_coin} werfen, was ihre Fähigkeiten und deine Gewinne erweitert.","{helper} can now flip {medium_coin}, broadening their capabilities and your profits."
+LARGE_ADDITIONAL_COIN_VALUE_NAME,Goldene Beute,Golden Bounty
+LARGE_ADDITIONAL_COIN_VALUE_MULTIPLIER_DESC,"{large_coin} geben +{increase_amount}% mehr {currency}, was ihren Wert erheblich steigert.","{large_coin} gives +{increase_amount}% more {currency}, dramatically increasing their worth."

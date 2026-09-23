@@ -1,0 +1,17 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bq5vel30dt2mr"
+
+[deps]
+
+files=["res://localization/localized_purchasables.de.translation", "res://localization/localized_purchasables.en.translation"]
+
+source_file="res://localization/localized_purchasables.csv"
+dest_files=["res://localization/localized_purchasables.de.translation", "res://localization/localized_purchasables.en.translation"]
+
+[params]
+
+compress=true
+delimiter=0

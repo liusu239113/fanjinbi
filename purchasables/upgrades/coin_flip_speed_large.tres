@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Purchasable" load_steps=4 format=3 uid="uid://gw6su3h8ouvx"]
+
+[ext_resource type="Texture2D" uid="uid://dx7lurcncfoc5" path="res://assets/images/upgrade_icons.png" id="1"]
+[ext_resource type="Script" uid="uid://cvdya1ja2f1e7" path="res://purchasables/purchasable.gd" id="2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_lecq8"]
+atlas = ExtResource("1")
+region = Rect2(32, 64, 32, 32)
+
+[resource]
+script = ExtResource("2")
+attribute_to_upgrade_or_unlock = 20
+icon = SubResource("AtlasTexture_lecq8")
+name_key = "LARGE_COIN_FLIP_SPEED_NAME"
+description_key = "LARGE_COIN_FLIP_SPEED_DESC"
+requirement_to_see_expression_key = "requirement_to_see_coin_flip_speed_large"
+price_expression_key = "price_expression_coin_flip_speed_large"
+increase_amount_key = "increase_amount_coin_flip_speed_large"
+max_purchase_amount_key = "max_purchase_amount_coin_flip_speed_large"
+requirement_to_buy_expression_key = "requirement_to_buy_coin_flip_speed_large"
+increase_is_percentage = true

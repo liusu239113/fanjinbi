@@ -1,0 +1,23 @@
+[gd_scene load_steps=3 format=4 uid="uid://d1s6oihqedvo5"]
+
+[ext_resource type="Script" uid="uid://cgomx252541x3" path="res://addons/resources_spreadsheet_view/main_screen/table_header.gd" id="1"]
+[ext_resource type="Script" uid="uid://dppnlou3cr813" path="res://addons/resources_spreadsheet_view/editor_icon_button.gd" id="2"]
+
+[node name="Header" type="HBoxContainer"]
+offset_right = 179.0
+offset_bottom = 31.0
+size_flags_horizontal = 3
+script = ExtResource("1")
+
+[node name="Button" type="Button" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "resource_name"
+clip_text = true
+
+[node name="Button2" type="MenuButton" parent="."]
+layout_mode = 2
+size_flags_horizontal = 9
+script = ExtResource("2")
+icon_name = "ArrowDown"

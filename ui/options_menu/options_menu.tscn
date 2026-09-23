@@ -1,0 +1,346 @@
+[gd_scene load_steps=5 format=4 uid="uid://2u363xjkcfy7"]
+
+[ext_resource type="Script" uid="uid://56pn38t5eq4r" path="res://ui/options_menu/options_menu.gd" id="1"]
+[ext_resource type="Script" uid="uid://6utr7xt73ih6" path="res://ui/options_menu/general_settings.gd" id="2"]
+[ext_resource type="Script" uid="uid://cy0eo7e1vbb06" path="res://ui/options_menu/audio_settings.gd" id="3"]
+[ext_resource type="Script" uid="uid://bsvw57sqtfv2" path="res://ui/options_menu/graphics_settings.gd" id="4"]
+
+[node name="Options" type="CanvasLayer"]
+script = ExtResource("1")
+
+[node name="OptionsMenu" type="PanelContainer" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -271.0
+offset_top = -158.5
+offset_right = 271.0
+offset_bottom = 158.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TabContainer" type="TabContainer" parent="OptionsMenu"]
+layout_mode = 2
+mouse_filter = 0
+current_tab = 0
+tab_focus_mode = 0
+
+[node name="OPTIONS_GENERAL" type="ScrollContainer" parent="OptionsMenu/TabContainer"]
+visible = false
+layout_mode = 2
+script = ExtResource("2")
+metadata/_tab_index = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "OPTION_LANGUAGE"
+
+[node name="OptionButton" type="OptionButton" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+selected = 0
+item_count = 2
+popup/item_0/text = "LANG_ENGLISH"
+popup/item_0/id = 0
+popup/item_1/text = "LANG_GERMAN"
+popup/item_1/id = 1
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "OPTION_HIDE_MONEY_LABELS"
+
+[node name="HideMoneyLabelCheckButton" type="CheckButton" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Seperator" type="Control" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CloseGameButton" type="Button" parent="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "CLOSE_GAME"
+
+[node name="OPTIONS_AUDIO" type="ScrollContainer" parent="OptionsMenu/TabContainer"]
+visible = false
+layout_mode = 2
+script = ExtResource("3")
+metadata/_tab_index = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer"]
+layout_mode = 2
+
+[node name="LabelMasterVolumeSlider" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "VOLUME_MASTER"
+
+[node name="MasterVolumeSlider" type="HSlider" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+
+[node name="LabelSoundEffectVolumeSlider" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "VOLUME_SOUND"
+
+[node name="SoundEffectVolumeSlider" type="HSlider" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+
+[node name="LabellMusicVolumeSlider" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "VOLUME_MUSIC"
+
+[node name="MusicVolumeSlider" type="HSlider" parent="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+
+[node name="OPTIONS_DISPLAY" type="ScrollContainer" parent="OptionsMenu/TabContainer"]
+visible = false
+layout_mode = 2
+script = ExtResource("4")
+metadata/_tab_index = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="OptionsMenu/TabContainer/OPTIONS_DISPLAY"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_DISPLAY/MarginContainer"]
+layout_mode = 2
+
+[node name="FullscreenCheckButton" type="CheckButton" parent="OptionsMenu/TabContainer/OPTIONS_DISPLAY/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "OPTION_FULLSCREEN"
+
+[node name="OPTIONS_CREDITS" type="ScrollContainer" parent="OptionsMenu/TabContainer"]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "GAME_BY"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CategoryArt" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_ART"
+
+[node name="VBoxContainerArt" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Thebossforge" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerArt"]
+layout_mode = 2
+text = "- Bossforge"
+
+[node name="greenpixels" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerArt"]
+layout_mode = 2
+text = "- greenpixels"
+
+[node name="CategoryCode" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_CODE"
+
+[node name="VBoxContainerCode" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="greenpixels" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerCode"]
+layout_mode = 2
+text = "- greenpixels"
+
+[node name="CategoryMusic" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_MUSIC"
+
+[node name="VBoxContainerMusic" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Abstraction" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerMusic"]
+layout_mode = 2
+text = "- Abstraction (Music Loop Bundle)"
+
+[node name="CategorySound" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_SOUND"
+
+[node name="VBoxContainerSound" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Shapeforms" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerSound"]
+layout_mode = 2
+text = "- Shapeforms Audio Free Sound Effects (Asset Pack)"
+
+[node name="FantasyInventoryUISounds" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerSound"]
+layout_mode = 2
+text = "- Fantasy Inventory & UI Sounds (Asset Pack)"
+
+[node name="CategoryTranslation" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_TRANSLATION"
+
+[node name="VBoxContainerTranslation" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="greenpixels" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTranslation"]
+layout_mode = 2
+text = "- greenpixels"
+
+[node name="Thebossforge" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTranslation"]
+layout_mode = 2
+text = "- Bossforge"
+
+[node name="CategoryTools" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_TOOLS"
+
+[node name="VBoxContainerTools" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Godot" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- Godot"
+
+[node name="Aseprite" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- Aseprite"
+
+[node name="GodotBigNumberClass" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- GodotBigNumberClass"
+
+[node name="LimboConsole" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- LimboConsole"
+
+[node name="GodotCI" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- Godot CI by Barichello"
+
+[node name="SteamDeploy" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- SteamDeploy"
+
+[node name="ButlerPublish" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerTools"]
+layout_mode = 2
+text = "- Butler Publish Itchio Action by manleydev"
+
+[node name="CategoryOther" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 6
+text = "CREDITS_CATEGORY_OTHER"
+
+[node name="VBoxContainerOther" type="VBoxContainer" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Schinken" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerOther"]
+layout_mode = 2
+text = "- Schinken, Performance Improvement Recommendations"
+
+[node name="Schinken2" type="Label" parent="OptionsMenu/TabContainer/OPTIONS_CREDITS/MarginContainer/VBoxContainer/VBoxContainerOther"]
+layout_mode = 2
+text = "- Wife of greenpixels, Supportive Life Pillar"
+
+[node name="Control" type="Control" parent="OptionsMenu"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="CloseButton" type="Button" parent="OptionsMenu/Control"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -38.0
+offset_right = -4.0
+offset_bottom = 26.0
+grow_horizontal = 0
+text = "x"
+flat = true
+
+[connection signal="item_selected" from="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/HBoxContainer/OptionButton" to="OptionsMenu/TabContainer/OPTIONS_GENERAL" method="_on_option_button_item_selected"]
+[connection signal="toggled" from="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/HBoxContainer2/HideMoneyLabelCheckButton" to="OptionsMenu/TabContainer/OPTIONS_GENERAL" method="_on_hide_money_label_check_button_toggled"]
+[connection signal="pressed" from="OptionsMenu/TabContainer/OPTIONS_GENERAL/MarginContainer/VBoxContainer/CloseGameButton" to="OptionsMenu/TabContainer/OPTIONS_GENERAL" method="_on_close_game_button_pressed"]
+[connection signal="drag_ended" from="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer/MasterVolumeSlider" to="OptionsMenu/TabContainer/OPTIONS_AUDIO" method="_on_master_volume_slider_drag_ended"]
+[connection signal="drag_ended" from="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer/SoundEffectVolumeSlider" to="OptionsMenu/TabContainer/OPTIONS_AUDIO" method="_on_sound_effect_volume_slider_drag_ended"]
+[connection signal="drag_ended" from="OptionsMenu/TabContainer/OPTIONS_AUDIO/MarginContainer/VBoxContainer/MusicVolumeSlider" to="OptionsMenu/TabContainer/OPTIONS_AUDIO" method="_on_music_volume_slider_drag_ended"]
+[connection signal="toggled" from="OptionsMenu/TabContainer/OPTIONS_DISPLAY/MarginContainer/VBoxContainer/FullscreenCheckButton" to="OptionsMenu/TabContainer/OPTIONS_DISPLAY" method="_on_fullscreen_check_button_toggled"]
+[connection signal="pressed" from="OptionsMenu/Control/CloseButton" to="." method="_on_close_button_pressed"]
