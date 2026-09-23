@@ -134,6 +134,17 @@ class SaveData {
     var highestMoney: Double = 0.0
     var highestCatch: Double = 0.0
     var purchases: MutableMap<String, Int> = mutableMapOf()
+
+    // ---- 转生进度（跨轮保留）----
+    var pearls: Long = 0
+    var prestigeCount: Int = 0
+    var skillLevels: MutableMap<String, Int> = mutableMapOf()
+    var bestCombo: Int = 0
+    var totalCatches: Long = 0
+    var unlockedAchievements: MutableSet<String> = mutableSetOf()
+    var caughtSpecies: MutableSet<String> = mutableSetOf()
+    var unlockedMaps: MutableSet<String> = mutableSetOf("creek")
+    var currentMapId: String = "creek"
     var masterVolume: Float = 0.8f
     var sfxVolume: Float = 0.8f
     var bgmVolume: Float = 0.5f

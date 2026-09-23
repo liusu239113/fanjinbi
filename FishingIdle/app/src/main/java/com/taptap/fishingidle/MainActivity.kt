@@ -42,12 +42,14 @@ import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.GameView
 import com.taptap.fishingidle.game.SaveManager
 import com.taptap.fishingidle.game.Settings
+import com.taptap.fishingidle.game.SkillTree
 import com.taptap.fishingidle.game.World
 import com.taptap.fishingidle.ui.AchievementToast
 import com.taptap.fishingidle.ui.BottomBar
 import com.taptap.fishingidle.ui.CatchStrip
 import com.taptap.fishingidle.ui.MainMenu
 import com.taptap.fishingidle.ui.MenuPanel
+import com.taptap.fishingidle.ui.PrestigePanel
 import com.taptap.fishingidle.ui.MoneyBar
 import com.taptap.fishingidle.ui.ResetConfirmDialog
 import com.taptap.fishingidle.ui.ShopPanel
@@ -132,6 +134,7 @@ class MainActivity : ComponentActivity() {
         var showShop by remember { mutableStateOf(false) }
         var showMenu by remember { mutableStateOf(false) }
         var showReset by remember { mutableStateOf(false) }
+        var showPrestige by remember { mutableStateOf(false) }
         var gameViewRef by remember { mutableStateOf<GameView?>(null) }
         val hasSave = remember { saveManager.hasSave() }
         // HUD 刷新计数。GameState 是普通 var，必须靠它变化来驱动重组，
@@ -195,8 +198,8 @@ class MainActivity : ComponentActivity() {
         }
 
         // 打开面板或回到主菜单时暂停世界模拟
-        LaunchedEffect(showShop, showMenu, showReset, inGame) {
-            gameViewRef?.paused = showShop || showMenu || showReset || !inGame
+        LaunchedEffect(showShop, showMenu, showReset, showPrestige, inGame) {
+            gameViewRef?.paused = showShop || showMenu || showReset || showPrestige || !inGame
         }
 
         // ---------------- 主菜单 ----------------
@@ -321,9 +324,14 @@ class MainActivity : ComponentActivity() {
                 BottomBar(
                     world = world,
                     revision = revision,
+                    canPrestige = gameState.canPrestige(),
                     onOpenShop = {
                         audio.play("sfx_click", 0.6f)
                         showShop = true
+                    },
+                    onOpenPrestige = {
+                        audio.play("sfx_click", 0.6f)
+                        showPrestige = true
                     },
                     onOpenMenu = {
                         audio.play("sfx_click", 0.6f)
@@ -364,6 +372,37 @@ class MainActivity : ComponentActivity() {
                     onClose = {
                         audio.play("sfx_click", 0.6f)
                         showShop = false
+                    },
+                )
+            }
+
+            // 转生 / 技能树
+            if (showPrestige) {
+                PrestigePanel(
+                    state = gameState,
+                    assets = assets,
+                    onPrestige = {
+                        val gained = gameState.doPrestige()
+                        if (gained > 0) {
+                            audio.play("sfx_success", 1.0f)
+                            world.switchMap(gameState.currentMap)
+                            saveManager.save(gameState, settings)
+                        }
+                        showPrestige = false
+                        revision++
+                    },
+                    onLevelUp = { def ->
+                        if (SkillTree.levelUp(gameState, def)) {
+                            audio.play("sfx_buy", 0.9f)
+                            saveManager.save(gameState, settings)
+                        } else {
+                            audio.play("sfx_cant_buy", 0.7f)
+                        }
+                        revision++
+                    },
+                    onClose = {
+                        audio.play("sfx_click", 0.6f)
+                        showPrestige = false
                     },
                 )
             }

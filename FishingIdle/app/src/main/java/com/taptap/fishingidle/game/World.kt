@@ -307,7 +307,7 @@ class Helper(var x: Float) {
                     idleDuration = 0.3f
                 } else {
                     val dx = f.x - x
-                    val speed = 260f * gameState.helperEfficiency.toFloat()
+                    val speed = 260f * (gameState.helperEfficiency * gameState.skillHelperMultiplier).toFloat()
                     if (abs(dx) < 24f) {
                         state = HelperState.CASTING
                         lineX = f.x
@@ -329,7 +329,7 @@ class Helper(var x: Float) {
                     }
                     state = HelperState.IDLE
                     idleDuration = (0.35f + Random.nextFloat() * 0.5f) /
-                        gameState.helperEfficiency.toFloat()
+                        (gameState.helperEfficiency * gameState.skillHelperMultiplier).toFloat()
                 }
             }
         }
@@ -427,11 +427,10 @@ class World(val gameState: GameState) {
             val have = countOf(rarity)
             if (have < want) {
                 repeat(want - have) {
-                    val pool = currentMap.species.filter { it.rarity == rarity }
-                    if (pool.isEmpty()) return@repeat
+                    val species = rollSpecies(rarity) ?: return@repeat
                     fishes.add(
                         Fish(
-                            pool.random(),
+                            species,
                             Random.nextFloat() * (Space.POND_R - Space.POND_L) + Space.POND_L,
                             Random.nextFloat() * (Space.POND_B - Space.POND_T) + Space.POND_T,
                         )
@@ -448,6 +447,24 @@ class World(val gameState: GameState) {
                 }
             }
         }
+    }
+
+    /**
+     * 在当前地图里按稀有度抽一个鱼种。
+     * 技能「深渊直觉」会提高稀有档位的权重，让好鱼更容易出现。
+     */
+    private fun rollSpecies(rarity: Rarity): Species? {
+        val pool = currentMap.species.filter { it.rarity == rarity }
+        if (pool.isEmpty()) return null
+        val bonus = gameState.skillRareWeightBonus.toFloat()
+        if (bonus <= 0f || rarity == Rarity.COMMON) return pool.random()
+
+        // 稀有度越高，加权越明显；同时按权重抽，避免同档内总抽到同一种
+        val weighted = pool.flatMap { sp ->
+            val w = (1f + bonus * rarity.ordinal).toInt().coerceAtLeast(1)
+            List(w) { sp }
+        }
+        return weighted.random()
     }
 
     /** 切换地图：清空现有鱼群，按新地图重新铺满。 */
@@ -640,7 +657,7 @@ class World(val gameState: GameState) {
             BobberEvent.Reeled -> {
                 val f = bobber.hookedFish
                 if (f != null) {
-                    if (Random.nextFloat() < Content.escapeChance(f.kind) * 0.35f) {
+                    if (Random.nextFloat() < Content.escapeChance(f.kind) * (1.0 - gameState.skillEscapeReduce).toFloat() * 0.35f) {
                         f.state = FishState.ESCAPED
                         f.vx = if (Random.nextBoolean()) 110f else -110f
                         f.vy = 70f

@@ -100,7 +100,9 @@ fun MoneyBar(state: GameState, revision: Int, modifier: Modifier = Modifier) {
 fun BottomBar(
     world: World,
     revision: Int,
+    canPrestige: Boolean,
     onOpenShop: () -> Unit,
+    onOpenPrestige: () -> Unit,
     onOpenMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -108,7 +110,7 @@ fun BottomBar(
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -128,8 +130,15 @@ fun BottomBar(
             )
         }
 
-        GameButton("菜单", onOpenMenu, accent = UITheme.WaterTop, fontSize = 15)
-        GameButton("商店", onOpenShop, accent = UITheme.Gold, fontSize = 15)
+        GameButton("菜单", onOpenMenu, accent = UITheme.WaterTop, fontSize = 14)
+        // 转生可做时高亮，给玩家一个明确的行动提示
+        GameButton(
+            if (canPrestige) "转生!" else "转生",
+            onOpenPrestige,
+            accent = if (canPrestige) UITheme.TextGood else UITheme.WaterTop,
+            fontSize = 14,
+        )
+        GameButton("商店", onOpenShop, accent = UITheme.Gold, fontSize = 14)
     }
 }
 

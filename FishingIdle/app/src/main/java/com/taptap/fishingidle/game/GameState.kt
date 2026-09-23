@@ -55,6 +55,42 @@ class GameState {
     var chainReaction: Boolean = false
     var helperEfficiency: Double = 1.0
 
+    // ---- 转生 ----
+    /** 珍珠：转生货币，用于升级技能树，转生不会清空。 */
+    var pearls: Long = 0
+
+    /** 已转生次数。 */
+    var prestigeCount: Int = 0
+
+    /** 技能等级：技能 id → 已投入级数。转生不清空。 */
+    val skillLevels: MutableMap<String, Int> = mutableMapOf()
+
+    // ---- 技能树算出的加成（由 SkillTree.applyAll 维护）----
+    var skillValueBonus: Double = 0.0
+    var skillReelBonus: Double = 0.0
+    var skillEscapeReduce: Double = 0.0
+    var skillStartMoney: Double = 0.0
+    var skillHelperBonus: Double = 0.0
+    var skillFishCapacity: Int = 0
+    var skillComboStep: Double = 0.04
+    var skillPearlBonus: Double = 0.0
+    var skillRareWeightBonus: Double = 0.0
+    var skillGlobalBonus: Double = 0.0
+
+    /** 技能带来的总收益倍率。 */
+    val skillValueMultiplier: Double
+        get() = (1.0 + skillValueBonus) * (1.0 + skillGlobalBonus)
+
+    /** 技能带来的总收线速度倍率。 */
+    val skillReelMultiplier: Double
+        get() = (1.0 + skillReelBonus) * (1.0 + skillGlobalBonus)
+
+    /** 技能带来的钓手效率倍率。 */
+    val skillHelperMultiplier: Double
+        get() = (1.0 + skillHelperBonus) * (1.0 + skillGlobalBonus)
+
+    fun skillLevel(id: String): Int = skillLevels[id] ?: 0
+
     // ---- 购买记录（成长数据的唯一真相）----
     val purchases: MutableMap<String, Int> = mutableMapOf()
 
@@ -89,9 +125,49 @@ class GameState {
     var bestCombo: Int = 0
         private set
 
-    /** 连击带来的收益加成：每连击 +4%，上限 +120%。 */
+    /** 连击带来的收益加成。步长由技能「连击之势」提升，默认每层 +4%，上限 30 层。 */
     val comboMultiplier: Double
-        get() = 1.0 + (combo.coerceAtMost(30) * 0.04)
+        get() = 1.0 + (combo.coerceAtMost(30) * skillComboStep)
+
+    // ---- 转生 ----
+
+    /** 本次转生可获得多少珍珠。 */
+    fun pendingPearls(): Long {
+        val base = Prestige.pearlsFor(totalMoney)
+        if (base <= 0) return 0
+        return (base * (1.0 + skillPearlBonus)).toLong().coerceAtLeast(1)
+    }
+
+    /** 是否可以转生。 */
+    fun canPrestige(): Boolean = pendingPearls() > 0
+
+    /**
+     * 执行转生：清空金币、鱼群、钓手、普通升级与地图进度，
+     * 换取珍珠并保留技能树。返回本次获得的珍珠数。
+     */
+    fun doPrestige(): Long {
+        val gain = pendingPearls()
+        if (gain <= 0) return 0
+
+        pearls += gain
+        prestigeCount++
+
+        // 重置本轮进度
+        money = skillStartMoney          // 技能「开局红利」给启动资金
+        totalMoney = 0.0
+        highestMoney = 0.0
+        highestCatch = 0.0
+        combo = 0
+        purchases.clear()
+        unlockedMaps.clear()
+        unlockedMaps.add(Bestiary.maps.first().id)
+        currentMapId = Bestiary.maps.first().id
+        resetAttributes()
+        // 技能效果在重置后再套一遍（resetAttributes 不会动技能字段）
+        SkillTree.applyAll(this)
+        money = skillStartMoney
+        return gain
+    }
 
     fun recordEarning(kind: Rarity, source: Source, amount: Double) {
         earningsBySource[source] = (earningsBySource[source] ?: 0.0) + amount
@@ -114,12 +190,18 @@ class GameState {
         combo = 0
     }
 
-    /** 某稀有度档位的单次渔获价值。对应原版 (base + additional) * multiplier。 */
-    fun catchValue(kind: Rarity): Double = when (kind) {
-        Rarity.COMMON -> (BASE_COMMON + commonValueAdd) * commonValueMul
-        Rarity.RARE -> (BASE_RARE + rareValueAdd) * rareValueMul
-        Rarity.EPIC -> (BASE_EPIC + epicValueAdd) * epicValueMul
-        Rarity.LEGEND -> (BASE_LEGEND + legendValueAdd) * legendValueMul
+    /**
+     * 某稀有度档位的单次渔获价值。
+     * 对应原版 (base + additional) * multiplier，再乘上技能树加成。
+     */
+    fun catchValue(kind: Rarity): Double {
+        val base = when (kind) {
+            Rarity.COMMON -> (BASE_COMMON + commonValueAdd) * commonValueMul
+            Rarity.RARE -> (BASE_RARE + rareValueAdd) * rareValueMul
+            Rarity.EPIC -> (BASE_EPIC + epicValueAdd) * epicValueMul
+            Rarity.LEGEND -> (BASE_LEGEND + legendValueAdd) * legendValueMul
+        }
+        return base * skillValueMultiplier
     }
 
     /**
@@ -147,12 +229,15 @@ class GameState {
         caughtSpecies.add(id)
     }
 
-    /** 某鱼种收线耗时倍率（越大越快）。 */
-    fun reelSpeed(kind: Rarity): Double = when (kind) {
-        Rarity.COMMON -> commonReelSpeed
-        Rarity.RARE -> rareReelSpeed
-        Rarity.EPIC -> epicReelSpeed
-        Rarity.LEGEND -> legendReelSpeed
+    /** 某鱼种收线耗时倍率（越大越快），含技能加成。 */
+    fun reelSpeed(kind: Rarity): Double {
+        val base = when (kind) {
+            Rarity.COMMON -> commonReelSpeed
+            Rarity.RARE -> rareReelSpeed
+            Rarity.EPIC -> epicReelSpeed
+            Rarity.LEGEND -> legendReelSpeed
+        }
+        return base * skillReelMultiplier
     }
 
     /** 该鱼种是否已解锁（拥有至少一条）。 */
@@ -231,10 +316,43 @@ class GameState {
         it.highestMoney = highestMoney
         it.highestCatch = highestCatch
         it.purchases = purchases.toMutableMap()
+        it.pearls = pearls
+        it.prestigeCount = prestigeCount
+        it.skillLevels = skillLevels.toMutableMap()
+        it.bestCombo = bestCombo
+        it.totalCatches = totalCatches
+        it.unlockedAchievements = unlockedAchievements.toMutableSet()
+        it.caughtSpecies = caughtSpecies.toMutableSet()
+        it.unlockedMaps = unlockedMaps.toMutableSet()
+        it.currentMapId = currentMapId
     }
 
-    /** 从存档重建：先恢复金钱，再重放所有购买，最后按购买次数重建鱼群数量。 */
+    /**
+     * 从存档重建。
+     *
+     * 顺序很重要：先恢复跨轮进度（珍珠/技能/图鉴），再套用技能加成，
+     * 最后重放购买 —— 因为购买产生的属性会与技能倍率相乘，
+     * 顺序反了会导致数值对不上。
+     */
     fun loadFrom(data: SaveData) {
+        pearls = data.pearls
+        prestigeCount = data.prestigeCount
+        skillLevels.clear()
+        skillLevels.putAll(data.skillLevels)
+        bestCombo = data.bestCombo
+        totalCatches = data.totalCatches
+        unlockedAchievements.clear()
+        unlockedAchievements.addAll(data.unlockedAchievements)
+        caughtSpecies.clear()
+        caughtSpecies.addAll(data.caughtSpecies)
+        unlockedMaps.clear()
+        if (data.unlockedMaps.isEmpty()) {
+            unlockedMaps.add(Bestiary.maps.first().id)
+        } else {
+            unlockedMaps.addAll(data.unlockedMaps)
+        }
+        currentMapId = data.currentMapId.ifEmpty { Bestiary.maps.first().id }
+
         money = data.money
         totalMoney = data.totalMoney
         highestMoney = data.highestMoney
@@ -248,6 +366,9 @@ class GameState {
             val count = data.purchases[def.id] ?: 0
             repeat(count) { applyPurchase(def) }
         }
+
+        // 技能加成最后套，保证它作用在重放后的属性上
+        SkillTree.applyAll(this)
     }
 
     private fun resetAttributes() {
