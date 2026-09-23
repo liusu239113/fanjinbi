@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -45,6 +48,7 @@ import com.taptap.fishingidle.game.Settings
 import com.taptap.fishingidle.game.SkillTree
 import com.taptap.fishingidle.game.World
 import com.taptap.fishingidle.ui.AchievementToast
+import com.taptap.fishingidle.ui.AppFontFamily
 import com.taptap.fishingidle.ui.BottomBar
 import com.taptap.fishingidle.ui.CatchStrip
 import com.taptap.fishingidle.ui.MainMenu
@@ -85,7 +89,11 @@ class MainActivity : ComponentActivity() {
         audio.playBgm(this, "bgm_main")
 
         setContent {
-            FishingGameScreen()
+            // 全局套用游戏字体：所有 Text 默认都用 AppFontFamily，
+            // 各组件里就不必逐个指定 fontFamily 了。
+            CompositionLocalProvider(LocalTextStyle provides TextStyle(fontFamily = AppFontFamily)) {
+                FishingGameScreen()
+            }
         }
     }
 

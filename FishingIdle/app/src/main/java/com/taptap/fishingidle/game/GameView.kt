@@ -2,6 +2,7 @@ package com.taptap.fishingidle.game
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
@@ -25,7 +26,10 @@ class GameView(
     private val onSfx: (String) -> Unit,
 ) : View(context) {
 
-    private val renderer = GameRenderer(assets, world, world.gameState, settings)
+    private val renderer = GameRenderer(
+        assets, world, world.gameState, settings,
+        gameTypeface = loadGameTypeface(context),
+    )
 
     private var lastFrameNanos = 0L
     private var accumulator = 0f
@@ -187,6 +191,18 @@ class GameView(
             }
         }
         return best
+    }
+
+    /**
+     * 加载游戏字体。
+     * 放在 res/font 下的字体可以用 ResourcesCompat 直接取，不必手动读 assets。
+     */
+    private fun loadGameTypeface(context: Context): Typeface? = try {
+        androidx.core.content.res.ResourcesCompat.getFont(
+            context, com.taptap.fishingidle.R.font.game_font
+        )
+    } catch (e: Exception) {
+        null
     }
 
     companion object {

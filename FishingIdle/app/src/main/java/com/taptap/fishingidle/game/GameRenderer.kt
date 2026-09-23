@@ -24,6 +24,8 @@ class GameRenderer(
     private val world: World,
     private val gameState: GameState,
     private val settings: Settings,
+    /** 全局游戏字体，与 UI 保持一致。 */
+    private val gameTypeface: Typeface? = null,
 ) {
     private companion object {
         /** 玩家小船在世界坐标下的宽度。按世界单位给，避免随屏幕像素放大。 */
@@ -41,7 +43,9 @@ class GameRenderer(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tilePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        // 用与 UI 同一套游戏字体（res/font/game_font.ttf），
+        // 否则飘字/提示会跟界面字体不一致。
+        typeface = gameTypeface ?: Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
     }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
