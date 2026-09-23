@@ -32,8 +32,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # 注意：不能省略 packages —— 该 action 默认会安装 'tools' 包，
+      # 而 'tools' 在新版 SDK 仓库中已被移除，会导致 sdkmanager 退出码 1。
       - name: 安装 Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: 安装 SDK 组件
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: 配置 Gradle（含缓存）
         uses: gradle/actions/setup-gradle@v4
@@ -52,7 +61,9 @@ jobs:
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           echo "APK: $APK"
           ls -la "$APK"
-          $ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner verify --verbose "$APK"
+          APKSIGNER=$(find "${ANDROID_SDK_ROOT}" -name apksigner -type f -path '*build-tools*' | sort -V | tail -1)
+          echo "apksigner: $APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
           echo "sha256:"
           sha256sum "$APK"
 
