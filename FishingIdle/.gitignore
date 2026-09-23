@@ -19,3 +19,7 @@ captures/
 
 # 日志
 *.log
+
+# release/ 下的成品 APK 需要提交（供直接下载）
+\!release/
+\!release/*.apk
