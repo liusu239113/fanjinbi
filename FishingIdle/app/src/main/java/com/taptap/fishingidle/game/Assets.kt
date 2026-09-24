@@ -42,12 +42,28 @@ class Assets(context: Context) {
     /** 预缩放到指定宽度的位图，带独立缓存键。 */
     fun scaled(name: String, targetW: Int): Bitmap? {
         if (targetW <= 0) return raw(name)
-        val key = "$name@$targetW"
+        val key = "$name@w$targetW"
         cache[key]?.let { return it }
         val src = raw(name) ?: return null
         val ratio = targetW.toFloat() / src.width
         val h = (src.height * ratio).toInt().coerceAtLeast(1)
         val out = Bitmap.createScaledBitmap(src, targetW, h, true)
+        cache[key] = out
+        return out
+    }
+
+    /**
+     * 预缩放到指定**高度**的位图，宽度按原始比例。
+     * 不同素材宽高比不一致时，按高度统一才能保证视觉大小一致。
+     */
+    fun scaledToHeight(name: String, targetH: Int): Bitmap? {
+        if (targetH <= 0) return raw(name)
+        val key = "$name@h$targetH"
+        cache[key]?.let { return it }
+        val src = raw(name) ?: return null
+        val ratio = targetH.toFloat() / src.height
+        val w = (src.width * ratio).toInt().coerceAtLeast(1)
+        val out = Bitmap.createScaledBitmap(src, w, targetH, true)
         cache[key] = out
         return out
     }

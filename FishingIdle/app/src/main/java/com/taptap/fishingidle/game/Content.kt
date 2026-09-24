@@ -30,8 +30,8 @@ object Content {
         ),
         PurchasableDef(
             id = "legend_fish", attribute = Attribute.LEGEND_FISH,
-            name = "巨口鱼", desc = "放入一条深海巨口鱼。基础收益 {v} 金币。",
-            icon = "fish_legend", priceBase = 1.3, priceMultiplier = 80000.0,
+            name = "传说鱼苗", desc = "放入一条中华鲟级别的名贵鱼。基础收益 {v} 金币。",
+            icon = "fw_xunyu", priceBase = 1.3, priceMultiplier = 80000.0,
             maxPurchases = 20,
             visibleWhen = { it.epicFish > 0 },
         ),

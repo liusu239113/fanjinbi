@@ -123,17 +123,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 清空存档并把运行时状态恢复到初始。 */
+    /**
+     * 清空存档并把运行时状态恢复到初始。
+     *
+     * 注意两点：
+     * 1. 清完**不要**立刻 save()，否则等于把空档又写回去、
+     *    主菜单会以为还有存档。
+     * 2. 调用方必须刷新 [saveEpoch]，让 hasSave 重新求值。
+     */
     private fun doReset() {
         saveManager.clear()
-        gameState.loadFrom(com.taptap.fishingidle.game.SaveData())
+        gameState.resetAll()
         world.fishes.clear()
         world.helpers.clear()
         world.floatingTexts.clear()
         world.particles.clear()
         world.syncFishCount()
         world.syncHelperCount()
-        saveManager.save(gameState, settings)
     }
 
     @Composable
@@ -145,7 +151,10 @@ class MainActivity : ComponentActivity() {
         var showReset by remember { mutableStateOf(false) }
         var showPrestige by remember { mutableStateOf(false) }
         var gameViewRef by remember { mutableStateOf<GameView?>(null) }
-        val hasSave = remember { saveManager.hasSave() }
+        // 每次重置存档后 +1，强制 hasSave 重新求值。
+        // 用 remember{} 缓存布尔值会导致「清档后主菜单仍显示旧存档」。
+        var saveEpoch by remember { mutableIntStateOf(0) }
+        val hasSave = remember(saveEpoch) { saveManager.hasSave() }
         // HUD 刷新计数。GameState 是普通 var，必须靠它变化来驱动重组，
         // 否则金币数字不会更新。
         var revision by remember { mutableIntStateOf(0) }
@@ -269,6 +278,8 @@ class MainActivity : ComponentActivity() {
                     assets = assets,
                     onConfirm = {
                         doReset()
+                        // 必须刷新 saveEpoch，否则主菜单仍会认为有存档
+                        saveEpoch++
                         showReset = false
                         showMenu = false
                         revision++
@@ -444,6 +455,8 @@ class MainActivity : ComponentActivity() {
                     assets = assets,
                     onConfirm = {
                         doReset()
+                        // 必须刷新 saveEpoch，否则主菜单仍会认为有存档
+                        saveEpoch++
                         showReset = false
                         showMenu = false
                         revision++

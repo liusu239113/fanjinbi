@@ -366,6 +366,31 @@ class GameState {
     }
 
     /**
+     * 彻底重置到全新开局：金钱归零、购买清空、图鉴与成就清空，
+     * 只保留玩家设置（音量等由 Settings 单独管理）。
+     */
+    fun resetAll() {
+        money = 0.0
+        totalMoney = 0.0
+        highestMoney = 0.0
+        highestCatch = 0.0
+        purchases.clear()
+        pearls = 0
+        prestigeCount = 0
+        skillLevels.clear()
+        bestCombo = 0
+        combo = 0
+        totalCatches = 0
+        unlockedAchievements.clear()
+        caughtSpecies.clear()
+        unlockedMaps.clear()
+        unlockedMaps.add(Bestiary.maps.first().id)
+        currentMapId = Bestiary.maps.first().id
+        resetAttributes()
+        SkillTree.applyAll(this)
+    }
+
+    /**
      * 从存档重建。
      *
      * 顺序很重要：先恢复跨轮进度（珍珠/技能/图鉴），再套用技能加成，

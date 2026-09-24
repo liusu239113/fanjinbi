@@ -29,10 +29,12 @@ class GameRenderer(
 ) {
     private companion object {
         /**
-         * 玩家/帮手小船在世界坐标下的宽度。
-         * 按世界单位给，避免随屏幕像素放大成"巨型船"。
+         * 船的立绘高度（世界单位）。
+         *
+         * 按**高度**而不是宽度统一尺寸 —— 玩家与帮手的素材宽高比不同，
+         * 按宽度统一会把正方形那张放大成"巨型船+巨型竿"。
          */
-        const val PLAYER_BOAT_WORLD_W = 190f
+        const val PLAYER_BOAT_WORLD_H = 170f
     }
 
     // 稀有度颜色在构造时查表一次，避免每帧对每条鱼做 Map 查找
@@ -95,10 +97,12 @@ class GameRenderer(
         bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
         // 浮漂：用小号素材，别盖住整片水域
         bmpBobber = assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
-        // 玩家立绘与帮手立绘用同一个目标尺寸，保证画风与大小一致
-        val boatPx = (PLAYER_BOAT_WORLD_W * t.scale).toInt().coerceAtLeast(40)
-        bmpPlayerBoat = assets.scaled("player_boat", boatPx)
-        bmpHelper = assets.scaled("helper_boat", boatPx)
+        // 玩家立绘与帮手立绘按**高度**统一。
+        // 两张素材宽高比不同（玩家 3:2、帮手 1:1），若按宽度统一，
+        // 正方形那张会被等比放大到远超预期的高度，看起来就是一根巨大的竿。
+        val boatH = (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28)
+        bmpPlayerBoat = assets.scaledToHeight("player_boat", boatH)
+        bmpHelper = assets.scaledToHeight("helper_boat", boatH)
         fishFrames.clear()
         fishFrameDuration.clear()
         // 一张精灵可能被多个稀有度档复用，取其中最高的档决定目标尺寸
