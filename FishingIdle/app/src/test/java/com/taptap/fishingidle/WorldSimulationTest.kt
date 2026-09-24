@@ -206,24 +206,33 @@ class WorldSimulationTest {
         state.buy(Content.byId("chain_reaction")!!)
         val world = World(state)
 
-        // 把所有鱼聚到同一点，确保连锁能触发
         val cx = Space.W / 2f
         val cy = Space.POND_T + 300f
-        world.fishes.forEach { it.x = cx; it.y = cy }
 
-        world.advance(0.5f)
-        world.castAtNearestFish()
-
+        // 关键：整个收线过程都要把鱼按在落点附近。
+        // 鱼每帧会随机游动，若只在开始时聚一次，收线几秒后早就散开，
+        // 连锁半径内可能一条都不剩 —— 那会让这个测试时过时不过。
         var guard = 0
-        while (world.bobber.isActive && guard < 3000) {
+        var casts = 0
+        while (guard < 6000 && casts < 3) {
+            world.fishes.forEach { it.x = cx; it.y = cy }
+            if (!world.bobber.isActive) {
+                world.castLine(cx, cy)
+                casts++
+            }
             world.update(dt)
-            if (world.bobber.state == BobberState.BITE) world.onTap(world.bobber.x, world.bobber.y)
+            if (world.bobber.state == BobberState.BITE) {
+                world.onTap(world.bobber.x, world.bobber.y)
+            }
             guard++
         }
 
         val chainEarned = state.earningsBySource[com.taptap.fishingidle.game.Source.CHAIN] ?: 0.0
         assertTrue("连锁反应应产生收益，实际=$chainEarned", chainEarned > 0.0)
-        assertEquals("连锁后鱼群规模不变", 30 + GameState.INITIAL_COMMON_FISH, world.fishes.size)
+        assertEquals(
+            "连锁后鱼群规模不变",
+            30 + GameState.INITIAL_COMMON_FISH, world.fishes.size,
+        )
     }
 
     @Test
