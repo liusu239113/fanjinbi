@@ -46,6 +46,15 @@ enum class Attribute {
     HELPER_CAN_EPIC,
     HELPER_CAN_LEGEND,
     CHAIN_REACTION,
+    // 进阶成长
+    RARITY_MUL,
+    MAP_BONUS,
+    HELPER_SPEED,
+    HELPER_PARALLEL,
+    COMBO_POWER,
+    COMBO_KEEP,
+    AUTO_REEL_SPEED,
+    LUCKY_HOOK,
 }
 
 /** 收益来源，用于统计面板。 */

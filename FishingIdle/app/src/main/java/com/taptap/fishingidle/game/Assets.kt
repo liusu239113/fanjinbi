@@ -19,17 +19,24 @@ class Assets(context: Context) {
     private val appContext = context.applicationContext
     private val cache = HashMap<String, Bitmap>()
 
-    /** 原始位图，用于需要保持原始比例的场合。 */
-    fun raw(name: String): Bitmap? = cache.getOrPut(name) {
-        try {
+    /**
+     * 原始位图。素材不存在时返回 null —— 调用方一律判空处理。
+     * 不要把 null 塞进缓存（HashMap 可以存 null，但会让 getOrPut 反复重算）。
+     */
+    fun raw(name: String): Bitmap? {
+        cache[name]?.let { return it }
+        val bmp = try {
             appContext.assets.open("art/$name.png").use { input: InputStream ->
-                BitmapFactory.decodeStream(input, null, BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }) ?: return@getOrPut createFallback()
+                BitmapFactory.decodeStream(
+                    input, null,
+                    BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 },
+                )
             }
         } catch (e: Exception) {
-            createFallback()
+            null
         }
+        if (bmp != null) cache[name] = bmp
+        return bmp
     }
 
     /** 预缩放到指定宽度的位图，带独立缓存键。 */
@@ -44,11 +51,6 @@ class Assets(context: Context) {
         cache[key] = out
         return out
     }
-
-    private fun createFallback(): Bitmap =
-        Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).also {
-            it.eraseColor(android.graphics.Color.MAGENTA)
-        }
 
     /**
      * 读取动画图集的配置（列数、行数）。
@@ -65,6 +67,35 @@ class Assets(context: Context) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * 取某个动画图集的**第一帧**，用作 UI 图标（图鉴、商店条目等）。
+     *
+     * 精灵的原始素材是 `art/<name>_anim.png`（一张多帧图集），
+     * UI 直接按整张图显示会糊成一片，必须切出单帧。
+     * 若该动画不存在则退回同名的单帧图，最后才给兜底色块。
+     */
+    fun firstFrame(name: String, targetW: Int): Bitmap? {
+        val key = "$name#frame0@$targetW"
+        cache[key]?.let { return it }
+
+        val cfg = frameConfig("${name}_anim")
+        val sheet = scaled("${name}_anim", targetW)
+        if (cfg != null && sheet != null) {
+            val (cols, rows) = cfg
+            val fw = sheet.width / cols
+            val fh = sheet.height / rows
+            if (fw > 0 && fh > 0) {
+                val frame = Bitmap.createBitmap(sheet, 0, 0, fw, fh)
+                cache[key] = frame
+                return frame
+            }
+        }
+        // 退回单帧图（老素材），再不行才用兜底色块
+        val fallback = raw(name)
+        if (fallback != null) cache[key] = fallback
+        return fallback
     }
 
     fun evict() {

@@ -1,6 +1,12 @@
 package com.taptap.fishingidle.ui
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
@@ -49,3 +55,45 @@ object FontSize {
 
 val Bold = FontWeight.Bold
 val SemiBold = FontWeight.SemiBold
+
+/**
+ * 全局主题：把默认字体换成游戏字体。
+ *
+ * Material3 的 Typography 覆盖所有 Text 的默认样式，
+ * 这样各处不用逐个指定 fontFamily 也能统一生效。
+ */
+@Composable
+fun FishingIdleTheme(content: @Composable () -> Unit) {
+    val font = AppFontFamily
+    MaterialTheme(
+        colorScheme = lightColorScheme(
+            primary = UITheme.Gold,
+            background = UITheme.DeepWater,
+            surface = UITheme.PanelBg,
+        ),
+        typography = gameTypography(font),
+        content = content,
+    )
+}
+
+private fun gameTypography(font: FontFamily): Typography {
+    val base = Typography()
+    fun TextStyle.withFont() = copy(fontFamily = font)
+    return Typography(
+        displayLarge = base.displayLarge.withFont(),
+        displayMedium = base.displayMedium.withFont(),
+        displaySmall = base.displaySmall.withFont(),
+        headlineLarge = base.headlineLarge.withFont(),
+        headlineMedium = base.headlineMedium.withFont(),
+        headlineSmall = base.headlineSmall.withFont(),
+        titleLarge = base.titleLarge.withFont(),
+        titleMedium = base.titleMedium.withFont(),
+        titleSmall = base.titleSmall.withFont(),
+        bodyLarge = base.bodyLarge.withFont(),
+        bodyMedium = base.bodyMedium.withFont(),
+        bodySmall = base.bodySmall.withFont(),
+        labelLarge = base.labelLarge.withFont(),
+        labelMedium = base.labelMedium.withFont(),
+        labelSmall = base.labelSmall.withFont(),
+    )
+}

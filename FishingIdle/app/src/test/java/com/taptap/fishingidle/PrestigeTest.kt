@@ -86,7 +86,7 @@ class PrestigeTest {
         assertEquals("金币应清空", 0.0, s.money, 0.001)
         assertEquals("累计收入应清空", 0.0, s.totalMoney, 0.001)
         assertEquals("购买记录应清空", 0, s.purchases.size)
-        assertEquals("鱼群应回到初始 1 条", 1, s.commonFish)
+        assertEquals("鱼群应回到初始数量", GameState.INITIAL_COMMON_FISH, s.commonFish)
         assertEquals("鲤鱼应清空", 0, s.rareFish)
         assertEquals("钓手应清空", 0, s.helpers)
         assertEquals("升级加成应清空", 0.0, s.commonValueAdd, 0.001)

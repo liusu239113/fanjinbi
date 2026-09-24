@@ -7,6 +7,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -185,6 +187,59 @@ fun CatchStrip(state: GameState, revision: Int, modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
+}
+
+/**
+ * 屏幕左右两侧的划船按钮。
+ *
+ * 按住即持续移动 —— 用 pointerInput 监听按下/抬起，
+ * 而不是 onClick，这样长按能一直划。
+ */
+@Composable
+fun MoveButtons(
+    world: World,
+    revision: Int,
+    modifier: Modifier = Modifier,
+) {
+    @Suppress("UNUSED_EXPRESSION") revision
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        MoveButton("◀", world::setMoveLeft)
+        MoveButton("▶", world::setMoveRight)
+    }
+}
+
+@Composable
+private fun MoveButton(label: String, onHold: (Boolean) -> Unit) {
+    Box(
+        Modifier
+            .size(64.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(UITheme.DeepWater.copy(alpha = 0.75f))
+            .border(3.dp, UITheme.GoldDark, RoundedCornerShape(32.dp))
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val down = awaitPointerEvent(PointerEventPass.Main)
+                        val pressed = down.changes.any { it.pressed }
+                        onHold(pressed)
+                        // 抬手时确保松开
+                        if (!pressed) onHold(false)
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = UITheme.GoldLight,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

@@ -23,7 +23,8 @@ class GameState {
         private set
 
     // ---- 鱼群数量 ----
-    var commonFish: Int = 1
+    // 初始就放一批小鱼，否则开局水面上只有一两条，钓场看着空荡荡
+    var commonFish: Int = 6
     var rareFish: Int = 0
     var epicFish: Int = 0
     var legendFish: Int = 0
@@ -54,6 +55,24 @@ class GameState {
     var helperCanLegend: Boolean = false
     var chainReaction: Boolean = false
     var helperEfficiency: Double = 1.0
+
+    // ---- 进阶成长（后期主要数值来源）----
+    /** 所有鱼的价值倍率加成。 */
+    var rarityMul: Double = 0.0
+    /** 当前水域的额外价值倍率。 */
+    var mapBonus: Double = 0.0
+    /** 钓手划船速度加成。 */
+    var helperSpeed: Double = 0.0
+    /** 每名钓手可同时照看的鱼数（在基础上叠加）。 */
+    var helperParallel: Int = 0
+    /** 连击每层额外加成。 */
+    var comboPower: Double = 0.0
+    /** 脱钩时保留的连击比例 0~1。 */
+    var comboKeep: Double = 0.0
+    /** 自动重抛的收线速度加成。 */
+    var autoReelSpeed: Double = 0.0
+    /** 高稀有度鱼出现概率加成。 */
+    var luckyHook: Double = 0.0
 
     // ---- 转生 ----
     /** 珍珠：转生货币，用于升级技能树，转生不会清空。 */
@@ -125,9 +144,15 @@ class GameState {
     var bestCombo: Int = 0
         private set
 
-    /** 连击带来的收益加成。步长由技能「连击之势」提升，默认每层 +4%，上限 30 层。 */
+    /**
+     * 连击收益加成。步长 = 技能「连击之势」+ 升级「行云流水」，上限 30 层。
+     */
     val comboMultiplier: Double
-        get() = 1.0 + (combo.coerceAtMost(30) * skillComboStep)
+        get() = 1.0 + (combo.coerceAtMost(30) * (skillComboStep + comboPower))
+
+    /** 全局价值倍率：稀有度加成 × 水域加成，由进阶升级提供。 */
+    val globalValueMultiplier: Double
+        get() = (1.0 + rarityMul) * (1.0 + mapBonus)
 
     // ---- 转生 ----
 
@@ -185,9 +210,12 @@ class GameState {
         if (combo > bestCombo) bestCombo = combo
     }
 
-    /** 脱钩/超时：连击清零。 */
+    /**
+     * 脱钩/超时。「稳如磐石」可以让玩家保留一部分连击层数，
+     * 减少手滑一次的惩罚。
+     */
     fun onCatchFail() {
-        combo = 0
+        combo = (combo * comboKeep).toInt().coerceAtLeast(0)
     }
 
     /**
@@ -201,7 +229,7 @@ class GameState {
             Rarity.EPIC -> (BASE_EPIC + epicValueAdd) * epicValueMul
             Rarity.LEGEND -> (BASE_LEGEND + legendValueAdd) * legendValueMul
         }
-        return base * skillValueMultiplier
+        return base * skillValueMultiplier * globalValueMultiplier
     }
 
     /**
@@ -291,6 +319,16 @@ class GameState {
             Attribute.HELPER_CAN_EPIC -> helperCanEpic = true
             Attribute.HELPER_CAN_LEGEND -> helperCanLegend = true
             Attribute.CHAIN_REACTION -> chainReaction = true
+
+            // 进阶成长
+            Attribute.RARITY_MUL -> rarityMul += amount
+            Attribute.MAP_BONUS -> mapBonus += amount
+            Attribute.HELPER_SPEED -> helperSpeed += amount
+            Attribute.HELPER_PARALLEL -> helperParallel += amount.toInt()
+            Attribute.COMBO_POWER -> comboPower += amount
+            Attribute.COMBO_KEEP -> comboKeep += amount
+            Attribute.AUTO_REEL_SPEED -> autoReelSpeed += amount
+            Attribute.LUCKY_HOOK -> luckyHook += amount
         }
     }
 
@@ -372,11 +410,14 @@ class GameState {
     }
 
     private fun resetAttributes() {
-        commonFish = 1; rareFish = 0; epicFish = 0; legendFish = 0; helpers = 0
+        commonFish = INITIAL_COMMON_FISH
+        rareFish = 0; epicFish = 0; legendFish = 0; helpers = 0
         commonValueAdd = 0.0; rareValueAdd = 0.0; epicValueAdd = 0.0; legendValueAdd = 0.0
         commonValueMul = 1.0; rareValueMul = 1.0; epicValueMul = 1.0; legendValueMul = 1.0
         commonReelSpeed = 1.0; rareReelSpeed = 1.0; epicReelSpeed = 1.0; legendReelSpeed = 1.0
         helperEfficiency = 1.0
+        rarityMul = 0.0; mapBonus = 0.0; helperSpeed = 0.0; helperParallel = 0
+        comboPower = 0.0; comboKeep = 0.0; autoReelSpeed = 0.0; luckyHook = 0.0
         autoReelChance = 0.0
         autoReelUnlocked = false
         helperCanRare = false; helperCanEpic = false; helperCanLegend = false
@@ -384,6 +425,9 @@ class GameState {
     }
 
     companion object {
+        /** 开局送的小鱼数量，让钓场一开始就有生气。 */
+        const val INITIAL_COMMON_FISH = 6
+
         const val BASE_COMMON = 1.0
         const val BASE_RARE = 20.0
         const val BASE_EPIC = 300.0

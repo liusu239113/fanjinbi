@@ -21,7 +21,7 @@ class EconomyTest {
     fun `初始状态正确`() {
         val s = GameState()
         assertEquals(0.0, s.money, 0.001)
-        assertEquals(1, s.commonFish)
+        assertEquals(GameState.INITIAL_COMMON_FISH, s.commonFish)
         assertEquals(0, s.rareFish)
         assertEquals(1.0, s.catchValue(Rarity.COMMON), 0.001)
     }
@@ -45,9 +45,9 @@ class EconomyTest {
 
         // helper: base=1.45, mult=10
         val h = def("helper")
-        assertEquals(10.0, h.price(0), 0.001)
-        assertEquals(14.0, h.price(1), 0.001)    // floor(14.5)
-        assertEquals(21.0, h.price(2), 0.001)    // floor(21.025)
+        assertEquals(120.0, h.price(0), 0.001)
+        assertEquals(192.0, h.price(1), 0.001)   // floor(1.6^1 * 120)
+        assertEquals(307.0, h.price(2), 0.001)   // floor(1.6^2 * 120)
     }
 
     @Test
@@ -64,7 +64,7 @@ class EconomyTest {
         s.money = 1.0
         assertFalse(s.buy(def("common_fish")))
         assertEquals(1.0, s.money, 0.001)
-        assertEquals(1, s.commonFish)
+        assertEquals(GameState.INITIAL_COMMON_FISH, s.commonFish)
     }
 
     @Test
@@ -73,7 +73,7 @@ class EconomyTest {
         s.money = 100.0
         assertTrue(s.buy(def("common_fish")))
         assertEquals(98.0, s.money, 0.001)
-        assertEquals(2, s.commonFish)
+        assertEquals(GameState.INITIAL_COMMON_FISH + 1, s.commonFish)
         assertEquals(1, s.owned("common_fish"))
     }
 
@@ -194,14 +194,14 @@ class EconomyTest {
         restored.buy(def("common_fish"))
         assertEquals(7, restored.owned("common_fish"))
         // 初始就有 1 条，买了 7 次 → 共 8 条
-        assertEquals(8, restored.commonFish)
+        assertEquals(GameState.INITIAL_COMMON_FISH + 7, restored.commonFish)
     }
 
     @Test
     fun `空存档不会崩溃`() {
         val s = GameState()
         s.loadFrom(SaveData())
-        assertEquals(1, s.commonFish)
+        assertEquals(GameState.INITIAL_COMMON_FISH, s.commonFish)
         assertEquals(0.0, s.money, 0.001)
     }
 

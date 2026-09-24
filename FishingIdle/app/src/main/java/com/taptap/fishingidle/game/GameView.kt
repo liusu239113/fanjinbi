@@ -172,9 +172,16 @@ class GameView(
         if (world.bobber.isActive) {
             if (world.onTap(wx, wy)) return
         }
-        // 否则在水面以下抛竿
+        // 水面以下：先看落点附近有没有鱼
         if (wy > Space.SURFACE_Y + 40f) {
-            world.castLine(wx, wy)
+            if (world.hasFishNear(wx, wy)) {
+                // 有鱼 → 把船划过去再抛竿
+                world.sailTo(wx)
+                world.castLine(wx, wy)
+            } else {
+                // 没鱼 → 只是把船划过去，不抛竿（避免"空地方也能咬钩"）
+                world.sailTo(wx)
+            }
         }
     }
 

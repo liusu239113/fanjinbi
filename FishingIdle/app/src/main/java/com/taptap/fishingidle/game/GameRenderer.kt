@@ -93,7 +93,8 @@ class GameRenderer(
         bmpWater = assets.scaled("water_tile", (512 * t.scale).toInt().coerceIn(256, 768))
         // 河床用侧视条带素材（原来那张俯视的 riverbed 拉出来是绿色竖条）
         bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
-        bmpBobber = assets.scaled("bobber", (60 * t.scale).toInt().coerceAtLeast(16))
+        // 浮漂：用小号素材，别盖住整片水域
+        bmpBobber = assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
         bmpRod = assets.scaled("rod", (110 * t.scale).toInt().coerceAtLeast(24))
         bmpHelper = assets.scaled("helper_boat", (96 * t.scale).toInt().coerceAtLeast(20))
         fishFrames.clear()
@@ -126,10 +127,10 @@ class GameRenderer(
 
         loadSeaweed(t)
 
-        // 云：两种形状，按屏幕宽度预缩放
+        // 云：用形状干净的 cloud_c，尺寸压小一点免得占满天空
         cloudFrames = listOfNotNull(
-            assets.scaled("cloud_a", (300 * t.scale).toInt().coerceAtLeast(48)),
-            assets.scaled("cloud_b", (260 * t.scale).toInt().coerceAtLeast(40)),
+            assets.scaled("cloud_c", (170 * t.scale).toInt().coerceAtLeast(36)),
+            assets.scaled("cloud_c", (120 * t.scale).toInt().coerceAtLeast(28)),
         )
 
         waterShader = null

@@ -55,6 +55,7 @@ import com.taptap.fishingidle.ui.MainMenu
 import com.taptap.fishingidle.ui.MenuPanel
 import com.taptap.fishingidle.ui.PrestigePanel
 import com.taptap.fishingidle.ui.MoneyBar
+import com.taptap.fishingidle.ui.MoveButtons
 import com.taptap.fishingidle.ui.ResetConfirmDialog
 import com.taptap.fishingidle.ui.ShopPanel
 import com.taptap.fishingidle.ui.UITheme
@@ -328,6 +329,10 @@ class MainActivity : ComponentActivity() {
                 AchievementToast(toast)
 
                 Spacer(Modifier.weight(1f))
+
+                // 左右划船按钮，贴着屏幕两侧
+                MoveButtons(world = world, revision = revision)
+                Spacer(Modifier.height(10.dp))
 
                 BottomBar(
                     world = world,

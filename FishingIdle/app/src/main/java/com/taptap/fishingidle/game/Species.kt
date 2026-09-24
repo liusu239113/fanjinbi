@@ -123,19 +123,32 @@ class FishingMap(
     val unlockCost: Double,
     val species: List<Species>,
 ) {
-    val totalWeight: Float get() = species.sumOf { it.rarity.weight.toDouble() }.toFloat()
+    /**
+     * 抽一条鱼。[luckBonus] 来自「幸运鱼钩」升级：
+     * 它会放大高稀有度的权重，让稀有种更容易出现。
+     */
+    fun roll(rng: Random, luckBonus: Double = 0.0): Species {
+        val total = species.sumOf { s ->
+            (s.rarity.weight * (1.0 + luckBonus * s.rarity.ordinal)).toDouble()
+        }.toFloat()
+        if (total <= 0f) return species.first()
 
-    fun roll(rng: Random): Species {
-        var r = rng.nextFloat() * totalWeight
+        var r = rng.nextFloat() * total
         for (s in species) {
-            r -= s.rarity.weight
+            val w = (s.rarity.weight * (1.0 + luckBonus * s.rarity.ordinal)).toFloat()
+            r -= w
             if (r <= 0f) return s
         }
         return species.last()
     }
 }
 
-/** 全部鱼种与地图。共 6 张图 × 9 种 = 54 种鱼。 */
+/**
+ * 全部鱼种与地图。6 张水域 × 每图 9 种 = 54 种鱼。
+ *
+ * 每种鱼都有**独立的外观素材**（54 张不同的动画图集），
+ * 不存在多张地图共用同一张图、只换名字的情况。
+ */
 object Bestiary {
 
     private fun sp(
@@ -144,12 +157,12 @@ object Bestiary {
         tint: FishTint = FishTint.NONE,
     ): Species = Species(id, name, rarity, sprite, mul, scale.toFloat(), escape.toFloat(), tint)
 
-    // ---------------- 1. 村口小河 ----------------
+    /** 1. 村口小河 —— 水浅鱼小，适合练手。 */
     val VILLAGE_CREEK = FishingMap(
         "creek", "村口小河", "水浅鱼小，适合练手。",
         1.0, 0.0,
         listOf(
-            sp("baitiao", "白条", Rarity.COMMON, "fish_common", 1.0, 0.85, tint = FishTint.SILVER),
+            sp("baitiao", "白条", Rarity.COMMON, "fish_common", 1.0, 0.85),
             sp("jiyu", "鲫鱼", Rarity.COMMON, "fw_jiyu", 1.5, 0.95),
             sp("niqiu", "泥鳅", Rarity.COMMON, "fw_niqiu", 2.0, 0.80),
             sp("caoyu", "草鱼", Rarity.RARE, "fish_rare", 1.0, 1.00),
@@ -157,92 +170,92 @@ object Bestiary {
             sp("huangsang", "黄颡鱼", Rarity.RARE, "fw_huangsang", 2.1, 0.95),
             sp("qingyu", "青鱼", Rarity.EPIC, "fw_qingyu", 1.0, 1.10),
             sp("heiyu", "黑鱼", Rarity.EPIC, "fw_heiyu", 1.6, 1.15),
-            sp("jinli", "金鲫", Rarity.LEGEND, "fw_jiyu", 1.0, 1.20, tint = FishTint.GOLDEN),
+            sp("jinji", "金鲫", Rarity.LEGEND, "fz_jinji", 1.0, 1.20),
         ),
     )
 
-    // ---------------- 2. 芦苇荡 ----------------
+    /** 2. 芦苇荡 —— 水草丰茂，鱼肥水美。 */
     val REED_MARSH = FishingMap(
         "marsh", "芦苇荡", "水草丰茂，鱼肥水美。",
         3_840.0, 1_150_000.0,
         listOf(
-            sp("jiyu2", "肥鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.05),
-            sp("niqiu2", "大泥鳅", Rarity.COMMON, "fw_niqiu", 1.3, 0.95),
-            sp("baitiao2", "银白条", Rarity.COMMON, "fish_common", 1.6, 0.90, tint = FishTint.PALE),
-            sp("lianyu", "鲢鱼", Rarity.RARE, "fw_jiyu", 1.2, 1.10, tint = FishTint.PALE),
-            sp("luyu", "鲈鱼", Rarity.RARE, "fw_luyu", 1.8, 1.00),
-            sp("liyu2", "红鲤", Rarity.RARE, "fw_liyu", 2.3, 1.05, tint = FishTint.CRIMSON),
-            sp("qingyu2", "大青鱼", Rarity.EPIC, "fw_qingyu", 1.0, 1.20),
-            sp("manyu", "河鳗", Rarity.EPIC, "fw_eel", 1.5, 1.00),
-            sp("daliyu", "大鲤鱼", Rarity.LEGEND, "fw_daliyu", 1.0, 1.25),
+            sp("maisui", "麦穗鱼", Rarity.COMMON, "fy_maisui", 1.0, 0.78),
+            sp("moroko", "中华鳑鮍", Rarity.COMMON, "fy_moroko", 1.5, 0.80),
+            sp("pangpi", "鳑鮍", Rarity.COMMON, "fy_pangpi", 2.0, 0.80),
+            sp("bianyu", "鳊鱼", Rarity.RARE, "fy_bianyu", 1.0, 1.00),
+            sp("wuchang", "武昌鱼", Rarity.RARE, "fy_wuchang", 1.5, 1.02),
+            sp("lingyu", "鲮鱼", Rarity.RARE, "fy_lingyu", 2.1, 1.00),
+            sp("guiyu", "鳜鱼", Rarity.EPIC, "fy_guiyu", 1.0, 1.12),
+            sp("hualu", "花鲈", Rarity.EPIC, "fz_hualu", 1.6, 1.10),
+            sp("hongli", "红鲤", Rarity.LEGEND, "fz_hongli", 1.0, 1.20),
         ),
     )
 
-    // ---------------- 3. 深山碧潭 ----------------
+    /** 3. 深山碧潭 —— 潭深水冷，藏着年岁久远的老鱼。 */
     val DEEP_POOL = FishingMap(
         "pool", "深山碧潭", "潭深水冷，藏着年岁久远的老鱼。",
         14_700_000.0, 4_420_000_000.0,
         listOf(
-            sp("jiyu3", "潭鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.10, tint = FishTint.JADE),
-            sp("niqiu3", "潭鳅", Rarity.COMMON, "fw_niqiu", 1.4, 0.95, tint = FishTint.DARK),
-            sp("lianyu2", "花鲢", Rarity.COMMON, "fw_jiyu", 1.9, 1.10, tint = FishTint.PALE),
-            sp("luyu2", "潭鲈", Rarity.RARE, "fw_luyu", 1.0, 1.05, tint = FishTint.JADE),
-            sp("heiyu2", "黑鱼王", Rarity.RARE, "fw_heiyu", 1.7, 1.25),
-            sp("qingyu3", "青鱼王", Rarity.EPIC, "fw_qingyu", 1.0, 1.30),
-            sp("manyu2", "潭鳗", Rarity.EPIC, "fw_eel", 1.6, 1.05, tint = FishTint.DARK),
-            sp("nianyu", "鲶鱼", Rarity.EPIC, "fw_nianyu", 2.3, 1.20),
-            sp("cuili", "翠鳞鲤", Rarity.LEGEND, "fw_liyu", 1.0, 1.25, tint = FishTint.JADE),
+            sp("huaqiu", "花鳅", Rarity.COMMON, "fz_huaqiu", 1.0, 0.85),
+            sp("dalinqiu", "大鳞泥鳅", Rarity.COMMON, "fz_dalinqiu", 1.5, 0.90),
+            sp("tongyu", "铜鱼", Rarity.COMMON, "fy_tongyu", 2.0, 1.00),
+            sp("shatang", "沙塘鳢", Rarity.RARE, "fy_shatang", 1.0, 1.05),
+            sp("changwen", "长吻鮠", Rarity.RARE, "fy_changwen", 1.5, 1.08),
+            sp("huzi", "胡子鲶", Rarity.RARE, "fy_huzi", 2.1, 1.10),
+            sp("nianyu", "鲶鱼", Rarity.EPIC, "fw_nianyu", 1.0, 1.20),
+            sp("eel", "河鳗", Rarity.EPIC, "fw_eel", 1.6, 1.10),
+            sp("jingli", "镜鲤", Rarity.LEGEND, "fz_jingli", 1.0, 1.25),
         ),
     )
 
-    // ---------------- 4. 急流险滩 ----------------
+    /** 4. 急流险滩 —— 水流湍急，只有强健的鱼能立足。 */
     val RAPIDS = FishingMap(
         "rapids", "急流险滩", "水流湍急，只有强健的鱼能立足。",
         5.66e10, 1.70e13,
-        species = listOf(
-            sp("jiyu4", "溪鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.00, tint = FishTint.AZURE),
-            sp("baitiao3", "急流白条", Rarity.COMMON, "fish_common", 1.5, 0.85, tint = FishTint.SILVER),
-            sp("niqiu4", "溪鳅", Rarity.COMMON, "fw_niqiu", 2.0, 0.90),
-            sp("luyu3", "急流鲈", Rarity.RARE, "fw_luyu", 1.0, 1.05),
-            sp("huangsang2", "大黄颡", Rarity.RARE, "fw_huangsang", 1.5, 1.05),
+        listOf(
+            sp("qiaozui", "翘嘴鲌", Rarity.COMMON, "fy_qiaozui", 1.0, 1.00),
+            sp("hongqi", "红鳍鲌", Rarity.COMMON, "fy_hongqi", 1.5, 0.95),
+            sp("huangwei", "黄尾鲴", Rarity.COMMON, "fz_huangwei", 2.0, 0.98),
+            sp("gouyu", "狗鱼", Rarity.RARE, "fy_gouyu", 1.0, 1.10),
+            sp("shengyu", "生鱼", Rarity.RARE, "fy_shengyu", 1.5, 1.15),
+            sp("huangshan", "黄鳝", Rarity.RARE, "fy_huangshan", 2.1, 0.95),
             sp("xunyu", "中华鲟", Rarity.EPIC, "fw_xunyu", 1.0, 1.35),
-            sp("heiyu3", "江黑鱼", Rarity.EPIC, "fw_heiyu", 1.5, 1.20, tint = FishTint.DARK),
-            sp("manyu3", "溪鳗", Rarity.EPIC, "fw_eel", 2.0, 1.10),
-            sp("arowana", "金龙鱼", Rarity.LEGEND, "fw_arowana", 1.0, 1.25),
+            sp("baixun", "白鲟", Rarity.EPIC, "fy_baixun", 1.6, 1.40),
+            sp("yanzhi", "胭脂鱼", Rarity.LEGEND, "fy_yanzhi", 1.0, 1.25),
         ),
     )
 
-    // ---------------- 5. 月牙湖 ----------------
+    /** 5. 月牙湖 —— 月圆之夜，湖底会浮起金光。 */
     val CRESCENT_LAKE = FishingMap(
         "lake", "月牙湖", "月圆之夜，湖底会浮起金光。",
         2.17e14, 6.52e16,
         listOf(
-            sp("jiyu5", "湖鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.05, tint = FishTint.SILVER),
-            sp("baitiao4", "月华白条", Rarity.COMMON, "fish_common", 1.7, 0.85, tint = FishTint.AZURE),
-            sp("niqiu5", "湖鳅", Rarity.COMMON, "fw_niqiu", 2.2, 0.90, tint = FishTint.SILVER),
-            sp("lianyu3", "湖鲢", Rarity.RARE, "fw_jiyu", 1.0, 1.15, tint = FishTint.PALE),
-            sp("luyu4", "月鲈", Rarity.RARE, "fw_luyu", 1.6, 1.10, tint = FishTint.AZURE),
-            sp("qingyu4", "湖青鱼", Rarity.EPIC, "fw_qingyu", 1.0, 1.25, tint = FishTint.AZURE),
-            sp("manyu4", "湖鳗", Rarity.EPIC, "fw_eel", 1.6, 1.15, tint = FishTint.PURPLE),
-            sp("xunyu2", "湖鲟", Rarity.LEGEND, "fw_xunyu", 1.0, 1.40, tint = FishTint.SILVER),
-            sp("yuelong", "月光龙鱼", Rarity.LEGEND, "fw_arowana", 1.8, 1.30, tint = FishTint.PALE),
+            sp("ziyu", "鲻鱼", Rarity.COMMON, "fy_ziyu", 1.0, 0.98),
+            sp("bailian", "白鲢", Rarity.COMMON, "fz_bailian", 1.5, 1.05),
+            sp("huanyu", "鲩鱼", Rarity.COMMON, "fz_huanyu", 2.0, 1.08),
+            sp("yongyu", "鳙鱼", Rarity.RARE, "fy_yongyu", 1.0, 1.15),
+            sp("hailu", "海鲈", Rarity.RARE, "fz_hailu", 1.5, 1.10),
+            sp("luyu", "鲈鱼", Rarity.RARE, "fw_luyu", 2.1, 1.05),
+            sp("arowana", "金龙鱼", Rarity.EPIC, "fw_arowana", 1.0, 1.25),
+            sp("hudie", "蝴蝶锦鲤", Rarity.EPIC, "fz_hudie", 1.6, 1.30),
+            sp("jinli", "黄金锦鲤", Rarity.LEGEND, "fz_jinli", 1.0, 1.28),
         ),
     )
 
-    // ---------------- 6. 龙渊秘境 ----------------
+    /** 6. 龙渊秘境 —— 传说中龙潜之渊，凡鱼皆已成精。 */
     val DRAGON_ABYSS = FishingMap(
         "abyss", "龙渊秘境", "传说中龙潜之渊，凡鱼皆已成精。",
         8.35e17, 2.50e20,
         listOf(
-            sp("jiyu6", "灵鲫", Rarity.COMMON, "fw_jiyu", 1.0, 1.10, tint = FishTint.PURPLE),
-            sp("niqiu6", "玉泥鳅", Rarity.COMMON, "fw_niqiu", 1.8, 0.95, tint = FishTint.JADE),
-            sp("baitiao5", "幽光白条", Rarity.COMMON, "fish_common", 2.4, 0.90, tint = FishTint.PURPLE),
-            sp("luyu5", "渊鲈", Rarity.RARE, "fw_luyu", 1.0, 1.15, tint = FishTint.PURPLE),
-            sp("huangsang3", "渊黄颡", Rarity.RARE, "fw_huangsang", 1.7, 1.10, tint = FishTint.CRIMSON),
-            sp("xunyu3", "渊鲟", Rarity.EPIC, "fw_xunyu", 1.0, 1.45, tint = FishTint.PURPLE),
-            sp("heiyu4", "墨龙鱼", Rarity.EPIC, "fw_heiyu", 1.8, 1.30, tint = FishTint.DARK),
-            sp("longli", "龙鳞鱼", Rarity.LEGEND, "fw_arowana", 1.0, 1.35, tint = FishTint.CRIMSON),
-            sp("dragoncarp", "龙渊鲤", Rarity.LEGEND, "fw_daliyu", 2.0, 1.40, tint = FishTint.PURPLE),
+            sp("wuli", "乌鲤", Rarity.COMMON, "fz_wuli", 1.0, 1.10),
+            sp("daheiyu", "大黑鱼", Rarity.COMMON, "fz_daheiyu", 1.5, 1.20),
+            sp("junian", "巨鲶", Rarity.COMMON, "fz_junian", 2.0, 1.25),
+            sp("baishan", "白鳝", Rarity.RARE, "fz_baishan", 1.0, 1.05),
+            sp("daliyu", "大鲤鱼", Rarity.RARE, "fw_daliyu", 1.5, 1.25),
+            sp("juli", "巨鲤", Rarity.RARE, "fz_juli", 2.1, 1.30),
+            sp("xunwang", "白鲟王", Rarity.EPIC, "fz_xunwang", 1.0, 1.45),
+            sp("jinlong", "金龙王鱼", Rarity.EPIC, "fz_jinlong", 1.6, 1.35),
+            sp("epic", "远古巨鱼", Rarity.LEGEND, "fish_epic", 1.0, 1.40),
         ),
     )
 

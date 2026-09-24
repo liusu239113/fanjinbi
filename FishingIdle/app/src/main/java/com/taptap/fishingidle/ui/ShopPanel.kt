@@ -196,7 +196,7 @@ private fun ShopItemRow(
     val affordable = state.money >= price
     val buyable = !maxed && affordable && def.buyableWhen(state)
 
-    val icon = remember(def.icon) { assets.scaled(def.icon, 96)?.asImageBitmap() }
+    val icon = remember(def.icon) { assets.firstFrame(def.icon, 96)?.asImageBitmap() }
 
     val borderColor = when {
         maxed -> UITheme.TextGood.copy(alpha = 0.65f)
@@ -459,7 +459,7 @@ private fun FishDex(state: GameState, assets: Assets) {
 
 @Composable
 private fun SpeciesRow(sp: Species, isCaught: Boolean, assets: Assets) {
-    val icon = remember(sp.sprite) { assets.scaled(sp.sprite, 128)?.asImageBitmap() }
+    val icon = remember(sp.sprite) { assets.firstFrame(sp.sprite, 128)?.asImageBitmap() }
     val rarity = when (sp.rarity) {
         Rarity.COMMON -> UITheme.RarityCommon
         Rarity.RARE -> UITheme.RarityRare

@@ -307,7 +307,9 @@ class Helper(var x: Float) {
                     idleDuration = 0.3f
                 } else {
                     val dx = f.x - x
-                    val speed = 260f * (gameState.helperEfficiency * gameState.skillHelperMultiplier).toFloat()
+                    val speed = 260f *
+                        (gameState.helperEfficiency * gameState.skillHelperMultiplier +
+                            gameState.helperSpeed).toFloat()
                     if (abs(dx) < 24f) {
                         state = HelperState.CASTING
                         lineX = f.x
@@ -408,8 +410,63 @@ class World(val gameState: GameState) {
         cameraX = (cameraX + dx).coerceIn(minX, maxX)
     }
 
-    /** 玩家船的位置：始终跟随镜头水平中心。 */
-    val boatX: Float get() = cameraX
+    /**
+     * 玩家船的水平位置。**独立于镜头** —— 玩家可以用左右按钮
+     * 把船划到河面任意位置，镜头只在船靠近边缘时跟随。
+     */
+    var boatX = Space.W / 2f
+        private set
+
+    /** 船的移动速度（世界单位/秒）。 */
+    private val boatSpeed = 520f
+
+    /**
+     * 玩家当前是否在按左/右键（由 UI 按钮设置）。
+     * 命名带 is 前缀，避免 Kotlin 自动生成的 setMoveLeft/setMoveRight
+     * 与下面的控制方法在 JVM 层撞签名。
+     */
+    private var isMovingLeft = false
+    private var isMovingRight = false
+
+    /**
+     * 划船。限制在钓场范围内，并让镜头跟随船（带边界夹取）。
+     */
+    fun moveBoat(dt: Float) {
+        var dir = 0f
+        if (isMovingLeft) dir -= 1f
+        if (isMovingRight) dir += 1f
+        if (dir == 0f) return
+        boatX = (boatX + dir * boatSpeed * dt).coerceIn(Space.POND_L, Space.POND_R)
+        followBoatWithCamera()
+    }
+
+    /** 镜头跟随船，但不越过世界边界。 */
+    private fun followBoatWithCamera() {
+        val half = viewHalfWidth
+        val minX = half
+        val maxX = (Space.W - half).coerceAtLeast(half)
+        cameraX = boatX.coerceIn(minX, maxX)
+    }
+
+    fun setMoveLeft(pressed: Boolean) {
+        isMovingLeft = pressed
+    }
+
+    fun setMoveRight(pressed: Boolean) {
+        isMovingRight = pressed
+    }
+
+    /** 松开所有方向键（面板打开、切后台时调用，避免船一直漂）。 */
+    fun stopMoving() {
+        isMovingLeft = false
+        isMovingRight = false
+    }
+
+    /** 点击水面把船划过去（点哪走哪）。 */
+    fun sailTo(targetX: Float) {
+        boatX = targetX.coerceIn(Space.POND_L, Space.POND_R)
+        followBoatWithCamera()
+    }
 
     // ---------------- 数量同步 ----------------
 
@@ -451,17 +508,25 @@ class World(val gameState: GameState) {
 
     /**
      * 在当前地图里按稀有度抽一个鱼种。
-     * 技能「深渊直觉」会提高稀有档位的权重，让好鱼更容易出现。
+     *
+     * 两个加成共同作用：
+     * - 技能「深渊直觉」提高稀有档位的**出现频率**
+     * - 升级「幸运鱼钩」让同档内更容易抽到高价值的那几种
      */
     private fun rollSpecies(rarity: Rarity): Species? {
         val pool = currentMap.species.filter { it.rarity == rarity }
         if (pool.isEmpty()) return null
-        val bonus = gameState.skillRareWeightBonus.toFloat()
-        if (bonus <= 0f || rarity == Rarity.COMMON) return pool.random()
 
-        // 稀有度越高，加权越明显；同时按权重抽，避免同档内总抽到同一种
+        val luck = gameState.luckyHook
+        if (pool.size == 1) return pool.first()
+
+        // 幸运鱼钩：按该鱼种自身的价值倍率加权，越值钱的越容易抽到
         val weighted = pool.flatMap { sp ->
-            val w = (1f + bonus * rarity.ordinal).toInt().coerceAtLeast(1)
+            val w = if (luck > 0.0) {
+                (1.0 + luck * sp.valueMul * rarity.ordinal).toInt().coerceAtLeast(1)
+            } else {
+                1
+            }
             List(w) { sp }
         }
         return weighted.random()
@@ -487,6 +552,11 @@ class World(val gameState: GameState) {
     }
 
     // ---------------- 玩家操作 ----------------
+
+    /** 落点附近 [Space.MAX_BITE_RANGE] 内是否有可钓的鱼。 */
+    fun hasFishNear(x: Float, y: Float): Boolean = fishes.any {
+        it.state == FishState.SWIMMING && hypot(it.x - x, it.y - y) <= Space.MAX_BITE_RANGE
+    }
 
     /**
      * 手动抛竿。
@@ -592,6 +662,9 @@ class World(val gameState: GameState) {
 
     fun update(dt: Float) {
         time += dt
+
+        // 玩家划船
+        moveBoat(dt)
 
         for (f in fishes) f.update(dt)
 

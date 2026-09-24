@@ -42,7 +42,7 @@ class WorldSimulationTest {
         val world = World(state)
         world.advance(120f)   // 2 分钟
         // 初始 1 条小鱼始终在场
-        assertEquals(1, world.fishes.size)
+        assertEquals(GameState.INITIAL_COMMON_FISH, world.fishes.size)
     }
 
     @Test
@@ -72,7 +72,7 @@ class WorldSimulationTest {
         assertTrue("应该抛出了若干竿: $casts", casts > 20)
         assertTrue("应该完成了若干竿: $reeled", reeled > 20)
         // 核心断言：鱼群数量始终维持，不会被慢慢掏空
-        assertEquals("鱼群不应消失", 1, world.fishes.size)
+        assertEquals("鱼群不应消失", GameState.INITIAL_COMMON_FISH, world.fishes.size)
     }
 
     @Test
@@ -128,23 +128,29 @@ class WorldSimulationTest {
         val helperEarned = state.earningsBySource[com.taptap.fishingidle.game.Source.HELPER] ?: 0.0
         assertTrue("钓手应产出金币，实际=$helperEarned", helperEarned > 0.0)
         assertTrue("钓手收益应累计到总收入", state.totalMoney >= helperEarned)
-        assertEquals("鱼群数量应保持", 1, world.fishes.size)
+        assertEquals("鱼群数量应保持", GameState.INITIAL_COMMON_FISH, world.fishes.size)
     }
 
     @Test
     fun `钓手数量多于鱼时不会产生额外收益也不会崩溃`() {
-        // 只有 1 条鱼，却雇了 20 个钓手：同一时刻只能有一个钓手在钓
+        // 鱼少钓手多：每个钓手最多认领一条鱼，不会有多个钓手抢同一条
         val state = GameState()
         state.money = 1e12
         repeat(20) { state.buy(Content.byId("helper")!!) }
         val world = World(state)
         assertEquals(20, world.helpers.size)
-        assertEquals(1, world.fishes.size)
+        assertEquals(GameState.INITIAL_COMMON_FISH, world.fishes.size)
 
         world.advance(45f)
 
-        // 任何时刻最多只有一条鱼被认领
-        assertTrue("同时被认领的鱼不应超过鱼总数", world.fishes.count { it.claimedBy != null } <= 1)
+        // 被认领的鱼数不能超过鱼的总数（每个钓手最多占一条）
+        val claimed = world.fishes.count { it.claimedBy != null }
+        assertTrue(
+            "被认领的鱼($claimed) 不应超过鱼总数(${world.fishes.size})",
+            claimed <= world.fishes.size,
+        )
+        // 也不该超过钓手数
+        assertTrue("被认领的鱼不应超过钓手数", claimed <= world.helpers.size)
         // 但收益仍然要正常产生
         assertTrue((state.earningsBySource[com.taptap.fishingidle.game.Source.HELPER] ?: 0.0) > 0.0)
     }
@@ -217,7 +223,7 @@ class WorldSimulationTest {
 
         val chainEarned = state.earningsBySource[com.taptap.fishingidle.game.Source.CHAIN] ?: 0.0
         assertTrue("连锁反应应产生收益，实际=$chainEarned", chainEarned > 0.0)
-        assertEquals("连锁后鱼群规模不变", 31, world.fishes.size)
+        assertEquals("连锁后鱼群规模不变", 30 + GameState.INITIAL_COMMON_FISH, world.fishes.size)
     }
 
     @Test
