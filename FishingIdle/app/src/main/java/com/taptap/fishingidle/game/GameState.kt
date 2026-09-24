@@ -53,6 +53,11 @@ class GameState {
     var autoCastUnlocked: Boolean = false   // 自动抛竿：空闲时自己找鱼下竿
     var pelicanOwned: Boolean = false       // 后期单位：鹈鹕（专叼大鱼）
     var netOwned: Boolean = false           // 后期技能：拖网（一次捞一网）
+    var sonarOwned: Boolean = false         // 声呐：稀有鱼显形 + 咬钩更快
+    var fishFinderOwned: Boolean = false    // 鱼探仪：抛竿落点自动吸鱼
+    var droneOwned: Boolean = false         // 无人机：强化自动抛竿
+    var diverOwned: Boolean = false         // 潜水员：定期下潜捞珍珠
+    var treasureOwned: Boolean = false      // 沉船宝藏：河面定时浮出宝箱
     var helperCanRare: Boolean = false
     var helperCanEpic: Boolean = false
     var helperCanLegend: Boolean = false
@@ -385,6 +390,11 @@ class GameState {
             Attribute.AUTO_CAST_UNLOCK -> autoCastUnlocked = true
             Attribute.PELICAN -> pelicanOwned = true
             Attribute.NET_SWEEP -> netOwned = true
+            Attribute.SONAR -> sonarOwned = true
+            Attribute.FISH_FINDER -> fishFinderOwned = true
+            Attribute.DRONE -> droneOwned = true
+            Attribute.DIVER -> diverOwned = true
+            Attribute.TREASURE -> treasureOwned = true
             Attribute.HELPER_CAN_RARE -> helperCanRare = true
             Attribute.HELPER_CAN_EPIC -> helperCanEpic = true
             Attribute.HELPER_CAN_LEGEND -> helperCanLegend = true
@@ -548,6 +558,11 @@ class GameState {
         autoCastUnlocked = false
         pelicanOwned = false
         netOwned = false
+        sonarOwned = false
+        fishFinderOwned = false
+        droneOwned = false
+        diverOwned = false
+        treasureOwned = false
         helperCanRare = false; helperCanEpic = false; helperCanLegend = false
         chainReaction = false
     }

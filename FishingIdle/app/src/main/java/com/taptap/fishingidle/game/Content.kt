@@ -302,8 +302,55 @@ object Content {
     /** 一网最多捞几条（与 [World.NET_MAX_FISH] 是同一个数）。 */
     private const val NET_MAX_FISH = 4
 
+    /**
+     * 后期第二梯队：把「看得到 / 够得着 / 打捞得到」也变成可买的玩法。
+     * 全部排在拖网之后，避免中期的数值成长被这些辅助功能抢戏。
+     */
+    val lateGame2: List<PurchasableDef> = listOf(
+        PurchasableDef(
+            id = "sonar", attribute = Attribute.SONAR,
+            name = "声呐",
+            desc = "河面标出稀有鱼的位置（稀有度颜色），稀有鱼咬钩速度 +35%。",
+            icon = "icon_sonar", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 2_500_000.0,
+            maxPurchases = 1,
+            visibleWhen = { it.netOwned },
+        ),
+        PurchasableDef(
+            id = "fish_finder", attribute = Attribute.FISH_FINDER,
+            name = "鱼探仪",
+            desc = "每条鱼头顶标出收益；抛竿落点会自动吸附到附近的鱼，不再空竿。",
+            icon = "icon_finder", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 4_000_000.0,
+            maxPurchases = 1,
+            visibleWhen = { it.sonarOwned },
+        ),
+        PurchasableDef(
+            id = "drone", attribute = Attribute.DRONE,
+            name = "无人机",
+            desc = "悬停在船上方，自动抛竿的范围 +70%、间隔缩短 35%。",
+            icon = "icon_drone", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 8_000_000.0,
+            maxPurchases = 1,
+            visibleWhen = { it.fishFinderOwned },
+        ),
+        PurchasableDef(
+            id = "diver", attribute = Attribute.DIVER,
+            name = "潜水员",
+            desc = "每 3 分钟潜下水底捞一颗珍珠上来。珍珠是转生货币，永久保留。",
+            icon = "icon_diver", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 15_000_000.0,
+            maxPurchases = 1,
+            visibleWhen = { it.droneOwned },
+        ),
+        PurchasableDef(
+            id = "treasure", attribute = Attribute.TREASURE,
+            name = "沉船宝藏",
+            desc = "河面上时不时浮出沉船的宝箱，点开就是一大笔金币，小概率开出珍珠。",
+            icon = "icon_chest", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 25_000_000.0,
+            maxPurchases = 1,
+            visibleWhen = { it.diverOwned },
+        ),
+    )
+
     /** 全部购买项，顺序即重放顺序（读档按这个顺序重放购买重建属性）。 */
-    val purchasables: List<PurchasableDef> = fishItems + upgrades + lateGame
+    val purchasables: List<PurchasableDef> = fishItems + upgrades + lateGame + lateGame2
 
     fun byId(id: String): PurchasableDef? = purchasables.firstOrNull { it.id == id }
 

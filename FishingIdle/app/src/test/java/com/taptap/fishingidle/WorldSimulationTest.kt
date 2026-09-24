@@ -3,7 +3,9 @@ package com.taptap.fishingidle
 import com.taptap.fishingidle.game.Bestiary
 import com.taptap.fishingidle.game.BoatArt
 import com.taptap.fishingidle.game.BobberState
+import com.taptap.fishingidle.game.Chest
 import com.taptap.fishingidle.game.Content
+import com.taptap.fishingidle.game.Diver
 import com.taptap.fishingidle.game.Fish
 import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.FishState
@@ -12,6 +14,8 @@ import com.taptap.fishingidle.game.Source
 import com.taptap.fishingidle.game.Space
 import com.taptap.fishingidle.game.World
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,6 +24,9 @@ import org.junit.Test
  * 这类测试能抓到纯数值测试抓不到的时序 bug。
  */
 class WorldSimulationTest {
+    private val DiveCycle = Diver.DIVE_CYCLE
+    private val ChestInterval = World.CHEST_INTERVAL
+
 
     private val dt = 1f / 60f
 
@@ -513,6 +520,99 @@ class WorldSimulationTest {
         val world = World(state)
         world.advance(120f)
         assertEquals(0.0, state.earningsBySource[Source.NET] ?: 0.0, 0.001)
+    }
+
+
+    // ---------------- 后期第二梯队：声呐 / 鱼探仪 / 无人机 / 潜水员 / 宝箱 ----------------
+
+    /** 声呐只加速稀有鱼的咬钩，小鱼不受影响。 */
+    @Test
+    fun `声呐让稀有鱼更快咬钩`() {
+        val plain = World(GameState())
+        val sonar = World(GameState().apply { sonarOwned = true })
+        assertEquals(1f, plain.sonarBiteSpeed(Rarity.RARE), 0.001f)
+        assertTrue("稀有鱼该更快咬钩", sonar.sonarBiteSpeed(Rarity.RARE) > 1.2f)
+        assertTrue("巨口鱼也该更快", sonar.sonarBiteSpeed(Rarity.LEGEND) > 1.2f)
+        assertEquals("小鱼不受声呐影响", 1f, sonar.sonarBiteSpeed(Rarity.COMMON), 0.001f)
+    }
+
+    /** 鱼探仪把落点吸到附近的鱼身上：本来够不着的距离也能中。 */
+    @Test
+    fun `鱼探仪让落点吸附到鱼身上`() {
+        fun castOnce(finder: Boolean): Fish? {
+            val state = GameState().apply { fishFinderOwned = finder }
+            val world = World(state)
+            // 只留一条鱼，放在落点 200 单位外（超过咬钩距离 190，但在吸附半径 220 内）
+            val fish = world.fishes.first()
+            fish.x = 1500f
+            fish.y = 1000f
+            world.fishes.drop(1).forEach { it.x = 200f; it.y = 300f }
+            world.castLine(fish.x + 200f, fish.y)
+            return world.bobber.hookedFish
+        }
+
+        assertNull("没鱼探仪时这么远够不着", castOnce(false))
+        assertNotNull("买了鱼探仪落点会被吸过去", castOnce(true))
+    }
+
+    /** 无人机把自动抛竿的范围和间隔都改掉。 */
+    @Test
+    fun `无人机强化自动抛竿`() {
+        val plain = World(GameState())
+        val drone = World(GameState().apply { droneOwned = true })
+        assertEquals(World.AUTO_CAST_RANGE, plain.autoCastRange(), 1f)
+        assertEquals(World.AUTO_CAST_RANGE * World.DRONE_RANGE_MULT, drone.autoCastRange(), 1f)
+        assertEquals(1f, plain.autoCastIntervalScale(), 0.001f)
+        assertTrue("买了无人机间隔该更短", drone.autoCastIntervalScale() < 0.8f)
+    }
+
+    /** 潜水员一个周期（3 分钟）会捞一颗珍珠上来，珍珠是转生货币。 */
+    @Test
+    fun `潜水员定期捞珍珠上来`() {
+        val state = GameState().apply { diverOwned = true }
+        val world = World(state)
+        world.syncSpecialUnits()
+        assertNotNull("买了就该有潜水员", world.diver)
+
+        repeat((DiveCycle * 60).toInt() + 120) { world.update(dt) }
+
+        assertTrue("一个周期后该有珍珠，实际 ${state.pearls}", state.pearls >= 1L)
+    }
+
+    /** 没买潜水员就没有珍珠。 */
+    @Test
+    fun `没买潜水员就没有珍珠`() {
+        val state = GameState()
+        val world = World(state)
+        repeat(60 * 400) { world.update(dt) }
+        assertEquals(0L, state.pearls)
+    }
+
+    /** 宝箱要自己点开才有收成；点了给一大笔钱。 */
+    @Test
+    fun `宝箱浮出来后点开才有钱`() {
+        val state = GameState().apply { treasureOwned = true }
+        val world = World(state)
+        world.advance(ChestInterval + 2f)
+
+        val c = world.chest
+        assertNotNull("该浮出宝箱了", c)
+        val before = state.money
+        assertEquals(0.0, before, 0.001)
+
+        world.onTap(c!!.x, c.y)
+
+        assertTrue("开箱该给一大笔金币，实际 ${state.money}", state.money > before + 100.0)
+        assertNull("开完就没了", world.chest)
+    }
+
+    /** 没买「沉船宝藏」就不会浮宝箱。 */
+    @Test
+    fun `没买沉船宝藏就不会浮宝箱`() {
+        val state = GameState()
+        val world = World(state)
+        world.advance(ChestInterval + 10f)
+        assertNull(world.chest)
     }
 
     @Test

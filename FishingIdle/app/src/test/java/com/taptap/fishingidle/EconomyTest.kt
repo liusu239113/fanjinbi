@@ -99,6 +99,8 @@ class EconomyTest {
         append(s.helperEfficiency).append(s.autoReelChance)
         append(s.autoReelUnlocked).append(s.autoCastUnlocked)
         append(s.pelicanOwned).append(s.netOwned)
+        append(s.sonarOwned).append(s.fishFinderOwned).append(s.droneOwned)
+        append(s.diverOwned).append(s.treasureOwned)
         append(s.helperCanRare).append(s.helperCanEpic).append(s.helperCanLegend)
         append(s.chainReaction)
         append(s.rarityMul).append(s.mapBonus).append(s.helperSpeed).append(s.helperParallel)
@@ -150,7 +152,7 @@ class EconomyTest {
      */
     @Test
     fun `每个商店条目买了都真的有效果`() {
-        assertEquals("购买项数量变了，记得补这条测试", 35, Content.purchasables.size)
+        assertEquals("购买项数量变了，记得补这条测试", 40, Content.purchasables.size)
         for (def in Content.purchasables) {
             val s = GameState()
             s.money = 1e30

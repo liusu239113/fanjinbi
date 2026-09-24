@@ -511,6 +511,72 @@ class Pelican(var x: Float) {
     }
 }
 
+/**
+ * 潜水员：定期潜到水底捞一颗珍珠上来。
+ *
+ * 它不产金币 —— 产的是**跨轮次的资产**（珍珠可以带进转生），
+ * 所以周期故意拉得长（[DIVE_CYCLE] 秒），而且真的会潜下去再浮上来，让玩家看得见。
+ */
+class Diver {
+    /** 下潜深度 0（水面）~ 1（水底）。 */
+    var depth = 0f
+        private set
+
+    var facing = 1f
+
+    /** 本次下潜是否已经结算过珍珠，避免一个周期发两次。 */
+    private var rewarded = true
+    private var phase = 0.85f
+
+    fun update(dt: Float, world: World) {
+        phase += dt / DIVE_CYCLE
+        if (phase >= 1f) {
+            phase -= 1f
+            rewarded = false
+        }
+        depth = when {
+            phase < 0.22f -> phase / 0.22f                 // 下潜
+            phase < 0.38f -> 1f                            // 在底部摸珍珠
+            phase < 0.60f -> 1f - (phase - 0.38f) / 0.22f  // 上浮
+            else -> 0f                                     // 水面休息
+        }
+        if (!rewarded && phase >= 0.38f) {
+            rewarded = true
+            world.diverSurfacePearl()
+        }
+    }
+
+    companion object {
+        /** 一个完整下潜周期（秒）。 */
+        const val DIVE_CYCLE = 180f
+    }
+}
+
+/** 河面浮出的沉船宝箱：点开得一大笔金币，小概率开出珍珠。 */
+class Chest(var x: Float, var y: Float) {
+    /** 剩余存在时间（秒）。 */
+    var life = LIFE
+        private set
+
+    /** 上下浮动相位。 */
+    var bob = 0f
+
+    val alive: Boolean get() = life > 0f
+
+    fun update(dt: Float) {
+        life -= dt
+        bob += dt
+    }
+
+    companion object {
+        /** 宝箱浮在水面停留多久（秒）。 */
+        const val LIFE = 16f
+
+        /** 点击判定的半径（世界单位）。 */
+        const val TAP_RADIUS = 150f
+    }
+}
+
 /** 游戏世界：持有所有实体并推进模拟。 */
 class World(val gameState: GameState) {
 
@@ -519,6 +585,17 @@ class World(val gameState: GameState) {
 
     /** 后期单位：鹈鹕（买了才有）。 */
     val pelicans = mutableListOf<Pelican>()
+
+    /** 后期单位：潜水员（买了才有）。 */
+    var diver: Diver? = null
+        private set
+
+    /** 河面浮出的沉船宝箱（点了才有收成）。 */
+    var chest: Chest? = null
+        private set
+
+    /** 距离下一次浮出宝箱还有多久（秒）。 */
+    private var chestTimer = CHEST_INTERVAL
 
     /** 拖网倒计时（秒）。 */
     private var netTimer = NET_INTERVAL
@@ -785,13 +862,19 @@ class World(val gameState: GameState) {
         syncFishCount()
     }
 
-    /** 后期单位跟着购买状态走（买了鹈鹕就放一只出来）。 */
+    /** 后期单位跟着购买状态走（买了鹈鹕 / 潜水员就放出来）。 */
     fun syncSpecialUnits() {
         if (gameState.pelicanOwned) {
             if (pelicans.isEmpty()) pelicans.add(Pelican(Space.W / 2f))
         } else {
             pelicans.clear()
         }
+        if (gameState.diverOwned) {
+            if (diver == null) diver = Diver()
+        } else {
+            diver = null
+        }
+        if (!gameState.treasureOwned) chest = null
     }
 
     fun syncHelperCount() {
@@ -837,8 +920,17 @@ class World(val gameState: GameState) {
      */
     fun castLine(tx: Float, ty: Float): Boolean {
         if (bobber.isActive) return false
-        val cx = tx.coerceIn(Space.POND_L, Space.POND_R)
-        val cy = ty.coerceIn(Space.POND_T, Space.POND_B)
+        // 鱼探仪：落点自动吸附到附近最近的那条鱼 —— 手抖也不会空竿
+        val snapped = if (gameState.fishFinderOwned) {
+            fishes.asSequence()
+                .filter { it.state == FishState.SWIMMING }
+                .filter { hypot(it.x - tx, it.y - ty) <= FINDER_SNAP_RADIUS }
+                .minByOrNull { hypot(it.x - tx, it.y - ty) }
+        } else {
+            null
+        }
+        val cx = (snapped?.x ?: tx).coerceIn(Space.POND_L, Space.POND_R)
+        val cy = (snapped?.y ?: ty).coerceIn(Space.POND_T, Space.POND_B)
 
         // 挑落点附近的空闲鱼，太远的够不着。
         // 技能「深渊直觉」（skillRareWeightBonus）让稀有鱼更抢食：
@@ -863,11 +955,17 @@ class World(val gameState: GameState) {
         castAnim = 0f
         if (fish != null) {
             val range = Content.biteDelay(fish.kind)
-            bobber.biteTimer = range.start + Random.nextFloat() * (range.endInclusive - range.start)
+            val wait = range.start + Random.nextFloat() * (range.endInclusive - range.start)
+            // 声呐：稀有鱼更早咬钩
+            bobber.biteTimer = wait / sonarBiteSpeed(fish.kind)
         }
         pendingSounds.add("cast")
         return true
     }
+
+    /** 声呐对咬钩速度的加成：只对稀有及以上的鱼生效。 */
+    internal fun sonarBiteSpeed(kind: Rarity): Float =
+        if (gameState.sonarOwned && kind != Rarity.COMMON) SONAR_BITE_SPEED else 1f
 
     /**
      * 把已钓上来的鱼"放回"水里。
@@ -893,6 +991,13 @@ class World(val gameState: GameState) {
      * 只要浮标处于活动状态，点哪里都算数。
      */
     fun onTap(wx: Float, wy: Float): Boolean {
+        // 宝箱优先：点到了就直接开箱（它比浮标大，也不跟收线抢操作）
+        val c = chest
+        if (c != null && hypot(wx - c.x, wy - c.y) <= Chest.TAP_RADIUS) {
+            openChest(c)
+            chest = null
+            return true
+        }
         if (!bobber.isActive) return false
         when (bobber.state) {
             BobberState.BITE, BobberState.REELING -> {
@@ -933,6 +1038,66 @@ class World(val gameState: GameState) {
         Rarity.RARE -> gameState.helperCanRare
         Rarity.EPIC -> gameState.helperCanEpic
         Rarity.LEGEND -> gameState.helperCanLegend
+    }
+
+    /**
+     * 潜水员浮上来交货：一颗珍珠。
+     *
+     * 珍珠是转生货币（能带进下一轮），所以这里是后期唯一"不产金币"的产出来源 ——
+     * 它让挂机收益之外多了一条"挂久了能换长期强度"的路。
+     */
+    fun diverSurfacePearl() {
+        gameState.pearls += 1
+        spawnText(boatX, Space.BOAT_WATERLINE - 150f, "珍珠 +1", Palette.TEXT_GOLD, 1.25f)
+        spawnCoinBurst(boatX, Space.BOAT_WATERLINE - 60f)
+        pendingSounds.add("legend")
+    }
+
+    /**
+     * 沉船宝箱：隔一段时间在船附近浮出一个，点在它身上才能开。
+     *
+     * 这是河里唯一的"要动手"的后期内容 —— 挂机挂久了也有个值得看一眼的理由。
+     */
+    private fun updateChest(dt: Float) {
+        val c = chest
+        if (c != null) {
+            c.update(dt)
+            if (!c.alive) chest = null
+        }
+        if (!gameState.treasureOwned) return
+
+        chestTimer -= dt
+        if (chest == null && chestTimer <= 0f) {
+            chestTimer = CHEST_INTERVAL
+            val x = (boatX + (Random.nextFloat() * 2f - 1f) * CHEST_SPAWN_SPREAD)
+                .coerceIn(Space.POND_L + 60f, Space.POND_R - 60f)
+            val y = Space.POND_T + 120f + Random.nextFloat() * 380f
+            chest = Chest(x, y)
+            spawnText(x, y - 70f, "浮出宝箱！点它", Palette.TEXT_GOLD, 1.15f)
+            spawnSplash(x, y, Rarity.EPIC)
+            pendingSounds.add("bite")
+        }
+    }
+
+    /** 点开宝箱：一大笔金币（按当前鱼价折算），小概率再开出一颗珍珠。 */
+    private fun openChest(c: Chest) {
+        val value = gameState.catchValue(Rarity.COMMON) * CHEST_VALUE_MULT
+        // 开箱算"打捞收入"，不计进渔获数/连击 —— 宝箱不该刷连击成就
+        gameState.money += value
+        gameState.recordEarning(Rarity.EPIC, Source.TREASURE, value)
+
+        spawnText(c.x, c.y - 40f, "+${formatNumber(value)}", Palette.TEXT_GOLD, 1.5f)
+        spawnCoinBurst(c.x, c.y)
+        spawnSplash(c.x, c.y, Rarity.LEGEND)
+        pendingSounds.add("success")
+
+        if (Random.nextFloat() < CHEST_PEARL_CHANCE) {
+            gameState.pearls += 1
+            spawnText(c.x, c.y - 110f, "珍珠 +1", Palette.TEXT_GOLD, 1.3f)
+            pendingSounds.add("legend")
+        }
+        val newly = Achievements.checkUnlocks(gameState)
+        if (newly.isNotEmpty()) pendingAchievements.addAll(newly)
     }
 
     /**
@@ -1035,7 +1200,9 @@ class World(val gameState: GameState) {
 
         for (h in helpers) h.update(dt, gameState, this)
         for (p in pelicans) p.update(dt, this)
+        diver?.update(dt, this)
         updateNetSweep(dt)
+        updateChest(dt)
 
         // 自动抛竿（智能浮标）与自动重抛（自动重抛升级）：
         // 手上没竿、冷却也过了，就自己找条鱼下竿。
@@ -1048,8 +1215,10 @@ class World(val gameState: GameState) {
             if (byUpgrade || pendingAutoRecast) {
                 pendingAutoRecast = false
                 if (autoCastOnce()) {
-                    autoReelCooldown =
-                        autoRecastDelay(if (byUpgrade) AUTO_CAST_INTERVAL else AUTO_RECAST_INTERVAL)
+                    autoReelCooldown = autoRecastDelay(
+                        if (byUpgrade) AUTO_CAST_INTERVAL * autoCastIntervalScale()
+                        else AUTO_RECAST_INTERVAL,
+                    )
                 }
             }
         }
@@ -1084,7 +1253,7 @@ class World(val gameState: GameState) {
         // 悬停/点中的那条鱼只在船附近时才认 —— 手机上 hoverFish 会一直留着，
         // 不然自动抛竿会永远盯着很久以前点过的那条鱼
         val hovered = hoverFish?.takeIf {
-            it.state == FishState.SWIMMING && abs(it.x - boatX) <= AUTO_CAST_RANGE
+            it.state == FishState.SWIMMING && abs(it.x - boatX) <= autoCastRange()
         }
         val target = hovered ?: pickAutoCastTarget() ?: return false
         return castLine(target.x, target.y)
@@ -1121,11 +1290,19 @@ class World(val gameState: GameState) {
         keepBoatOnScreen()
     }
 
+    /** 自动抛竿的范围（无人机买了之后看得更远）。 */
+    internal fun autoCastRange(): Float =
+        AUTO_CAST_RANGE * (if (gameState.droneOwned) DRONE_RANGE_MULT else 1f)
+
+    /** 自动抛竿的间隔倍率（无人机买了之后下竿更勤）。 */
+    internal fun autoCastIntervalScale(): Float =
+        if (gameState.droneOwned) DRONE_INTERVAL_MULT else 1f
+
     /** 自动抛竿的目标：船附近几条最近的鱼里随机挑一条，免得每次都钓同一条。 */
     private fun pickAutoCastTarget(): Fish? {
         val near = fishes.asSequence()
             .filter { it.state == FishState.SWIMMING }
-            .filter { abs(it.x - boatX) <= AUTO_CAST_RANGE }
+            .filter { abs(it.x - boatX) <= autoCastRange() }
             .sortedBy { hypot(it.x - boatX, it.y - Space.BOAT_WATERLINE) }
             .take(4)
             .toList()
@@ -1244,6 +1421,30 @@ class World(val gameState: GameState) {
 
         /** 鹈鹕预定目标用的标记（和钓手的预定共用 claimedBy 字段）。 */
         private val BIRDS_CLAIM = Any()
+
+        /** 声呐对稀有鱼咬钩速度的倍率。 */
+        const val SONAR_BITE_SPEED = 1.35f
+
+        /** 鱼探仪把落点吸到鱼身上的最大距离（世界单位）。 */
+        const val FINDER_SNAP_RADIUS = 220f
+
+        /** 无人机的自动抛竿范围倍率。 */
+        const val DRONE_RANGE_MULT = 1.7f
+
+        /** 无人机的自动抛竿间隔倍率（越小越快）。 */
+        const val DRONE_INTERVAL_MULT = 0.65f
+
+        /** 宝箱两次浮出之间的间隔（秒）。 */
+        const val CHEST_INTERVAL = 100f
+
+        /** 宝箱离船多远处浮出（世界单位，左右随机）。 */
+        const val CHEST_SPAWN_SPREAD = 420f
+
+        /** 宝箱金币 = 当前小鱼价值 × 这个倍数。 */
+        const val CHEST_VALUE_MULT = 200.0
+
+        /** 宝箱开出珍珠的概率。 */
+        const val CHEST_PEARL_CHANCE = 0.25f
     }
 
     /**

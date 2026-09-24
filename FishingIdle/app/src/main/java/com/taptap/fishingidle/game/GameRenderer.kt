@@ -59,6 +59,18 @@ class GameRenderer(
 
         /** 渔网特效的宽度（世界单位），要能罩住一网鱼。 */
         const val NET_WORLD_W = 300f
+
+        /** 无人机悬停时的绘制高度（世界单位）。 */
+        const val DRONE_WORLD_H = 110f
+
+        /** 潜水员的绘制高度（世界单位）。 */
+        const val DIVER_WORLD_H = 120f
+
+        /** 宝箱的绘制宽度（世界单位）。 */
+        const val CHEST_WORLD_W = 120f
+
+        /** 无人机悬停在船上方多高（世界单位）。 */
+        const val DRONE_HOVER_H = 300f
     }
 
     // 稀有度颜色在构造时查表一次，避免每帧对每条鱼做 Map 查找
@@ -131,6 +143,11 @@ class GameRenderer(
     /** 拖网特效用的网。 */
     private var bmpNet: Bitmap? = null
 
+    /** 后期第二梯队：无人机 / 潜水员 / 宝箱。 */
+    private var droneFrames: List<Bitmap> = emptyList()
+    private var diverFrames: List<Bitmap> = emptyList()
+    private var bmpChest: Bitmap? = null
+
     private var playerCastHull: FloatArray = floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
     private var helperCastHull: FloatArray = floatArrayOf(BoatArt.HELPER_HULL_FRAC)
     private var playerCastTips: List<FloatArray> = emptyList()
@@ -178,6 +195,13 @@ class GameRenderer(
             "pelican", 0, (PELICAN_WORLD_H * t.scale).toInt().coerceAtLeast(24),
         )
         bmpNet = assets.scaled("fishing_net", (NET_WORLD_W * t.scale).toInt().coerceAtLeast(24))
+        droneFrames = loadAnimation(
+            "drone", 0, (DRONE_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+        )
+        diverFrames = loadAnimation(
+            "diver", 0, (DIVER_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+        )
+        bmpChest = assets.scaled("chest", (CHEST_WORLD_W * t.scale).toInt().coerceAtLeast(24))
         // 动画帧的画布尺幅和静止立绘不同，船底比例与竿尖都得逐帧量，
         // 否则一抛竿船体就会上下跳、线也不再接在竿尖上
         playerCastHull = if (playerCastFrames.isEmpty()) {
@@ -366,11 +390,16 @@ class GameRenderer(
         drawSeaweed(canvas, t, camX)
         drawBubbles(canvas, t, camX)
         drawFish(canvas, t, camX)
+        drawSonarMarks(canvas, t, camX)
+        drawDiver(canvas, t, camX)
         drawNetEffect(canvas, t, camX)
+        drawChest(canvas, t, camX)
         drawHelpers(canvas, t, camX)
         drawBobberAndLine(canvas, t, camX)
         drawPelicans(canvas, t, camX)
+        drawDrone(canvas, t, camX)
         drawPlayerBoat(canvas, t, camX)
+        drawFinderLabels(canvas, t, camX)
         drawParticles(canvas, t, camX)
         drawFloatingTexts(canvas, t, camX)
 
@@ -804,6 +833,92 @@ class GameRenderer(
                 scale = t.scale,
                 flipX = p.facing < 0f,
             )
+        }
+    }
+
+    /** 无人机：悬停在船的正上方，桨叶一直在转。 */
+    private fun drawDrone(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val frames = droneFrames
+        if (frames.isEmpty() || !world.gameState.droneOwned) return
+        val cx = t.toScreenX(world.boatX - camX)
+        val cy = t.toScreenY(Space.BOAT_WATERLINE) -
+            (DRONE_HOVER_H + sin(world.time * 1.7f) * 10f) * t.scale
+        val idx = (world.time / 0.11f).toInt().mod(frames.size)
+        SpriteDraw.draw(canvas, frames[idx], cx, cy, scale = t.scale)
+    }
+
+    /** 潜水员：从船边下潜到水底，摸到珍珠再浮上来。 */
+    private fun drawDiver(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val frames = diverFrames
+        val d = world.diver ?: return
+        if (frames.isEmpty()) return
+        val cx = t.toScreenX(world.boatX - 26f - camX)
+        val surfaceY = t.toScreenY(Space.BOAT_WATERLINE)
+        val bottomY = t.toScreenY(Space.POND_B - 80f)
+        val cy = surfaceY + (bottomY - surfaceY) * d.depth
+        // 气泡：越深越少，视觉上像在往下游
+        val idx = (world.time / 0.16f).toInt().mod(frames.size)
+        SpriteDraw.draw(canvas, frames[idx], cx, cy, scale = t.scale, alpha = 230)
+    }
+
+    /** 沉船宝箱：浮在水里上下漂，快消失时开始闪。 */
+    private fun drawChest(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val bmp = bmpChest ?: return
+        val c = world.chest ?: return
+        val halfView = t.screenW / t.scale / 2f
+        if (abs(c.x - camX) > halfView + 200f) return
+
+        val cx = t.toScreenX(c.x - camX)
+        val cy = t.toScreenY(c.y) + sin(c.bob * 1.6f) * 8f * t.scale
+
+        // 一圈金色光晕：告诉玩家"这个能点"
+        val pulse = (sin(c.bob * 3.2f) * 0.5f + 0.5f)
+        strokePaint.color = Color.argb((70 + 90 * pulse).toInt(), 255, 214, 120)
+        strokePaint.strokeWidth = 3f * t.scale
+        canvas.drawCircle(cx, cy, (Chest.TAP_RADIUS * 0.55f) * t.scale, strokePaint)
+
+        // 快消失了就闪烁提醒
+        val blink = c.life < 4f && ((c.bob * 6f).toInt() % 2 == 0)
+        SpriteDraw.draw(canvas, bmp, cx, cy, scale = t.scale, alpha = if (blink) 110 else 255)
+    }
+
+    /** 声呐标记：给稀有及以上的鱼加一个稀有度颜色的光点。 */
+    private fun drawSonarMarks(canvas: Canvas, t: ViewTransform, camX: Float) {
+        if (!world.gameState.sonarOwned) return
+        val halfView = t.screenW / t.scale / 2f
+        for (f in world.fishes) {
+            if (f.kind == Rarity.COMMON) continue
+            if (f.state != FishState.SWIMMING) continue
+            if (abs(f.x - camX) > halfView + 80f) continue
+            val cx = t.toScreenX(f.x - camX)
+            val cy = t.toScreenY(f.y) - 30f * t.scale
+            val color = rarityColor[f.kind] ?: continue
+            val pulse = (sin(world.time * 4f + f.wiggle) * 0.5f + 0.5f)
+            paint.color = color
+            paint.alpha = (120 + 120 * pulse).toInt()
+            canvas.drawCircle(cx, cy, (5f + 3f * pulse) * t.scale, paint)
+            paint.alpha = 255
+        }
+    }
+
+    /** 鱼探仪：在每条鱼头顶标出它值多少钱。 */
+    private fun drawFinderLabels(canvas: Canvas, t: ViewTransform, camX: Float) {
+        if (!world.gameState.fishFinderOwned) return
+        val halfView = t.screenW / t.scale / 2f
+        for (f in world.fishes) {
+            if (f.state != FishState.SWIMMING) continue
+            if (abs(f.x - camX) > halfView + 80f) continue
+            val value = world.gameState.catchValue(f.species, world.currentMap)
+            textPaint.textSize = 11f * t.scale
+            textPaint.color = Palette.TEXT_GOLD
+            textPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(
+                formatNumber(value),
+                t.toScreenX(f.x - camX),
+                t.toScreenY(f.y) - 16f * t.scale,
+                textPaint,
+            )
+            textPaint.textAlign = Paint.Align.LEFT
         }
     }
 

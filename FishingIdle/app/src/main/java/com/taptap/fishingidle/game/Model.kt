@@ -72,6 +72,11 @@ enum class Attribute {
     // 后期内容：特殊单位与主动技能
     PELICAN,
     NET_SWEEP,
+    SONAR,
+    FISH_FINDER,
+    DRONE,
+    DIVER,
+    TREASURE,
 }
 
 /** 收益来源，用于统计面板。 */
@@ -82,6 +87,7 @@ enum class Source(val displayName: String) {
     AUTO("自动收线"),
     PELICAN("鹈鹕叼鱼"),
     NET("拖网捕捞"),
+    TREASURE("沉船宝箱"),
 }
 
 /** 浮动文字。 */

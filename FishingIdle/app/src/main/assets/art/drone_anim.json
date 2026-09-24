@@ -1,0 +1,8 @@
+{
+  "image": "drone_anim.png",
+  "frameWidth": 150,
+  "frameHeight": 121,
+  "columns": 4,
+  "rows": 1,
+  "frameCount": 4
+}
