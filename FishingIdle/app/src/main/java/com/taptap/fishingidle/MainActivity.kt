@@ -145,6 +145,7 @@ class MainActivity : ComponentActivity() {
         world.particles.clear()
         world.syncFishCount()
         world.syncHelperCount()
+        world.syncSpecialUnits()
     }
 
     @Composable
@@ -432,6 +433,7 @@ class MainActivity : ComponentActivity() {
                             audio.play("sfx_buy", 0.9f)
                             world.syncFishCount()
                             world.syncHelperCount()
+                            world.syncSpecialUnits()
                             saveManager.save(gameState, settings)
                         } else {
                             audio.play("sfx_cant_buy", 0.7f)

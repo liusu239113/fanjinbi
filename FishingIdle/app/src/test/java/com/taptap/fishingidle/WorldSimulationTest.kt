@@ -8,6 +8,7 @@ import com.taptap.fishingidle.game.Fish
 import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.FishState
 import com.taptap.fishingidle.game.GameState
+import com.taptap.fishingidle.game.Source
 import com.taptap.fishingidle.game.Space
 import com.taptap.fishingidle.game.World
 import org.junit.Assert.assertEquals
@@ -317,6 +318,38 @@ class WorldSimulationTest {
         assertTrue("浮标应正常结束", world.bobber.state == BobberState.DONE)
     }
 
+    /**
+     * 船划到河的两端时不能半条出画。
+     *
+     * 镜头最多只能推到 `[half, W-half]`；如果船还能往更外面划，镜头就追不上了 ——
+     * 玩家看到的就是"船卡在屏幕边上、镜头不跟了、这边过不去"。
+     */
+    @Test
+    fun `船划到两端也不会跑出视野`() {
+        val state = GameState()
+        val world = World(state)
+        world.viewHalfWidth = 340f           // 一屏约 680 世界单位
+        val visible = 60f                    // 至少留这么多白边
+
+        world.setMoveLeft(true)
+        repeat(60 * 12) { world.update(dt) }  // 往左狂划 12 秒
+        world.setMoveLeft(false)
+        assertTrue("应该能划到左端附近，实际 ${world.boatX}", world.boatX < 200f)
+        assertTrue(
+            "往左划到底时船出画了：boat=${world.boatX} camera=${world.cameraX}",
+            world.boatX >= world.cameraX - world.viewHalfWidth + visible,
+        )
+
+        world.setMoveRight(true)
+        repeat(60 * 24) { world.update(dt) }  // 再往右划到头
+        world.setMoveRight(false)
+        assertTrue("应该能划到右端附近，实际 ${world.boatX}", world.boatX > Space.W - 200f)
+        assertTrue(
+            "往右划到底时船出画了：boat=${world.boatX} camera=${world.cameraX}",
+            world.boatX <= world.cameraX + world.viewHalfWidth - visible,
+        )
+    }
+
     @Test
     fun `自动收线解锁后咬钩即自动收线`() {
         val state = GameState()
@@ -358,6 +391,28 @@ class WorldSimulationTest {
         assertTrue("挂机渔获应计入统计", state.totalCatches > 0)
     }
 
+    /**
+     * 鱼都在远处时，挂了智能浮标的船要自己开过去 ——
+     * 不然自动抛竿只在船附近找鱼，挂机会停在没鱼的河段上一直空转。
+     */
+    @Test
+    fun `船边没鱼时会自己巡航过去`() {
+        val state = GameState()
+        state.autoCastUnlocked = true
+        val world = World(state)
+        world.viewHalfWidth = 340f
+        world.fishes.forEach { it.x = 2600f; it.y = 1100f }   // 鱼全赶到右半边
+        world.sailTo(200f)                                    // 船停在最左边
+        val start = world.boatX
+
+        repeat(60 * 25) { world.update(dt) }
+
+        assertTrue(
+            "船该自己开向鱼群：起点 $start，现在 ${world.boatX}",
+            world.boatX > start + 300f,
+        )
+    }
+
     @Test
     fun `没买自动抛竿时不会自己下竿`() {
         val state = GameState()
@@ -368,6 +423,96 @@ class WorldSimulationTest {
             world.bobber.state == BobberState.IDLE,
         )
         assertEquals(0.0, state.money, 0.001)
+    }
+
+    /**
+     * 开局十分钟的收入不该够养一整队钓手。
+     *
+     * 这是"数值别失控"的总闸：自动化直接给（单独衡量收入速度本身），
+     * 玩家每 5 秒把钱花在最便宜的鱼苗和新增钓手上，成就奖金也照常结算。
+     * 之前成就一次给 1.5 万 ~ 40 万，这条会直接挂。
+     */
+    @Test
+    fun `开局十分钟的收入买不起一整队钓手`() {
+        val state = GameState()
+        state.autoReelUnlocked = true
+        state.autoCastUnlocked = true
+        val world = World(state)
+
+        var frames = 0
+        repeat(10 * 60 * 60) {
+            world.update(dt)
+            frames++
+            if (frames % 300 == 0) {          // 每 5 秒花一次钱
+                Content.byId("common_fish")?.let { state.buy(it) }
+                Content.byId("helper")?.let { state.buy(it) }
+            }
+        }
+
+        assertTrue(
+            "十分钟就雇到 ${state.helpers} 名钓手（累计收入 ${state.totalMoney}），太快了",
+            state.helpers < 6,
+        )
+    }
+
+    /**
+     * 鹈鹕：买了才会出现，而且真的会自己去叼鱼（不计入点击、算挂机收益）。
+     */
+    @Test
+    fun `鹈鹕会自己叼走最值钱的鱼`() {
+        val state = GameState()
+        state.pelicanOwned = true
+        state.helpers = 0
+        val world = World(state)
+        world.syncSpecialUnits()
+        assertEquals("买了就该放一只出来", 1, world.pelicans.size)
+
+        world.advance(40f)
+
+        assertTrue("鹈鹕四十秒内至少该叼上几条，实际 ${state.totalCatches}", state.totalCatches >= 1)
+        assertTrue("叼上来的鱼要算钱", state.money > 0.0)
+        val pelicanIncome = state.earningsBySource[Source.PELICAN] ?: 0.0
+        assertTrue("收益要记在「鹈鹕叼鱼」名下，实际 $pelicanIncome", pelicanIncome > 0.0)
+    }
+
+    /** 没买鹈鹕时河面上不该有鸟。 */
+    @Test
+    fun `没买鹈鹕就没有鹈鹕`() {
+        val state = GameState()
+        val world = World(state)
+        world.syncSpecialUnits()
+        world.advance(10f)
+        assertTrue(world.pelicans.isEmpty())
+    }
+
+    /**
+     * 拖网：买了之后每隔一段时间自动捞一网，一次捞起好几条。
+     */
+    @Test
+    fun `拖网会一次捞起好几条鱼`() {
+        val state = GameState()
+        state.netOwned = true
+        val world = World(state)
+        // 鱼都赶到船附近，保证一网能罩住
+        world.fishes.forEach { it.x = world.boatX + 60f; it.y = Space.BOAT_WATERLINE + 200f }
+
+        world.advance(46f) // 拖网间隔 45 秒
+
+        val netIncome = state.earningsBySource[Source.NET] ?: 0.0
+        assertTrue("拖网该有收成，实际 $netIncome", netIncome > 0.0)
+        assertTrue(
+            "一网该捞起多条鱼，实际 ${state.totalCatches} 条",
+            state.totalCatches >= 2,
+        )
+    }
+
+    /** 没买拖网就没有网。 */
+    @Test
+    fun `没买拖网就不会撒网`() {
+        val state = GameState()
+        val world = World(state)
+        world.advance(120f)
+        assertEquals(0.0, state.earningsBySource[Source.NET] ?: 0.0, 0.001)
     }
 
     @Test

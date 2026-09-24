@@ -51,6 +51,8 @@ class GameState {
     var autoReelChance: Double = 0.0        // 自动重抛概率（对应原版重翻）
     var autoReelUnlocked: Boolean = false   // 自动收线：咬钩后自动开始收线
     var autoCastUnlocked: Boolean = false   // 自动抛竿：空闲时自己找鱼下竿
+    var pelicanOwned: Boolean = false       // 后期单位：鹈鹕（专叼大鱼）
+    var netOwned: Boolean = false           // 后期技能：拖网（一次捞一网）
     var helperCanRare: Boolean = false
     var helperCanEpic: Boolean = false
     var helperCanLegend: Boolean = false
@@ -178,9 +180,19 @@ class GameState {
      * 图鉴加成是**永久**的，转生也不清空，这是长线收集的动力。
      */
     val globalValueMultiplier: Double
-        get() = (1.0 + rarityMul) * (1.0 + mapBonus) * DexReward.multiplier(this)
+        get() = (1.0 + rarityMul) * (1.0 + mapBonus) * DexReward.multiplier(this) *
+            prestigeMultiplier
 
     // ---- 转生 ----
+
+    /**
+     * 转生次数带来的永久收益加成：每转生一次 +10%。
+     *
+     * 光靠珍珠换技能，玩家要花掉珍珠才看得到变化，"清空一切"的代价显得很亏；
+     * 这条加成是转生**当场**就到手、且不会被任何操作回收的，让转生本身有意义。
+     */
+    val prestigeMultiplier: Double
+        get() = 1.0 + prestigeCount * PRESTIGE_VALUE_STEP
 
     /** 本次转生可获得多少珍珠。 */
     fun pendingPearls(): Long {
@@ -371,6 +383,8 @@ class GameState {
 
             Attribute.AUTO_REEL_UNLOCK -> autoReelUnlocked = true
             Attribute.AUTO_CAST_UNLOCK -> autoCastUnlocked = true
+            Attribute.PELICAN -> pelicanOwned = true
+            Attribute.NET_SWEEP -> netOwned = true
             Attribute.HELPER_CAN_RARE -> helperCanRare = true
             Attribute.HELPER_CAN_EPIC -> helperCanEpic = true
             Attribute.HELPER_CAN_LEGEND -> helperCanLegend = true
@@ -532,6 +546,8 @@ class GameState {
         autoReelChance = 0.0
         autoReelUnlocked = false
         autoCastUnlocked = false
+        pelicanOwned = false
+        netOwned = false
         helperCanRare = false; helperCanEpic = false; helperCanLegend = false
         chainReaction = false
     }
@@ -539,6 +555,9 @@ class GameState {
     companion object {
         /** 开局送的小鱼数量，让钓场一开始就有生气。 */
         const val INITIAL_COMMON_FISH = 6
+
+        /** 每次转生永久增加的全局收益比例。 */
+        const val PRESTIGE_VALUE_STEP = 0.10
 
         const val BASE_COMMON = 1.0
         const val BASE_RARE = 20.0

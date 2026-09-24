@@ -1,6 +1,8 @@
 package com.taptap.fishingidle
 
+import com.taptap.fishingidle.game.Achievements
 import com.taptap.fishingidle.game.Content
+import com.taptap.fishingidle.game.Prestige
 import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.SaveData
@@ -96,11 +98,47 @@ class EconomyTest {
         append(s.commonReelSpeed).append(s.rareReelSpeed).append(s.epicReelSpeed).append(s.legendReelSpeed)
         append(s.helperEfficiency).append(s.autoReelChance)
         append(s.autoReelUnlocked).append(s.autoCastUnlocked)
+        append(s.pelicanOwned).append(s.netOwned)
         append(s.helperCanRare).append(s.helperCanEpic).append(s.helperCanLegend)
         append(s.chainReaction)
         append(s.rarityMul).append(s.mapBonus).append(s.helperSpeed).append(s.helperParallel)
         append(s.comboPower).append(s.comboKeep).append(s.autoReelSpeed).append(s.luckyHook)
         for (kind in Rarity.entries) append(s.catchValue(kind)).append(s.reelSpeed(kind))
+    }
+
+    /**
+     * 成就只能是奖金，不能是暴发户。
+     *
+     * 第一轮（还没转生）就拿得到的成就，奖励必须低于「前 6 名钓手的总价」——
+     * 之前 15 连击给 1.5 万、40 连击给 40 万，成就弹一次就能连买六名钓手，
+     * 前期经济直接崩掉。这条测试把量级钉死。
+     */
+    @Test
+    fun `早期成就奖励买不起一整队钓手`() {
+        val state = GameState()
+        val squad = (0 until 6).sumOf { Content.byId("helper")!!.price(it) }
+        val early = listOf(
+            "first_catch", "catch_50", "catch_500", "earn_10k", "helper_5",
+            "common_50", "rare_10", "combo_15", "combo_40", "single_1k",
+        )
+        for (id in early) {
+            val def = requireNotNull(Achievements.byId(id)) { "成就 $id 不存在" }
+            assertTrue(
+                "${def.name} 奖励 ${def.reward} 够买一整队钓手了（前 6 名共 $squad）",
+                def.reward < squad,
+            )
+        }
+    }
+
+    /** 成就奖励也不能离谱到超过转生门槛的量级（一次成就直接跨过一整轮）。 */
+    @Test
+    fun `没有成就一次给出超过转生门槛的奖励`() {
+        for (def in Achievements.all) {
+            assertTrue(
+                "${def.name} 奖励 ${def.reward} 太夸张了",
+                def.reward <= Prestige.MIN_TOTAL_FOR_PRESTIGE * 5,
+            )
+        }
     }
 
     /**
@@ -112,7 +150,7 @@ class EconomyTest {
      */
     @Test
     fun `每个商店条目买了都真的有效果`() {
-        assertEquals("购买项数量变了，记得补这条测试", 33, Content.purchasables.size)
+        assertEquals("购买项数量变了，记得补这条测试", 35, Content.purchasables.size)
         for (def in Content.purchasables) {
             val s = GameState()
             s.money = 1e30
@@ -122,17 +160,59 @@ class EconomyTest {
         }
     }
 
+    /**
+     * 自动化不能开局就给。
+     *
+     * 之前「自动收线」1200 金币、开局就可见 —— 玩家还没玩明白点击循环，
+     * 游戏就自己玩完了，整个前期玩法直接作废。
+     */
+    @Test
+    fun `自动化升级不该开局就买得到`() {
+        val fresh = GameState()
+        val reel = def("auto_reel_unlock")
+        val cast = def("auto_cast_unlock")
+        assertFalse("开局就不该看到自动收线", reel.visibleWhen(fresh))
+        assertFalse("开局就不该看到智能浮标", cast.visibleWhen(fresh))
+
+        val mid = GameState().apply { repeat(40) { onCatchSuccess() } }
+        assertTrue("钓够 40 条后应该开放自动收线", reel.visibleWhen(mid))
+        assertFalse("没买自动收线就不该露出挂机升级", cast.visibleWhen(mid))
+
+        val later = GameState().apply {
+            repeat(200) { onCatchSuccess() }
+            autoReelUnlocked = true
+        }
+        assertTrue("买了自动收线又钓够 150 条，才轮到智能浮标", cast.visibleWhen(later))
+        assertTrue("挂机升级要明显比自动收线贵", cast.price(0) > reel.price(0) * 10)
+    }
+
+    /**
+     * 每个商店条目要有自己的图标。
+     *
+     * 之前 33 个条目共用 6 张图标（四个鱼饵是同一张、四个线轮是同一张…），
+     * 商店一眼看过去全是重复图，玩家根本分不清买了什么。
+     */
+    @Test
+    fun `商店条目的图标不能重复`() {
+        val byIcon = Content.purchasables.groupBy { it.icon }
+        val dup = byIcon.filterValues { it.size > 1 }
+        assertTrue(
+            "这些条目还在共用图标：" + dup.entries.joinToString("; ") {
+                "${it.key} → ${it.value.joinToString("/") { d -> d.name }}"
+            },
+            dup.isEmpty(),
+        )
+    }
+
     @Test
     fun `一次性解锁价格恒定`() {
         val d = def("auto_reel_unlock")
-        assertEquals(1200.0, d.price(0), 0.001)
-        assertEquals(1200.0, d.price(5), 0.001)
+        assertEquals(6000.0, d.price(0), 0.001)
+        assertEquals(6000.0, d.price(5), 0.001)
         assertEquals(1, d.maxPurchases)
-        // 自动收线要一开始就买得到，否则玩家永远在手动点屏幕
-        assertTrue("自动收线应当开局可见", d.visibleWhen(GameState()))
+        assertEquals(250000.0, def("auto_cast_unlock").price(0), 0.001)
         val cast = def("auto_cast_unlock")
         assertEquals(1, cast.maxPurchases)
-        assertEquals(15000.0, cast.price(0), 0.001)
     }
 
     @Test

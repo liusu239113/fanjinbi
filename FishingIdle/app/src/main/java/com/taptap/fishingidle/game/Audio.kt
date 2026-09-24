@@ -119,6 +119,8 @@ class AudioManager(context: Context, private val settings: Settings) {
         val SFX = listOf(
             "sfx_cast", "sfx_splash", "sfx_bite", "sfx_reel", "sfx_success",
             "sfx_fail", "sfx_buy", "sfx_cant_buy", "sfx_coin", "sfx_click",
+            // 后期玩法：拖网、鹈鹕、钓到巨物
+            "sfx_net", "sfx_pelican", "sfx_legend",
         )
     }
 }

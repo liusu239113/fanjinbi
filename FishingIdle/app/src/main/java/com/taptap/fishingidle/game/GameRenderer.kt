@@ -38,8 +38,11 @@ class GameRenderer(
          */
         const val BOAT_WORLD_H = BoatArt.HEIGHT
 
-        /** 主角船下的水花宽度（世界单位）。 */
-        const val PLAYER_SPLASH_W = 210f
+        /** 主角立绘高度：比帮手矮，两条船看起来才是一个体量。 */
+        const val PLAYER_BOAT_WORLD_H = BoatArt.PLAYER_HEIGHT
+
+        /** 主角船下的水花宽度（世界单位），随主角立绘一起缩。 */
+        const val PLAYER_SPLASH_W = 150f
 
         /**
          * 抛竿动画帧的目标高度（世界单位）。
@@ -48,8 +51,14 @@ class GameRenderer(
          * 甩竿会把画面撑大，帧高直接照抄立绘高会让船在抛竿的一瞬间缩小。
          * 换抛竿素材要重新量（tools/measure_boat.py 会给建议值）。
          */
-        const val PLAYER_CAST_H = 184f
+        const val PLAYER_CAST_H = 134f
         const val HELPER_CAST_H = 140f
+
+        /** 鹈鹕的绘制高度（世界单位）—— 比船大一圈，才有"天上飞的大鸟"的体量。 */
+        const val PELICAN_WORLD_H = 150f
+
+        /** 渔网特效的宽度（世界单位），要能罩住一网鱼。 */
+        const val NET_WORLD_W = 300f
     }
 
     // 稀有度颜色在构造时查表一次，避免每帧对每条鱼做 Map 查找
@@ -116,6 +125,12 @@ class GameRenderer(
      * 逐帧动画每格的留白都不一样（裁到内容包围盒再补边），
      * 用同一个比例会让船每帧上下跳；竿尖更是每帧都在动。
      */
+    /** 鹈鹕的飞行帧（后期单位）。 */
+    private var pelicanFrames: List<Bitmap> = emptyList()
+
+    /** 拖网特效用的网。 */
+    private var bmpNet: Bitmap? = null
+
     private var playerCastHull: FloatArray = floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
     private var helperCastHull: FloatArray = floatArrayOf(BoatArt.HELPER_HULL_FRAC)
     private var playerCastTips: List<FloatArray> = emptyList()
@@ -138,12 +153,15 @@ class GameRenderer(
         bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
         // 浮漂：用小号素材，别盖住整片水域
         bmpBobber = assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
-        // 玩家立绘与帮手立绘按**高度**统一。
-        // 两张素材宽高比不同（玩家 3:2、帮手 1:1），若按宽度统一，
-        // 正方形那张会被等比放大到远超预期的高度，看起来就是一根巨大的竿。
-        val boatH = (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28)
-        bmpPlayerBoat = assets.scaledToHeight("player_boat", boatH)
-        bmpHelper = assets.scaledToHeight("helper_boat", boatH)
+        // 主角与帮手各自按**自己的立绘高度**画：
+        // 主角素材更宽（384×256），照帮手的高度直接画会宽出 50%，
+        // 船比帮手大一圈。PLAYER_BOAT_WORLD_H 就是为这个单列的。
+        bmpPlayerBoat = assets.scaledToHeight(
+            "player_boat", (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+        )
+        bmpHelper = assets.scaledToHeight(
+            "helper_boat", (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
+        )
         // 主角船底的水花：和帮手立绘里自带的那圈同一套视觉
         bmpPlayerSplash = assets.scaled("boat_splash", (PLAYER_SPLASH_W * t.scale).toInt().coerceAtLeast(24))
         // 抛竿逐帧动画（素材缺失时退回静止立绘，不会画出空白）。
@@ -155,6 +173,11 @@ class GameRenderer(
         helperCastFrames = loadAnimation(
             "helper_cast", 0, (HELPER_CAST_H * t.scale).toInt().coerceAtLeast(20),
         )
+        // 后期单位：鹈鹕按高度缩放；渔网按宽度缩放（要能罩住几条鱼）
+        pelicanFrames = loadAnimation(
+            "pelican", 0, (PELICAN_WORLD_H * t.scale).toInt().coerceAtLeast(24),
+        )
+        bmpNet = assets.scaled("fishing_net", (NET_WORLD_W * t.scale).toInt().coerceAtLeast(24))
         // 动画帧的画布尺幅和静止立绘不同，船底比例与竿尖都得逐帧量，
         // 否则一抛竿船体就会上下跳、线也不再接在竿尖上
         playerCastHull = if (playerCastFrames.isEmpty()) {
@@ -343,8 +366,10 @@ class GameRenderer(
         drawSeaweed(canvas, t, camX)
         drawBubbles(canvas, t, camX)
         drawFish(canvas, t, camX)
+        drawNetEffect(canvas, t, camX)
         drawHelpers(canvas, t, camX)
         drawBobberAndLine(canvas, t, camX)
+        drawPelicans(canvas, t, camX)
         drawPlayerBoat(canvas, t, camX)
         drawParticles(canvas, t, camX)
         drawFloatingTexts(canvas, t, camX)
@@ -746,6 +771,57 @@ class GameRenderer(
                 paint.alpha = 255
             }
         }
+    }
+
+    // ---------------- 后期单位：鹈鹕与拖网 ----------------
+
+    /** 鹈鹕：在水面上方盘旋，俯冲时扎向鱼。 */
+    private fun drawPelicans(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val frames = pelicanFrames
+        if (frames.isEmpty() || world.pelicans.isEmpty()) return
+        val halfView = t.screenW / t.scale / 2f
+        val waterScreenY = t.toScreenY(Space.BOAT_WATERLINE)
+        for (p in world.pelicans) {
+            if (abs(p.x - camX) > halfView + 260f) continue
+            val cx = t.toScreenX(p.x - camX)
+            val cy = t.toScreenY(p.y)
+
+            // 水面上的影子：有了它鹈鹕才像"在天上"而不是贴在水面
+            paint.color = Color.argb(58, 0, 0, 0)
+            canvas.drawOval(
+                RectF(
+                    cx - 40f * t.scale, waterScreenY - 7f * t.scale,
+                    cx + 40f * t.scale, waterScreenY + 9f * t.scale,
+                ),
+                paint,
+            )
+            paint.color = Color.WHITE
+
+            // 扇翅：每 0.3 秒换一帧，俯冲时扇得更快
+            val idx = (p.flap / 0.30f).toInt().mod(frames.size)
+            SpriteDraw.draw(
+                canvas, frames[idx], cx, cy,
+                scale = t.scale,
+                flipX = p.facing < 0f,
+            )
+        }
+    }
+
+    /** 拖网特效：网从天上落下来罩住这一网鱼，然后淡出。 */
+    private fun drawNetEffect(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val net = bmpNet ?: return
+        if (world.netEffect < 0f) return
+
+        val p = 1f - (world.netEffect / World.NET_EFFECT_TIME).coerceIn(0f, 1f)
+        val fall = (p / 0.45f).coerceIn(0f, 1f)          // 0→1 落网
+        val fade = if (p < 0.6f) 1f else 1f - ((p - 0.6f) / 0.4f).coerceIn(0f, 1f)
+        val cx = t.toScreenX(world.netEffectX - camX)
+        val cy = t.toScreenY(world.netEffectY) - (1f - fall) * 200f * t.scale
+        SpriteDraw.draw(
+            canvas, net, cx, cy,
+            scale = t.scale * (0.8f + 0.2f * fall),
+            alpha = (255 * fade).toInt().coerceIn(0, 255),
+        )
     }
 
     // ---------------- 浮标与钓线 ----------------

@@ -55,8 +55,17 @@ object Space {
  * 换船体素材必须同步更新这里，不然船会沉进水里或浮在半空。
  */
 object BoatArt {
-    /** 立绘高度（世界单位）。主角与帮手按高度统一，视觉大小才一致。 */
+    /** 帮手立绘高度（世界单位）。 */
     const val HEIGHT = 170f
+
+    /**
+     * 主角立绘高度（世界单位），比帮手矮一截。
+     *
+     * 主角素材是 384×256（3:2）、帮手是 192×192（1:1）。两张按**同一高度**画出来，
+     * 主角那条船会宽出整整 50%，摆在帮手旁边完全不是一个体量，看着很别扭。
+     * 按这个高度画，主角船的宽度才和帮手船接近（约 186 : 170 世界单位）。
+     */
+    const val PLAYER_HEIGHT = 124f
 
     /** 船底（龙骨最低点）像素所在高度占立绘高度的比例。 */
     const val PLAYER_HULL_FRAC = 0.902f
@@ -74,12 +83,12 @@ object BoatArt {
     const val HELPER_ASPECT = 1f
 
     /** 以立绘中心绘制时，中心相对水位线的 y 偏移（朝上的负方向）。 */
-    fun centerOffsetY(hullFrac: Float): Float = -(hullFrac - 0.5f) * HEIGHT
+    fun centerOffsetY(hullFrac: Float, height: Float = HEIGHT): Float = -(hullFrac - 0.5f) * height
 
-    /** 主角竿尖相对船中心的偏移。 */
+    /** 主角竿尖相对船中心的偏移（按主角自己的立绘高度算）。 */
     fun rodTipOffset(boatFacing: Float): Pair<Float, Float> = Pair(
-        (PLAYER_ROD_TIP_X - 0.5f) * HEIGHT * PLAYER_ASPECT * boatFacing,
-        centerOffsetY(PLAYER_HULL_FRAC) + (PLAYER_ROD_TIP_Y - 0.5f) * HEIGHT,
+        (PLAYER_ROD_TIP_X - 0.5f) * PLAYER_HEIGHT * PLAYER_ASPECT * boatFacing,
+        centerOffsetY(PLAYER_HULL_FRAC, PLAYER_HEIGHT) + (PLAYER_ROD_TIP_Y - 0.5f) * PLAYER_HEIGHT,
     )
 }
 
@@ -402,11 +411,127 @@ class Helper(var x: Float) {
     }
 }
 
+/**
+ * 鹈鹕：后期解锁的特殊单位。
+ *
+ * 和普通钓手的区别在于**它专挑大鱼**：锁定水面下最值钱的那条鱼俯冲下去叼走，
+ * 不受稀有度限制。钓手负责稳定产出，鹈鹕负责给你惊喜。
+ */
+class Pelican(var x: Float) {
+    /** 巡航高度（水面上方）。 */
+    private val cruiseY = Space.SURFACE_Y - 200f
+
+    /** 当前立绘中心的世界 y。 */
+    var y = cruiseY
+
+    var facing = 1f
+
+    /** 扇翅相位，渲染层据此在动画帧之间切换。 */
+    var flap = Random.nextFloat() * 6.2832f
+
+    /**
+     * 俯冲进度（秒），< 0 表示不在俯冲。
+     * 俯冲期间会从巡航高度一路扎到鱼身上。
+     */
+    var dive = -1f
+        private set
+
+    private var target: Fish? = null
+    private var cooldown = Random.nextFloat() * 2f
+
+    /** 是否正在俯冲（渲染层据此加速扇翅、贴水花）。 */
+    val diving: Boolean get() = dive >= 0f
+
+    fun update(dt: Float, world: World) {
+        flap += dt * (if (diving) 15f else 6.5f)
+        if (cooldown > 0f) cooldown -= dt
+
+        // 目标被别人钓走了就换一条
+        val t = target
+        if (t != null && t.state != FishState.SWIMMING && dive < 0f) {
+            t.claimedBy = null
+            target = null
+        }
+
+        // ---- 俯冲中 ----
+        if (dive >= 0f) {
+            dive += dt
+            val fish = target
+            if (fish != null) {
+                val p = (dive / DIVE_TIME).coerceIn(0f, 1f)
+                y = cruiseY + (fish.y - cruiseY) * p
+                x += (fish.x - x) * 0.35f
+                if (p > 0.5f) facing = if (fish.x >= x) 1f else -1f
+            }
+            if (dive >= DIVE_TIME) {
+                if (fish != null && fish.state == FishState.SWIMMING) world.pelicanCatch(this, fish)
+                fish?.claimedBy = null
+                target = null
+                dive = -1f
+                cooldown = CATCH_COOLDOWN
+            }
+            return
+        }
+
+        // ---- 巡航 ----
+        y = cruiseY + sin(flap * 0.5f) * 24f
+        if (cooldown > 0f) return
+
+        if (target == null) target = world.claimTargetForPelican()
+        val fish = target
+        if (fish == null) {
+            // 没鱼可叼就来回巡游，别杵在原地
+            x += facing * CRUISE_SPEED * dt
+            if (x <= Space.POND_L) { x = Space.POND_L; facing = 1f }
+            if (x >= Space.POND_R) { x = Space.POND_R; facing = -1f }
+            return
+        }
+
+        val dx = fish.x - x
+        if (abs(dx) > 14f) {
+            x += (if (dx > 0f) 1f else -1f) * FLY_SPEED * dt
+            facing = if (dx > 0f) 1f else -1f
+        } else {
+            dive = 0f // 到鱼头顶了，扎下去
+        }
+    }
+
+    companion object {
+        /** 一次俯冲用时（秒）。 */
+        const val DIVE_TIME = 0.55f
+
+        /** 叼完一条后歇多久（秒）。 */
+        const val CATCH_COOLDOWN = 5.5f
+
+        /** 巡航飞行速度（世界单位/秒）。 */
+        const val FLY_SPEED = 330f
+
+        /** 没目标时的闲逛速度。 */
+        const val CRUISE_SPEED = 90f
+    }
+}
+
 /** 游戏世界：持有所有实体并推进模拟。 */
 class World(val gameState: GameState) {
 
     val fishes = mutableListOf<Fish>()
     val helpers = mutableListOf<Helper>()
+
+    /** 后期单位：鹈鹕（买了才有）。 */
+    val pelicans = mutableListOf<Pelican>()
+
+    /** 拖网倒计时（秒）。 */
+    private var netTimer = NET_INTERVAL
+
+    /** 撒网特效剩余时间（秒），< 0 表示没有特效。 */
+    var netEffect = -1f
+        private set
+    var netEffectX = 0f
+        private set
+    var netEffectY = 0f
+        private set
+    var netEffectCount = 0
+        private set
     val floatingTexts = mutableListOf<FloatingText>()
     val particles = mutableListOf<Particle>()
     val bobber = Bobber()
@@ -454,6 +579,9 @@ class World(val gameState: GameState) {
     var autoReelCooldown = 0f
     var pendingAutoRecast = false
 
+    /** 空闲巡航的目的地（世界 x）；为 null 表示不巡航。 */
+    private var cruiseX: Float? = null
+
     /**
      * 当前钓场地图。**必须在 init 之前声明** —— init 里的 syncFishCount()
      * 会读它来抽鱼种，声明在 init 之后的话此刻还是 null。
@@ -463,6 +591,7 @@ class World(val gameState: GameState) {
     init {
         syncFishCount()
         syncHelperCount()
+        syncSpecialUnits()
     }
 
     // ---------------- 镜头 ----------------
@@ -519,15 +648,34 @@ class World(val gameState: GameState) {
         if (isMovingRight) dir += 1f
         if (dir == 0f) return
         boatFacing = dir
-        boatX = (boatX + dir * boatSpeed * dt).coerceIn(Space.POND_L, Space.POND_R)
+        boatX = (boatX + dir * boatSpeed * dt).coerceIn(boatMinX(), boatMaxX())
         keepBoatOnScreen()
     }
 
     /**
-     * 让船保持在视野内：只有当船接近屏幕边缘时才推动镜头。
+     * 船与屏幕边缘的留白（世界单位）。
+     *
+     * 占视野半宽的三成 —— 镜头跟得紧一点：船一往外走就把镜头带过去，
+     * 而不是等船贴到屏幕边才开始推。
+     */
+    private fun followMargin(): Float = (viewHalfWidth * BOAT_EDGE_RATIO).coerceAtLeast(60f)
+
+    /**
+     * 船能划到的最左 / 最右位置。
+     *
+     * 镜头最多只能推到 `[half, W - half]`（再往外就露出世界外面的空白了），
+     * 所以船也不能越过"镜头推到头时还能完整看到"的位置 ——
+     * 否则船会顶在河的两端半条出画，玩起来就是"镜头不跟了、边上也过不去"。
+     */
+    private fun boatMinX(): Float = maxOf(Space.POND_L, followMargin())
+
+    private fun boatMaxX(): Float = minOf(Space.POND_R, Space.W - followMargin())
+
+    /**
+     * 让船保持在视野内：船接近屏幕边缘时推动镜头。
      * [margin] 是船距屏幕边缘的留白（世界单位）。
      */
-    private fun keepBoatOnScreen(margin: Float = 140f) {
+    private fun keepBoatOnScreen(margin: Float = followMargin()) {
         val half = viewHalfWidth
         val leftEdge = cameraX - half + margin
         val rightEdge = cameraX + half - margin
@@ -541,8 +689,8 @@ class World(val gameState: GameState) {
         cameraX = cameraX.coerceIn(minX, maxX)
     }
 
-    /** 玩家此刻是否正按着左/右键划船（渲染层据此放大水花、拖出尾迹）。 */
-    fun isBoatMoving(): Boolean = isMovingLeft || isMovingRight
+    /** 船此刻在不在动（玩家按键或挂机巡航；渲染层据此放大水花、拖出尾迹）。 */
+    fun isBoatMoving(): Boolean = isMovingLeft || isMovingRight || cruiseX != null
 
     fun setMoveLeft(pressed: Boolean) {
         isMovingLeft = pressed
@@ -560,7 +708,7 @@ class World(val gameState: GameState) {
 
     /** 点击水面把船划过去（点哪走哪）。 */
     fun sailTo(targetX: Float) {
-        val clamped = targetX.coerceIn(Space.POND_L, Space.POND_R)
+        val clamped = targetX.coerceIn(boatMinX(), boatMaxX())
         if (abs(clamped - boatX) > 2f) boatFacing = if (clamped > boatX) 1f else -1f
         boatX = clamped
         keepBoatOnScreen()
@@ -635,6 +783,15 @@ class World(val gameState: GameState) {
         currentMap = map
         fishes.clear()
         syncFishCount()
+    }
+
+    /** 后期单位跟着购买状态走（买了鹈鹕就放一只出来）。 */
+    fun syncSpecialUnits() {
+        if (gameState.pelicanOwned) {
+            if (pelicans.isEmpty()) pelicans.add(Pelican(Space.W / 2f))
+        } else {
+            pelicans.clear()
+        }
     }
 
     fun syncHelperCount() {
@@ -778,6 +935,66 @@ class World(val gameState: GameState) {
         Rarity.LEGEND -> gameState.helperCanLegend
     }
 
+    /**
+     * 鹈鹕挑目标：整条河里**最值钱**的那条空闲鱼。
+     *
+     * 不按稀有度设门槛 —— 它就是用来叼大鱼的，这也是它贵的原因。
+     */
+    fun claimTargetForPelican(): Fish? {
+        val pick = fishes.asSequence()
+            .filter { it.state == FishState.SWIMMING }
+            .filter { it.claimedBy == null }
+            .maxByOrNull { gameState.catchValue(it.species, currentMap) }
+            ?: return null
+        pick.claimedBy = BIRDS_CLAIM
+        return pick
+    }
+
+    /** 鹈鹕把鱼叼走：立即结算，随后鱼回到水里。 */
+    fun pelicanCatch(pelican: Pelican, fish: Fish) {
+        val value = gameState.catchValue(fish.species, currentMap)
+        pendingSounds.add("pelican")
+        award(fish, value, Source.PELICAN, fish.x, fish.y)
+        spawnSplash(fish.x, fish.y, fish.kind)
+        returnToPond(fish)
+    }
+
+    /**
+     * 拖网：每 [NET_INTERVAL] 秒把船附近最靠前的几条鱼一网打尽。
+     *
+     * 这是"后期爽点"：攒够钱买下去，收成从一条一条变成一网一网。
+     */
+    private fun updateNetSweep(dt: Float) {
+        if (netEffect >= 0f) netEffect -= dt
+        if (!gameState.netOwned) return
+
+        netTimer -= dt
+        if (netTimer > 0f) return
+        netTimer = NET_INTERVAL
+
+        val targets = fishes.asSequence()
+            .filter { it.state == FishState.SWIMMING }
+            .filter { hypot(it.x - boatX, it.y - Space.BOAT_WATERLINE) <= NET_RADIUS }
+            .sortedBy { hypot(it.x - boatX, it.y - Space.BOAT_WATERLINE) }
+            .take(NET_MAX_FISH)
+            .toList()
+        if (targets.isEmpty()) return
+
+        netEffect = NET_EFFECT_TIME
+        netEffectX = targets.sumOf { it.x.toDouble() }.toFloat() / targets.size
+        netEffectY = targets.sumOf { it.y.toDouble() }.toFloat() / targets.size
+        netEffectCount = targets.size
+
+        for (f in targets) {
+            val value = gameState.catchValue(f.species, currentMap)
+            award(f, value, Source.NET, f.x, f.y)
+            spawnSplash(f.x, f.y, f.kind)
+            f.claimedBy = null
+            returnToPond(f)
+        }
+        pendingSounds.add("net")
+    }
+
     /** 钓手钓上一条鱼，立即结算，随后鱼回到水里。 */
     fun helperCatch(helper: Helper, fish: Fish) {
         val value = gameState.catchValue(fish.species, currentMap)
@@ -817,6 +1034,8 @@ class World(val gameState: GameState) {
         fishes.forEach { if (it.claimedBy != null && it.state != FishState.SWIMMING) it.claimedBy = null }
 
         for (h in helpers) h.update(dt, gameState, this)
+        for (p in pelicans) p.update(dt, this)
+        updateNetSweep(dt)
 
         // 自动抛竿（智能浮标）与自动重抛（自动重抛升级）：
         // 手上没竿、冷却也过了，就自己找条鱼下竿。
@@ -834,6 +1053,9 @@ class World(val gameState: GameState) {
                 }
             }
         }
+
+        // 空闲巡航：挂机时船边没鱼就自己开过去，别干等着
+        cruiseToFish(dt)
 
         // 清理已完成的鱼（游出画面的）
         fishes.removeAll { it.state == FishState.CAUGHT && it.y < Space.POND_T - 200f }
@@ -866,6 +1088,37 @@ class World(val gameState: GameState) {
         }
         val target = hovered ?: pickAutoCastTarget() ?: return false
         return castLine(target.x, target.y)
+    }
+
+    /**
+     * 空闲巡航：买了智能浮标、手上没竿、船附近又没鱼时，慢慢把船划过去。
+     *
+     * 自动抛竿只在船附近找鱼（[AUTO_CAST_RANGE]），而鱼是散布在整条河里的 ——
+     * 不巡航的话，挂机会停在没鱼的河段上一直空转，看起来像卡死。
+     */
+    private fun cruiseToFish(dt: Float) {
+        // 玩家自己在划就让他划（这里不能查 isBoatMoving —— 巡航本身也算"在动"）
+        if (!gameState.autoCastUnlocked || bobber.isActive || isMovingLeft || isMovingRight) {
+            cruiseX = null
+            return
+        }
+        if (pickAutoCastTarget() != null) {
+            cruiseX = null
+            return
+        }
+        val target = fishes.asSequence()
+            .filter { it.state == FishState.SWIMMING }
+            .minByOrNull { abs(it.x - boatX) } ?: return
+        cruiseX = target.x
+        val d = target.x - boatX
+        if (abs(d) < 24f) {
+            cruiseX = null
+            return
+        }
+        val dir = if (d > 0f) 1f else -1f
+        boatFacing = dir
+        boatX = (boatX + dir * boatSpeed * CRUISE_SPEED_RATIO * dt).coerceIn(boatMinX(), boatMaxX())
+        keepBoatOnScreen()
     }
 
     /** 自动抛竿的目标：船附近几条最近的鱼里随机挑一条，免得每次都钓同一条。 */
@@ -970,6 +1223,27 @@ class World(val gameState: GameState) {
 
         /** 自动抛竿只在船附近这个范围内找鱼。 */
         const val AUTO_CAST_RANGE = 620f
+
+        /** 船停在屏幕边缘时保留的留白，占视野半宽的比例。 */
+        const val BOAT_EDGE_RATIO = 0.30f
+
+        /** 空闲巡航的速度，占正常划船速度的比例。 */
+        const val CRUISE_SPEED_RATIO = 0.55f
+
+        /** 拖网两次撒网之间的间隔（秒）。 */
+        const val NET_INTERVAL = 45f
+
+        /** 拖网的覆盖半径（世界单位）。 */
+        const val NET_RADIUS = 620f
+
+        /** 一网最多捞几条。 */
+        const val NET_MAX_FISH = 4
+
+        /** 撒网特效时长（秒）。 */
+        const val NET_EFFECT_TIME = 0.9f
+
+        /** 鹈鹕预定目标用的标记（和钓手的预定共用 claimedBy 字段）。 */
+        private val BIRDS_CLAIM = Any()
     }
 
     /**
@@ -1011,7 +1285,14 @@ class World(val gameState: GameState) {
         }
 
         spawnCoinBurst(x, y)
-        pendingSounds.add(if (finalValue >= 100) "success" else "coin")
+        // 稀有收获给更响的反馈：巨口鱼单独一档
+        pendingSounds.add(
+            when {
+                fish.kind == Rarity.LEGEND -> "legend"
+                finalValue >= 100 -> "success"
+                else -> "coin"
+            },
+        )
 
         // 成就检查
         val newly = Achievements.checkUnlocks(gameState)

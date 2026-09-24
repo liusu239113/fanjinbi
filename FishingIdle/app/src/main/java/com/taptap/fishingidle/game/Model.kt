@@ -69,6 +69,9 @@ enum class Attribute {
     COMBO_KEEP,
     AUTO_REEL_SPEED,
     LUCKY_HOOK,
+    // 后期内容：特殊单位与主动技能
+    PELICAN,
+    NET_SWEEP,
 }
 
 /** 收益来源，用于统计面板。 */
@@ -77,6 +80,8 @@ enum class Source(val displayName: String) {
     HELPER("自动钓手"),
     CHAIN("鱼群骚动"),
     AUTO("自动收线"),
+    PELICAN("鹈鹕叼鱼"),
+    NET("拖网捕捞"),
 }
 
 /** 浮动文字。 */

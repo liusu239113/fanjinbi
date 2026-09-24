@@ -62,6 +62,45 @@ class PrestigeTest {
         assertEquals(1, s.prestigeCount)
     }
 
+    /**
+     * 第一次转生要一次给足珍珠 —— 清空全部家当只换 1 颗珍珠的话，
+     * 玩家只会觉得这功能没意义。
+     */
+    @Test
+    fun `第一次转生就给得起技能树`() {
+        assertEquals(3L, Prestige.pearlsFor(Prestige.MIN_TOTAL_FOR_PRESTIGE))
+        assertEquals(6L, Prestige.pearlsFor(Prestige.MIN_TOTAL_FOR_PRESTIGE * 4))
+        assertEquals(9L, Prestige.pearlsFor(Prestige.MIN_TOTAL_FOR_PRESTIGE * 9))
+        // 3 颗刚好够「鱼饵精通」点两级（1 + 2）
+        val s = GameState()
+        s.earn(Prestige.MIN_TOTAL_FOR_PRESTIGE)
+        s.doPrestige()
+        val def = SkillTree.byId("bait_mastery")!!
+        assertTrue(SkillTree.levelUp(s, def))
+        assertTrue(SkillTree.levelUp(s, def))
+        assertEquals(2, s.skillLevel(def.id))
+    }
+
+    /** 转生本身要永久加强收益 —— 不能只有花掉珍珠才看得到回报。 */
+    @Test
+    fun `每次转生永久提升收益`() {
+        // 同一起点（都没买过东西）下比较，才能看出转生自带的加成：
+        // 转生会把普通升级清空，直接比转生前后的总价值是比不出来的。
+        val base = GameState().catchValue(Rarity.COMMON)
+
+        val s = richState()
+        assertEquals(1.0, s.prestigeMultiplier, 0.0001)
+
+        s.doPrestige()
+        assertEquals(1.10, s.prestigeMultiplier, 0.0001)
+        assertEquals("转生一次后每条鱼应值 ×1.1", base * 1.1, s.catchValue(Rarity.COMMON), 0.001)
+
+        s.earn(1e12)
+        s.doPrestige()
+        assertEquals(1.20, s.prestigeMultiplier, 0.0001)
+        assertEquals("转生两次后每条鱼应值 ×1.2", base * 1.2, s.catchValue(Rarity.COMMON), 0.001)
+    }
+
     @Test
     fun `转生收益递减：收入翻十倍不会得到十倍珍珠`() {
         val a = Prestige.pearlsFor(1e8)

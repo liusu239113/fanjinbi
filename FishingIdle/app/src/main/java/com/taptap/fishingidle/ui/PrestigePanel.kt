@@ -154,6 +154,16 @@ private fun PrestigeTab(state: GameState, onPrestige: () -> Unit) {
             fontSize = 19.sp,
             fontWeight = FontWeight.Bold,
         )
+        Spacer(Modifier.height(6.dp))
+        // 把"转生到底换来了什么"写在按钮上面 —— 只说珍珠颗数太抽象，
+        // 玩家看不到永久加成，就会觉得转生是白清空。
+        val nowMul = state.prestigeMultiplier
+        val nextMul = nowMul + GameState.PRESTIGE_VALUE_STEP
+        Text(
+            "永久收益 ×${"%.2f".format(nowMul)} → ×${"%.2f".format(nextMul)}",
+            color = UITheme.TextGood,
+            fontSize = 12.sp,
+        )
 
         Spacer(Modifier.height(10.dp))
 
@@ -190,9 +200,9 @@ private fun PrestigeTab(state: GameState, onPrestige: () -> Unit) {
         Spacer(Modifier.height(14.dp))
 
         Text(
-            "转生会清空金币、鱼群、钓手与全部普通升级，\n" +
-                "以及水域解锁进度。\n" +
-                "珍珠与技能树永久保留。",
+            "转生会清空金币、鱼群、钓手、全部普通升级与水域进度，\n" +
+                "换来：每转生一次收益永久 +10%，外加珍珠（可永久升级技能树，\n" +
+                "珍珠与图鉴、成就都保留）。",
             color = UITheme.TextDim,
             fontSize = 12.sp,
             lineHeight = 17.sp,

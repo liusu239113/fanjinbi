@@ -17,11 +17,16 @@ object Prestige {
 
     /**
      * 本次转生能获得多少珍珠。
-     * 用累计收入的平方根做标度 —— 收益递减，避免一次转生就毕业。
+     *
+     * 3 颗打底 —— 第一次转生刚好够把「鱼饵精通」点两级（+50% 收益），
+     * 清空一切之后马上能感觉到"下一轮快多了"。
+     * 之后按累计收入的平方根增长：400 万 → 6 颗，900 万 → 9 颗，1 亿 → 30 颗。
+     * （旧公式是 ^0.42 且不乘系数，第一次转生只给 1 颗 —— 清空全部家当换一颗珍珠，
+     * 玩家自然觉得这功能没意义。）
      */
     fun pearlsFor(totalMoney: Double): Long {
         if (totalMoney < MIN_TOTAL_FOR_PRESTIGE) return 0
-        val raw = (totalMoney / MIN_TOTAL_FOR_PRESTIGE).pow(0.42)
+        val raw = 3.0 * (totalMoney / MIN_TOTAL_FOR_PRESTIGE).pow(0.5)
         return floor(raw).toLong().coerceAtLeast(1)
     }
 
