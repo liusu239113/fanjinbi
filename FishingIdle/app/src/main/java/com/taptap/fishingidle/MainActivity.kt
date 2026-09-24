@@ -39,10 +39,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.taptap.fishingidle.game.Assets
+import com.taptap.fishingidle.game.Attribute
 import com.taptap.fishingidle.game.AudioManager
+import com.taptap.fishingidle.game.DailyQuests
+import com.taptap.fishingidle.game.DailyTracker
 import com.taptap.fishingidle.game.FishingMap
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.GameView
+import com.taptap.fishingidle.game.OfflineEarnings
 import com.taptap.fishingidle.game.SaveManager
 import com.taptap.fishingidle.game.Settings
 import com.taptap.fishingidle.game.SkillTree
@@ -56,6 +60,7 @@ import com.taptap.fishingidle.ui.MenuPanel
 import com.taptap.fishingidle.ui.PrestigePanel
 import com.taptap.fishingidle.ui.MoneyBar
 import com.taptap.fishingidle.ui.MoveButtons
+import com.taptap.fishingidle.ui.OfflinePanel
 import com.taptap.fishingidle.ui.ResetConfirmDialog
 import com.taptap.fishingidle.ui.ShopPanel
 import com.taptap.fishingidle.ui.UITheme
@@ -155,6 +160,11 @@ class MainActivity : ComponentActivity() {
         // 用 remember{} 缓存布尔值会导致「清档后主菜单仍显示旧存档」。
         var saveEpoch by remember { mutableIntStateOf(0) }
         val hasSave = remember(saveEpoch) { saveManager.hasSave() }
+
+        // 离线收益：进入游戏时结算一次。用 remember 保证只算一次，
+        // 之后切后台回来走 ON_RESUME 的实时累计，不再重复弹窗。
+        var offlineResult by remember { mutableStateOf<OfflineEarnings.Result?>(null) }
+        var offlineChecked by remember { mutableStateOf(false) }
         // HUD 刷新计数。GameState 是普通 var，必须靠它变化来驱动重组，
         // 否则金币数字不会更新。
         var revision by remember { mutableIntStateOf(0) }
@@ -182,6 +192,14 @@ class MainActivity : ComponentActivity() {
                     kotlinx.coroutines.delay(260)
                 } else {
                     kotlinx.coroutines.delay(120)
+                }
+                // 每日任务：跨天重置 + 达标自动结算
+                DailyQuests.rolloverIfNeeded(gameState)
+                val done = DailyQuests.claimCompleted(gameState)
+                if (done.isNotEmpty()) {
+                    audio.play("sfx_success", 1.0f)
+                    saveManager.save(gameState, settings)
+                    revision++
                 }
             }
         }
@@ -213,6 +231,25 @@ class MainActivity : ComponentActivity() {
             }
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+
+        // 进入游戏时结算一次离线收益
+        LaunchedEffect(inGame) {
+            if (!inGame || offlineChecked) return@LaunchedEffect
+            offlineChecked = true
+            val last = gameState.lastSeenMillis
+            if (last > 0L) {
+                val elapsed = (System.currentTimeMillis() - last) / 1000
+                val perSec = OfflineEarnings.perHelperPerSecond(gameState)
+                val result = OfflineEarnings.settle(elapsed, perSec, gameState.helpers)
+                if (result.isMeaningful) {
+                    // 直接入账，弹窗只是告知
+                    gameState.money += result.money
+                    gameState.recordOfflineEarnings(result.catches)
+                    offlineResult = result
+                    revision++
+                }
+            }
         }
 
         // 打开面板或回到主菜单时暂停世界模拟
@@ -375,6 +412,7 @@ class MainActivity : ComponentActivity() {
                         if (ok) {
                             audio.play("sfx_buy", 0.95f)
                             world.switchMap(map)
+                            DailyTracker.onMapChanged(gameState)
                             saveManager.save(gameState, settings)
                         } else {
                             audio.play("sfx_cant_buy", 0.7f)
@@ -384,6 +422,9 @@ class MainActivity : ComponentActivity() {
                     onBuy = { def ->
                         val ok = gameState.buy(def)
                         if (ok) {
+                            if (def.attribute == Attribute.HELPER) {
+                                DailyTracker.onHelperBought(gameState)
+                            }
                             audio.play("sfx_buy", 0.9f)
                             world.syncFishCount()
                             world.syncHelperCount()
@@ -401,6 +442,19 @@ class MainActivity : ComponentActivity() {
             }
 
             // 转生 / 技能树
+            // 离线收益结算弹窗
+            offlineResult?.let { result ->
+                OfflinePanel(
+                    result = result,
+                    assets = assets,
+                    onClaim = {
+                        audio.play("sfx_success", 0.95f)
+                        offlineResult = null
+                        saveManager.save(gameState, settings)
+                    },
+                )
+            }
+
             if (showPrestige) {
                 PrestigePanel(
                     state = gameState,

@@ -158,4 +158,17 @@ class SaveData {
     var sfxVolume: Float = 0.8f
     var bgmVolume: Float = 0.5f
     var hideFloatingText: Boolean = false
+
+    /** 上次离开时的时间戳（毫秒），用于结算离线收益。 */
+    var lastSeenMillis: Long = 0L
+
+    // ---- 每日任务 ----
+    var dailyDayIndex: Long = 0L
+    var dailyDone: MutableSet<String> = mutableSetOf()
+    var dailyCatches: Long = 0
+    var dailyMoney: Double = 0.0
+    var dailyBestCombo: Int = 0
+    var dailyRareCatches: Long = 0
+    var dailyMapChanges: Int = 0
+    var dailyHelpersBought: Int = 0
 }

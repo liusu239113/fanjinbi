@@ -809,7 +809,6 @@ class World(val gameState: GameState) {
         var finalValue = value
 
         if (manual) {
-            gameState.onCatchSuccess()
             finalValue *= gameState.comboMultiplier
         }
 
@@ -817,6 +816,9 @@ class World(val gameState: GameState) {
         gameState.recordSpecies(fish.species.id)
 
         gameState.money += finalValue
+        // 统一记账：累计统计 + 连击 + 每日任务进度。
+        // 手动与自动钓手都要计入每日任务，否则挂机就完不成任务。
+        gameState.onCatchRecorded(fish.kind, finalValue)
         gameState.recordEarning(fish.kind, source, finalValue)
         gameState.recordCatch(finalValue)
 

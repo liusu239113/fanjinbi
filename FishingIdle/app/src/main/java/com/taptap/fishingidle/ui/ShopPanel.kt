@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.sp
 import com.taptap.fishingidle.game.Assets
 import com.taptap.fishingidle.game.Content
 import com.taptap.fishingidle.game.Bestiary
+import com.taptap.fishingidle.game.DailyQuests
+import com.taptap.fishingidle.game.DexReward
 import com.taptap.fishingidle.game.FishingMap
 import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.Species
@@ -63,7 +65,7 @@ fun ShopPanel(
     modifier: Modifier = Modifier,
 ) {
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("鱼苗", "升级", "水域", "图鉴", "统计")
+    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "统计")
 
     Box(modifier.fillMaxSize()) {
         Box(
@@ -100,7 +102,8 @@ fun ShopPanel(
                         0 -> ItemList(Content.fishItems, state, assets, onBuy, "鱼苗")
                         1 -> ItemList(Content.upgrades, state, assets, onBuy, "升级")
                         2 -> MapList(state, assets, onUnlockMap)
-                        3 -> FishDex(state, assets)
+                        3 -> DailyQuestList(state)
+                        4 -> FishDex(state, assets)
                         else -> StatsView(state)
                     }
                 }
@@ -405,6 +408,125 @@ private fun MapList(state: GameState, assets: Assets, onUnlock: (FishingMap) -> 
                         }
                     }
                 }
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+/** 每日任务列表。每天 3 条，完成后自动入账。 */
+@Composable
+private fun DailyQuestList(state: GameState) {
+    val quests = state.todayQuests
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Column {
+                SectionTitle("今日任务")
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "每天 0 点刷新 · 完成 ${state.dailyDone.size}/${quests.size}",
+                    color = UITheme.TextDim,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(6.dp))
+                // 图鉴收集进度的永久加成，给玩家一个长期目标
+                val dexMul = DexReward.multiplier(state)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(UITheme.TextGood.copy(alpha = 0.15f))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("📖", fontSize = 15.sp)
+                    Spacer(Modifier.width(7.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "图鉴加成 ×${String.format("%.2f", dexMul)}",
+                            color = UITheme.TextGood,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        val (label, _) = DexReward.nextMilestone(state)
+                        Text(label, color = UITheme.TextDim, fontSize = 10.sp)
+                    }
+                    Text(
+                        "${state.caughtSpecies.size}/${Bestiary.totalSpecies}",
+                        color = UITheme.TextGood, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+
+        items(quests, key = { it.id }) { q ->
+            val done = state.dailyDone.contains(q.id)
+            val progress = DailyQuests.progress(state, q)
+            val current = q.track(state.dailyProgress)
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (done) UITheme.SlotBgOwned else UITheme.SlotBg)
+                    .border(
+                        2.dp,
+                        if (done) UITheme.TextGood.copy(alpha = 0.7f) else Color(0xFF4A565A),
+                        RoundedCornerShape(10.dp),
+                    )
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(30.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (done) "✅" else "⬜", fontSize = 20.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        q.name,
+                        color = if (done) UITheme.TextGood else UITheme.Cream,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(q.desc, color = UITheme.TextDim, fontSize = 11.sp)
+                    Spacer(Modifier.height(5.dp))
+                    // 进度条
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color(0xFF2A3438)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(progress)
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (done) UITheme.TextGood else UITheme.Gold),
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "${formatNumber(current)} / ${formatNumber(q.goal)}",
+                        color = UITheme.TextDim, fontSize = 10.sp,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "🪙${formatNumber(q.reward)}",
+                    color = if (done) UITheme.TextGood else UITheme.GoldLight,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
         item { Spacer(Modifier.height(8.dp)) }

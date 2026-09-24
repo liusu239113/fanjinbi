@@ -134,6 +134,27 @@ class GameState {
     /** 已钓到过的鱼种 id（图鉴收集进度）。 */
     val caughtSpecies: MutableSet<String> = mutableSetOf()
 
+    /** 刚首次钓到、还没弹过提示的鱼种，由 UI 消费。 */
+    val pendingDexUnlocks: MutableList<String> = mutableListOf()
+
+    /** 上次离开的时间戳（毫秒）。启动时据此结算离线收益。 */
+    var lastSeenMillis: Long = 0L
+
+    // ---- 每日任务 ----
+    /** 当前是第几天（UTC 天数），用于判断是否要重置。 */
+    var dailyDayIndex: Long = DailyQuests.currentDayIndex()
+    /** 当日进度。 */
+    val dailyProgress: DailyProgress = DailyProgress()
+    /** 当日已完成的任务 id。 */
+    val dailyDone: MutableSet<String> = mutableSetOf()
+
+    /** 今日的三个任务。 */
+    val todayQuests: List<DailyQuest> get() = DailyQuests.forDay(dailyDayIndex)
+
+    /** 今日未完成的任务数（用于 HUD 红点）。 */
+    val pendingQuestCount: Int
+        get() = todayQuests.count { !dailyDone.contains(it.id) }
+
     /** 当前水域。 */
     val currentMap: FishingMap
         get() = Bestiary.mapById(currentMapId) ?: Bestiary.maps.first()
@@ -150,9 +171,13 @@ class GameState {
     val comboMultiplier: Double
         get() = 1.0 + (combo.coerceAtMost(30) * (skillComboStep + comboPower))
 
-    /** 全局价值倍率：稀有度加成 × 水域加成，由进阶升级提供。 */
+    /**
+     * 全局价值倍率。
+     * 三个来源相乘：进阶升级（稀有度/水域）× 图鉴收集进度。
+     * 图鉴加成是**永久**的，转生也不清空，这是长线收集的动力。
+     */
     val globalValueMultiplier: Double
-        get() = (1.0 + rarityMul) * (1.0 + mapBonus)
+        get() = (1.0 + rarityMul) * (1.0 + mapBonus) * DexReward.multiplier(this)
 
     // ---- 转生 ----
 
@@ -252,9 +277,38 @@ class GameState {
         return true
     }
 
-    /** 记录钓到某个鱼种。 */
-    fun recordSpecies(id: String) {
-        caughtSpecies.add(id)
+    /** 钓手当前是否能钓到该稀有度的鱼（由「钓手进阶」类升级解锁）。 */
+    fun helperCanCatch(rarity: Rarity): Boolean = when (rarity) {
+        Rarity.COMMON -> true
+        Rarity.RARE -> helperCanRare
+        Rarity.EPIC -> helperCanEpic
+        Rarity.LEGEND -> helperCanLegend
+    }
+
+    /** 离线收益结算后记账：计入总收入与渔获数，但不算连击。 */
+    fun recordOfflineEarnings(catches: Int) {
+        totalCatches += catches.toLong()
+    }
+
+    /**
+     * 一次成功的渔获后的统一记账入口。
+     * 把「累计统计」「连击」「每日任务进度」集中处理，
+     * 避免各处调用点漏埋。
+     */
+    fun onCatchRecorded(rarity: Rarity, value: Double) {
+        onCatchSuccess()
+        DailyTracker.onCatch(this, rarity, value)
+        DailyTracker.onCombo(this)
+    }
+
+    /** 记录钓到某个鱼种。返回是否为**首次**发现（用于弹图鉴提示）。 */
+    fun recordSpecies(id: String): Boolean {
+        val isNew = caughtSpecies.add(id)
+        if (isNew) {
+            // 图鉴进度提升会立刻反映到全局倍率，这里记一笔待弹出的提示
+            pendingDexUnlocks.add(id)
+        }
+        return isNew
     }
 
     /** 某鱼种收线耗时倍率（越大越快），含技能加成。 */
@@ -348,6 +402,31 @@ class GameState {
 
     // ---- 存档 ----
 
+    /** 把当日进度同步到存档对象。 */
+    private fun SaveData.syncDaily(from: GameState) {
+        dailyDayIndex = from.dailyDayIndex
+        dailyDone = from.dailyDone.toMutableSet()
+        dailyCatches = from.dailyProgress.catches
+        dailyMoney = from.dailyProgress.moneyEarned
+        dailyBestCombo = from.dailyProgress.bestCombo
+        dailyRareCatches = from.dailyProgress.rareCatches
+        dailyMapChanges = from.dailyProgress.mapChanges
+        dailyHelpersBought = from.dailyProgress.helpersBought
+    }
+
+    /** 从存档恢复当日进度。 */
+    private fun GameState.restoreDaily(from: SaveData) {
+        dailyDayIndex = from.dailyDayIndex
+        dailyDone.clear()
+        dailyDone.addAll(from.dailyDone)
+        dailyProgress.catches = from.dailyCatches
+        dailyProgress.moneyEarned = from.dailyMoney
+        dailyProgress.bestCombo = from.dailyBestCombo
+        dailyProgress.rareCatches = from.dailyRareCatches
+        dailyProgress.mapChanges = from.dailyMapChanges
+        dailyProgress.helpersBought = from.dailyHelpersBought
+    }
+
     fun toSave(): SaveData = SaveData().also {
         it.money = money
         it.totalMoney = totalMoney
@@ -363,6 +442,7 @@ class GameState {
         it.caughtSpecies = caughtSpecies.toMutableSet()
         it.unlockedMaps = unlockedMaps.toMutableSet()
         it.currentMapId = currentMapId
+        it.syncDaily(this)
     }
 
     /**
@@ -398,6 +478,10 @@ class GameState {
      * 顺序反了会导致数值对不上。
      */
     fun loadFrom(data: SaveData) {
+        lastSeenMillis = data.lastSeenMillis
+        restoreDaily(data)
+        // 跨天则清空当日进度
+        DailyQuests.rolloverIfNeeded(this)
         pearls = data.pearls
         prestigeCount = data.prestigeCount
         skillLevels.clear()
