@@ -174,13 +174,12 @@ class GameView(
         }
         // 水面以下：先看落点附近有没有鱼
         if (wy > Space.SURFACE_Y + 40f) {
+            world.sailTo(wx)
             if (world.hasFishNear(wx, wy)) {
-                // 有鱼 → 把船划过去再抛竿
-                world.sailTo(wx)
                 world.castLine(wx, wy)
             } else {
-                // 没鱼 → 只是把船划过去，不抛竿（避免"空地方也能咬钩"）
-                world.sailTo(wx)
+                // 附近没鱼就不抛竿，只给个提示 —— 避免"空地方也能咬钩"
+                world.notifyNoFish(wx, wy)
             }
         }
     }

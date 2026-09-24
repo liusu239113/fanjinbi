@@ -28,8 +28,11 @@ class GameRenderer(
     private val gameTypeface: Typeface? = null,
 ) {
     private companion object {
-        /** 玩家小船在世界坐标下的宽度。按世界单位给，避免随屏幕像素放大。 */
-        const val BOAT_WORLD_W = 260f
+        /**
+         * 玩家/帮手小船在世界坐标下的宽度。
+         * 按世界单位给，避免随屏幕像素放大成"巨型船"。
+         */
+        const val PLAYER_BOAT_WORLD_W = 190f
     }
 
     // 稀有度颜色在构造时查表一次，避免每帧对每条鱼做 Map 查找
@@ -59,17 +62,14 @@ class GameRenderer(
     private var bmpWater: Bitmap? = null
     private var bmpRiverbed: Bitmap? = null
     private var bmpBobber: Bitmap? = null
-    private var bmpRod: Bitmap? = null
     private var bmpHelper: Bitmap? = null
+    /** 玩家立绘：钓手 + 小船 + 鱼竿一体。 */
+    private var bmpPlayerBoat: Bitmap? = null
 
     /** 每种鱼的逐帧动画。key 为精灵名（不含 _anim 后缀）。 */
     private val fishFrames = HashMap<String, List<Bitmap>>()
     /** 每种鱼每帧的播放时长（秒）。 */
     private val fishFrameDuration = HashMap<String, Float>()
-
-    /** 船的逐帧动画（随波起伏）。 */
-    private var boatFrames: List<Bitmap> = emptyList()
-    private var boatFrameDuration = 0.12f
 
     /** 水下装饰：海草用帧动画，随机分布在水底。 */
     private var seaweedFrames: List<Bitmap> = emptyList()
@@ -95,8 +95,10 @@ class GameRenderer(
         bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
         // 浮漂：用小号素材，别盖住整片水域
         bmpBobber = assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
-        bmpRod = assets.scaled("rod", (110 * t.scale).toInt().coerceAtLeast(24))
-        bmpHelper = assets.scaled("helper_boat", (96 * t.scale).toInt().coerceAtLeast(20))
+        // 玩家立绘与帮手立绘用同一个目标尺寸，保证画风与大小一致
+        val boatPx = (PLAYER_BOAT_WORLD_W * t.scale).toInt().coerceAtLeast(40)
+        bmpPlayerBoat = assets.scaled("player_boat", boatPx)
+        bmpHelper = assets.scaled("helper_boat", boatPx)
         fishFrames.clear()
         fishFrameDuration.clear()
         // 一张精灵可能被多个稀有度档复用，取其中最高的档决定目标尺寸
@@ -121,10 +123,6 @@ class GameRenderer(
                 Rarity.LEGEND -> 0.115f
             }
         }
-        // 船：侧视小船，逐帧随波起伏。尺寸按世界单位给，不再被屏幕像素放大
-        boatFrames = loadAnimation("boat", (BOAT_WORLD_W * t.scale).toInt().coerceAtLeast(32))
-        boatFrameDuration = 0.13f
-
         loadSeaweed(t)
 
         // 云：用形状干净的 cloud_c，尺寸压小一点免得占满天空
@@ -553,30 +551,20 @@ class GameRenderer(
     // ---------------- 玩家的船（停在水面）----------------
 
     /**
-     * 玩家的船：**侧视**小船，骑在水面线上。
+     * 玩家的船：**带钓手立绘的侧视小船**，骑在水面线上。
      *
-     * 之前这里用的是俯视贴图、还按屏幕像素放大到 150px，结果船巨大且方向不对。
-     * 现在统一用侧视动画，尺寸按世界单位 [BOAT_WORLD_W] 换算，
-     * 保证在任何分辨率下都占画面里固定的比例。
+     * 用 [bmpPlayerBoat]（人物+船+竿一体的立绘），而不是
+     * 「空船 + 单独一根放大鱼竿」—— 后者会画出一根巨大的竿，
+     * 且和帮手的立绘风格对不上。
      */
     private fun drawPlayerBoat(canvas: Canvas, t: ViewTransform, camX: Float) {
-        val bmp = frameAt(boatFrames, boatFrameDuration, 0f) ?: return
+        val bmp = bmpPlayerBoat ?: return
         val cx = t.toScreenX(world.boatX - camX)
-        // 船底正好压在水面线上，吃水线以下被水色盖住
-        val cy = t.toScreenY(Space.SURFACE_Y) - bmp.height * t.scale * 0.34f
+        // 轻微起伏，让船看起来是浮在水上的
+        val bob = sin(world.time * 1.5f) * 3f
+        // 船底压在水面线上，吃水线以下被水色盖住
+        val cy = t.toScreenY(Space.SURFACE_Y) - bmp.height * t.scale * 0.30f + bob * t.scale
         SpriteDraw.draw(canvas, bmp, cx, cy, scale = t.scale)
-
-        // 鱼竿从船头伸出，跟着船体轻微摆动
-        val rod = bmpRod
-        if (rod != null) {
-            SpriteDraw.draw(
-                canvas, rod,
-                cx + bmp.width * t.scale * 0.34f,
-                cy - bmp.height * t.scale * 0.28f,
-                scale = t.scale * 0.62f,
-                rotation = -20f + sin(world.time * 1.4f) * 2.5f,
-            )
-        }
     }
 
     // ---------------- 粒子与文字 ----------------

@@ -64,8 +64,12 @@ fun WoodPanel(
         // 木纹面板：整张图按九宫格铺 —— 四角护角保持原始像素，
         // 只有中间的木纹被拉伸。绝不用 FillBounds 整图缩放，
         // 那会把护角压扁（面板越扁越明显）。
+        //
+        // matchParentSize 而不是 fillMaxSize：前者不参与父容器尺寸计算，
+        // 只跟随已有尺寸。用 fillMaxSize 会在 Column 里把面板撑到整屏，
+        // 把后面的按钮全挤出屏幕（主菜单点不动就是这个原因）。
         if (panelBitmap != null) {
-            Canvas(Modifier.fillMaxSize()) {
+            Canvas(Modifier.matchParentSize()) {
                 drawNinePatch(panelBitmap, cornerPx)
             }
         }

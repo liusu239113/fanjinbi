@@ -26,8 +26,14 @@ object Space {
     const val POND_T = SURFACE_Y + 130f
     const val POND_B = H - 120f
 
-    /** 抛竿离最近鱼的最大有效距离，超出则没有鱼来咬钩。 */
-    const val MAX_BITE_RANGE = 420f
+    /**
+     * 抛竿离最近鱼的最大有效距离，超出则没有鱼来咬钩。
+     *
+     * 这个值直接决定"看起来有没有鱼"：手机竖屏下屏幕约 675 世界单位宽，
+     * 取 420 的话半屏内的鱼都算数，玩家会觉得"空地方也能钓上鱼"。
+     * 收到 190 大约占屏宽 28%，必须真的抛到鱼边上才行。
+     */
+    const val MAX_BITE_RANGE = 190f
 }
 
 enum class FishState { SWIMMING, APPROACHING, BITING, HOOKED, CAUGHT, ESCAPED }
@@ -429,7 +435,11 @@ class World(val gameState: GameState) {
     private var isMovingRight = false
 
     /**
-     * 划船。限制在钓场范围内，并让镜头跟随船（带边界夹取）。
+     * 划船。
+     *
+     * 关键：镜头**只在船快要划出屏幕时才跟**。
+     * 如果每帧都让镜头居中到船上，船就会永远钉在屏幕中央，
+     * 看起来像"整片水面在动"而不是"船在动"。
      */
     fun moveBoat(dt: Float) {
         var dir = 0f
@@ -437,15 +447,25 @@ class World(val gameState: GameState) {
         if (isMovingRight) dir += 1f
         if (dir == 0f) return
         boatX = (boatX + dir * boatSpeed * dt).coerceIn(Space.POND_L, Space.POND_R)
-        followBoatWithCamera()
+        keepBoatOnScreen()
     }
 
-    /** 镜头跟随船，但不越过世界边界。 */
-    private fun followBoatWithCamera() {
+    /**
+     * 让船保持在视野内：只有当船接近屏幕边缘时才推动镜头。
+     * [margin] 是船距屏幕边缘的留白（世界单位）。
+     */
+    private fun keepBoatOnScreen(margin: Float = 140f) {
         val half = viewHalfWidth
+        val leftEdge = cameraX - half + margin
+        val rightEdge = cameraX + half - margin
+        if (boatX < leftEdge) {
+            cameraX -= (leftEdge - boatX)
+        } else if (boatX > rightEdge) {
+            cameraX += (boatX - rightEdge)
+        }
         val minX = half
         val maxX = (Space.W - half).coerceAtLeast(half)
-        cameraX = boatX.coerceIn(minX, maxX)
+        cameraX = cameraX.coerceIn(minX, maxX)
     }
 
     fun setMoveLeft(pressed: Boolean) {
@@ -465,7 +485,7 @@ class World(val gameState: GameState) {
     /** 点击水面把船划过去（点哪走哪）。 */
     fun sailTo(targetX: Float) {
         boatX = targetX.coerceIn(Space.POND_L, Space.POND_R)
-        followBoatWithCamera()
+        keepBoatOnScreen()
     }
 
     // ---------------- 数量同步 ----------------
@@ -556,6 +576,11 @@ class World(val gameState: GameState) {
     /** 落点附近 [Space.MAX_BITE_RANGE] 内是否有可钓的鱼。 */
     fun hasFishNear(x: Float, y: Float): Boolean = fishes.any {
         it.state == FishState.SWIMMING && hypot(it.x - x, it.y - y) <= Space.MAX_BITE_RANGE
+    }
+
+    /** 玩家抛到没鱼的地方时给个反馈，而不是静默什么都不发生。 */
+    fun notifyNoFish(x: Float, y: Float) {
+        spawnText(x, y, "这里没有鱼", Palette.TEXT_BAD, 0.9f)
     }
 
     /**
