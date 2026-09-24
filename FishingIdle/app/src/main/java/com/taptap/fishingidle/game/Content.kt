@@ -37,10 +37,15 @@ object Content {
         ),
         PurchasableDef(
             id = "helper", attribute = Attribute.HELPER,
-            name = "自动钓手", desc = "雇一名钓手，自动寻找并钓起鱼。",
-            // 钓手是挂机收益的来源，起步价不能太低，否则开局就能白嫖
-            icon = "icon_helper", priceBase = 1.6, priceMultiplier = 120.0,
-            maxPurchases = 30,
+            name = "自动钓手",
+            desc = "雇一名钓手替你钓鱼。最多 20 名，升级可让他一次照看多条鱼。",
+            // 钓手是挂机收益的来源，也是整个放置循环的核心：
+            // 起步价抬高、曲线拉陡（1.75^n × 500），并把总数收到 20 名 ——
+            // 之前 1.6^n × 120 起步只要 120 金币，开局几分钟就能雇满一队。
+            icon = "icon_helper", priceBase = 1.75, priceMultiplier = 500.0,
+            maxPurchases = 20,
+            // 先自己动手钓上几条鱼，钓手才会出现（别一进游戏就挂机）
+            visibleWhen = { it.totalCatches >= 8 },
         ),
     )
 
@@ -141,17 +146,26 @@ object Content {
         // --- 自动收线 / 重抛 ---
         PurchasableDef(
             id = "auto_reel_chance", attribute = Attribute.AUTO_REEL_CHANCE,
-            name = "自动重抛", desc = "钓上鱼后有 {n} 概率自动再抛一竿。",
+            name = "自动重抛", desc = "钓上鱼后有 {n} 概率立刻再来一竿，不用重新抛。",
             icon = "icon_reflip", priceBase = 1.9, priceMultiplier = 150.0,
             increaseAmount = 0.05, maxPurchases = 15,
             visibleWhen = { it.rareFish > 0 },
         ),
         PurchasableDef(
             id = "auto_reel_unlock", attribute = Attribute.AUTO_REEL_UNLOCK,
-            name = "智能浮标", desc = "鼠标悬停在鱼上时自动收线。",
-            icon = "icon_hover", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 1000.0,
+            name = "自动收线",
+            desc = "浮标一下沉就自动收线，不用再点屏幕（收线快慢仍看线轮等级）。",
+            icon = "icon_hover", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 1_200.0,
             maxPurchases = 1,
             visibleWhen = { it.commonFish > 0 },
+        ),
+        PurchasableDef(
+            id = "auto_cast_unlock", attribute = Attribute.AUTO_CAST_UNLOCK,
+            name = "智能浮标",
+            desc = "空闲时自动朝附近的鱼抛竿，放手也能一直钓。",
+            icon = "icon_hover", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 15_000.0,
+            maxPurchases = 1,
+            visibleWhen = { it.totalCatches >= 12 },
         ),
 
         // --- 钓手强化 ---
@@ -165,21 +179,21 @@ object Content {
         PurchasableDef(
             id = "helper_can_rare", attribute = Attribute.HELPER_CAN_RARE,
             name = "钓手进阶", desc = "钓手可以钓取鲤鱼。",
-            icon = "icon_helper", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 600.0,
+            icon = "icon_helper", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 4_000.0,
             maxPurchases = 1,
             visibleWhen = { it.rareFish > 0 && it.helpers > 0 },
         ),
         PurchasableDef(
             id = "helper_can_epic", attribute = Attribute.HELPER_CAN_EPIC,
             name = "钓手大师", desc = "钓手可以钓取锦鲤。",
-            icon = "icon_helper", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 6000.0,
+            icon = "icon_helper", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 80_000.0,
             maxPurchases = 1,
             visibleWhen = { it.epicFish > 0 && it.helpers > 0 },
         ),
         PurchasableDef(
             id = "helper_can_legend", attribute = Attribute.HELPER_CAN_LEGEND,
             name = "深海搭档", desc = "钓手可以钓取巨口鱼。",
-            icon = "icon_helper", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 90000.0,
+            icon = "icon_helper", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 1_500_000.0,
             maxPurchases = 1,
             visibleWhen = { it.legendFish > 0 && it.helpers > 0 },
         ),
@@ -188,7 +202,7 @@ object Content {
         PurchasableDef(
             id = "chain_reaction", attribute = Attribute.CHAIN_REACTION,
             name = "鱼群骚动", desc = "钓上鱼时惊动周围鱼群，连锁收线。",
-            icon = "icon_reflip", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 25000.0,
+            icon = "icon_reflip", priceBase = 0.0, priceMultiplier = 0.0, flatOffset = 60_000.0,
             maxPurchases = 1,
             visibleWhen = { it.epicFish > 0 },
         ),
@@ -219,9 +233,11 @@ object Content {
         ),
         PurchasableDef(
             id = "helper_parallel", attribute = Attribute.HELPER_PARALLEL,
-            name = "并行作业", desc = "每名钓手可同时照看 {n} 条鱼。",
-            icon = "icon_helper", priceBase = 2.0, priceMultiplier = 200000.0,
-            increaseAmount = 1.0, maxPurchases = 5,
+            name = "并行作业", desc = "每名钓手可同时多照看 {n} 条鱼。",
+            // 钓手总数收到 20 之后，这条升级是"扩大挂机产出"的正路，
+            // 但也得真的接线（以前买了完全没用）
+            icon = "icon_helper", priceBase = 2.2, priceMultiplier = 800000.0,
+            increaseAmount = 1.0, maxPurchases = 3,
             visibleWhen = { it.helpers >= 10 },
         ),
 
@@ -244,7 +260,7 @@ object Content {
         // --- 进阶：自动化 ---
         PurchasableDef(
             id = "auto_reel_speed", attribute = Attribute.AUTO_REEL_SPEED,
-            name = "自动绞盘", desc = "自动重抛的间隔缩短，收线速度 +{n}。",
+            name = "自动绞盘", desc = "自动重抛的间隔缩短（每级 +{n} 速率）。",
             icon = "icon_speed", priceBase = 1.9, priceMultiplier = 400000.0,
             increaseAmount = 0.3, maxPurchases = 20,
             visibleWhen = { it.autoReelChance > 0.0 },

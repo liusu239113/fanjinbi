@@ -102,7 +102,7 @@ object SkillTree {
         ),
         SkillDef(
             "deep_instinct", "深渊直觉",
-            "稀有鱼出现概率 +{v}%",
+            "抛竿时稀有鱼更抢食（等效距离 -{v}%）",
             maxLevel = 8, costPerLevel = 5,
             requires = "school_density",
             effect = { s, lv -> s.skillRareWeightBonus = lv * 0.12 },

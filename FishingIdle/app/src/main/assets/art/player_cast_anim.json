@@ -1,0 +1,8 @@
+{
+  "image": "player_cast_anim.png",
+  "frameWidth": 480,
+  "frameHeight": 388,
+  "columns": 4,
+  "rows": 1,
+  "frameCount": 4
+}

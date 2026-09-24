@@ -19,3 +19,8 @@ captures/
 
 # 日志
 *.log
+
+# Kotlin 会话目录
+.kotlin/
+__pycache__/
+*.pyc

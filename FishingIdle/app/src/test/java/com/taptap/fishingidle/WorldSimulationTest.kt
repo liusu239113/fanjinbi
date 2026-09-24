@@ -1,5 +1,7 @@
 package com.taptap.fishingidle
 
+import com.taptap.fishingidle.game.Bestiary
+import com.taptap.fishingidle.game.BoatArt
 import com.taptap.fishingidle.game.BobberState
 import com.taptap.fishingidle.game.Content
 import com.taptap.fishingidle.game.Fish
@@ -129,6 +131,51 @@ class WorldSimulationTest {
         assertTrue("钓手应产出金币，实际=$helperEarned", helperEarned > 0.0)
         assertTrue("钓手收益应累计到总收入", state.totalMoney >= helperEarned)
         assertEquals("鱼群数量应保持", GameState.INITIAL_COMMON_FISH, world.fishes.size)
+    }
+
+    @Test
+    fun `并行作业升级真的会让一条船照看多条鱼`() {
+        val state = GameState()
+        state.money = 1e12
+        repeat(20) { state.buy(Content.byId("common_fish")!!) }
+        repeat(5) { state.buy(Content.byId("helper")!!) }
+        state.buy(Content.byId("helper_parallel")!!)
+        assertEquals(1, state.helperParallel)
+
+        val world = World(state)
+        world.advance(30f)
+
+        val most = world.helpers.maxOfOrNull { it.targets.size } ?: 0
+        assertTrue("买了「并行作业」就该有条船同时照看多条鱼，实际最多=$most", most >= 2)
+        // 每条线各自对应一条被认领的鱼，不能出现重复占用
+        val claimed = world.fishes.count { it.claimedBy != null }
+        val lines = world.helpers.sumOf { it.targets.size }
+        assertEquals("认领数与钓线数应一致", lines, claimed)
+    }
+
+    @Test
+    fun `主角与帮手的船底都贴在同一条水位线上`() {
+        // 渲染层按"立绘里的船底像素落在这条线"摆放，两边用的是同一套公式：
+        // 这里直接验证该不变量，避免又把主角和帮手摆成一高一低。
+        for (frac in listOf(BoatArt.PLAYER_HULL_FRAC, BoatArt.HELPER_HULL_FRAC)) {
+            val hullBottomOffset = BoatArt.centerOffsetY(frac) + (frac - 0.5f) * BoatArt.HEIGHT
+            assertEquals("船底应正好落在水位线上", 0f, hullBottomOffset, 0.001f)
+        }
+        // 竿尖必须高于水位线，否则鱼线会从船身里穿出来
+        val (_, tipDy) = BoatArt.rodTipOffset(1f)
+        assertTrue("竿尖应在水位线之上，实际偏移=$tipDy", tipDy < -20f)
+    }
+
+    @Test
+    fun `每张水域都有自己的环境素材与配色`() {
+        val ids = Bestiary.maps.map { it.env.id }
+        assertEquals("水域 id 不能重复", ids.size, ids.distinct().size)
+        val clouds = Bestiary.maps.map { it.env.cloud }
+        val weeds = Bestiary.maps.map { it.env.seaweed }
+        assertEquals("每张水域的云朵素材都要独立", clouds.size, clouds.distinct().size)
+        assertEquals("每张水域的水草素材都要独立", weeds.size, weeds.distinct().size)
+        val skies = Bestiary.maps.map { it.env.skyTop }
+        assertEquals("每张水域的天空配色都要不同", skies.size, skies.distinct().size)
     }
 
     @Test
@@ -271,22 +318,56 @@ class WorldSimulationTest {
     }
 
     @Test
-    fun `智能浮标解锁后会自动抛竿`() {
+    fun `自动收线解锁后咬钩即自动收线`() {
         val state = GameState()
         state.money = 1e9
         state.buy(Content.byId("auto_reel_unlock")!!)
         assertTrue(state.autoReelUnlocked)
 
         val world = World(state)
-        world.advance(1f)
-        // 模拟手指悬停在一条鱼上
-        world.hoverFish = world.fishes.first()
-        world.advance(1.5f)
+        world.advance(0.5f)
+        world.castAtNearestFish()
 
+        // 全程不给任何点击，只推进时间
+        var sawReeling = false
+        var guard = 0
+        while (guard < 4000 && world.bobber.isActive) {
+            world.update(dt)
+            if (world.bobber.state == BobberState.REELING) sawReeling = true
+            guard++
+        }
+
+        assertTrue("咬钩后应自动进入收线，不需要玩家点屏幕", sawReeling)
+        assertTrue("自动收线也要真的把鱼钓上来", state.money > 0.0)
+    }
+
+    @Test
+    fun `智能浮标解锁后能全程挂机`() {
+        val state = GameState()
+        state.money = 1e9
+        state.buy(Content.byId("auto_cast_unlock")!!)
+        state.buy(Content.byId("auto_reel_unlock")!!)
+        assertTrue(state.autoCastUnlocked)
+
+        val world = World(state)
+        // 完全不碰屏幕，只跑时间
+        world.advance(60f)
+
+        assertTrue("自动抛竿应能自己下竿", world.bobber.state != BobberState.IDLE)
+        assertTrue("挂机一分钟应该有渔获，实际=${state.money}", state.money > 0.0)
+        assertTrue("挂机渔获应计入统计", state.totalCatches > 0)
+    }
+
+    @Test
+    fun `没买自动抛竿时不会自己下竿`() {
+        val state = GameState()
+        val world = World(state)
+        world.advance(30f)
         assertTrue(
-            "悬停在鱼上时应自动抛竿",
-            world.bobber.isActive || world.bobber.state == BobberState.DONE,
+            "没买「智能浮标」就不该自动抛竿，否则升级没意义",
+            world.bobber.state == BobberState.IDLE,
         )
+        assertEquals(0.0, state.money, 0.001)
     }
 
     @Test

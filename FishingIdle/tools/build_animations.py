@@ -64,6 +64,8 @@ JOBS = [
     ("fz_huanyu_sheet.png", "fz_huanyu", 4),
     ("fz_wuli_sheet.png", "fz_wuli", 4),
     ("fz_jingli_sheet.png", "fz_jingli", 4),
+    # 金鲫用透明底新源图（assets/image/fz_jinji_v6_*.png，2 行 4 列）；
+    # 旧源图是 3 行 3 列，被这里按 2x4 硬切成了半个鱼身，已弃用
     ("fz_jinji_sheet.png", "fz_jinji", 4, (2, 4)),
     ("fz_bailian_sheet.png", "fz_bailian", 4),
     ("fz_hualu_sheet.png", "fz_hualu", 4),

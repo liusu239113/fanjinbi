@@ -49,10 +49,13 @@ import com.taptap.fishingidle.game.formatNumber
 fun PrestigePanel(
     state: GameState,
     assets: Assets,
+    /** HUD 那套刷新计数：面板开着时珍珠 / 技能等级要实时变，不能等重开。 */
+    revision: Int,
     onPrestige: () -> Unit,
     onLevelUp: (SkillDef) -> Unit,
     onClose: () -> Unit,
 ) {
+    @Suppress("UNUSED_EXPRESSION") revision
     var tab by remember { mutableIntStateOf(0) }
 
     Box(Modifier.fillMaxSize()) {

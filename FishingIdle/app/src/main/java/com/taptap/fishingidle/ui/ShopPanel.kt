@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,21 +53,53 @@ import com.taptap.fishingidle.game.Source
 import com.taptap.fishingidle.game.formatNumber
 
 /**
- * 商店面板：鱼苗 / 升级 / 图鉴 / 统计 四个页签。
+ * 商店面板：鱼苗 / 升级 / 水域 / 图鉴 / 统计 四个页签。
  * 以底部抽屉形式呈现 —— 竖屏手机上单手可及，且不遮挡上方的钓场。
+ *
+ * [revision] 是 HUD 那套刷新计数：GameState 用的是普通 var，不接这个计数
+ * 组件会被 Compose 跳过，表现为"买完东西面板不更新，必须退出去再进来"。
  */
 @Composable
 fun ShopPanel(
     state: GameState,
     assets: Assets,
     world: World,
-    onBuy: (PurchasableDef) -> Unit,
-    onUnlockMap: (FishingMap) -> Unit,
+    revision: Int,
+    onBuy: (PurchasableDef) -> Boolean,
+    onUnlockMap: (FishingMap) -> Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    @Suppress("UNUSED_EXPRESSION") revision
     var tab by remember { mutableIntStateOf(0) }
     val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "统计")
+
+    // 购买反馈条：成功/失败都在面板顶部闪一下，1.4 秒后自动收起
+    var flash by remember { mutableStateOf<String?>(null) }
+    var flashOk by remember { mutableStateOf(true) }
+    var flashId by remember { mutableIntStateOf(0) }
+    // 刚买过的条目高亮一下，让玩家看清是哪一条生效了
+    var justBought by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(flashId) {
+        if (flashId > 0) {
+            kotlinx.coroutines.delay(1400)
+            flash = null
+            justBought = null
+        }
+    }
+    val purchase: (PurchasableDef) -> Unit = { def ->
+        val ok = onBuy(def)
+        flash = if (ok) "已购买 · ${def.name}" else "金币不足 · ${def.name}"
+        flashOk = ok
+        justBought = if (ok) def.id else null
+        flashId++
+    }
+    val unlock: (FishingMap) -> Unit = { map ->
+        val ok = onUnlockMap(map)
+        flash = if (ok) "已解锁 · ${map.name}" else "金币不足 · ${map.name}"
+        flashOk = ok
+        flashId++
+    }
 
     Box(modifier.fillMaxSize()) {
         Box(
@@ -96,15 +130,26 @@ fun ShopPanel(
                         GameButton("✕", onClose, accent = UITheme.WaterTop, fontSize = 14)
                     }
 
-                    Spacer(Modifier.height(10.dp))
+                    // 购买反馈条（固定高度，避免出现/消失时列表上下跳）
+                    Box(Modifier.fillMaxWidth().height(26.dp), contentAlignment = Alignment.Center) {
+                        val text = flash
+                        if (text != null) {
+                            Text(
+                                text,
+                                color = if (flashOk) UITheme.TextGood else UITheme.TextBad,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
 
                     when (tab) {
-                        0 -> ItemList(Content.fishItems, state, assets, onBuy, "鱼苗")
-                        1 -> ItemList(Content.upgrades, state, assets, onBuy, "升级")
-                        2 -> MapList(state, assets, onUnlockMap)
-                        3 -> DailyQuestList(state)
-                        4 -> FishDex(state, assets)
-                        else -> StatsView(state)
+                        0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought)
+                        1 -> ItemList(Content.upgrades, state, assets, purchase, "升级", revision, justBought)
+                        2 -> MapList(state, assets, unlock, revision)
+                        3 -> DailyQuestList(state, revision)
+                        4 -> FishDex(state, assets, revision)
+                        else -> StatsView(state, revision)
                     }
                 }
             }
@@ -140,19 +185,17 @@ private fun ItemList(
     assets: Assets,
     onBuy: (PurchasableDef) -> Unit,
     emptyHint: String,
+    revision: Int,
+    justBought: String?,
 ) {
-    val visible = remember(state.purchases.size, state.money, defs) {
+    // 排序只看"是否满级 + 价格"，**不看当前金币** ——
+    // 钓手一直在赚钱，用金币参与排序会让列表一边看一边乱跳。
+    // 买得起买不起只影响每行的配色。
+    val visible = remember(revision, state.purchases.size, defs) {
         defs.filter { it.visibleWhen(state) }
             .sortedWith(
                 compareBy(
-                    { def ->
-                        val owned = state.owned(def.id)
-                        when {
-                            def.isMaxed(owned) -> 2
-                            state.money >= def.price(owned) -> 0
-                            else -> 1
-                        }
-                    },
+                    { def -> if (def.isMaxed(state.owned(def.id), state)) 1 else 0 },
                     { def -> def.price(state.owned(def.id)) },
                 )
             )
@@ -175,7 +218,7 @@ private fun ItemList(
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         items(visible, key = { it.id }) { def ->
-            ShopItemRow(def, state, assets, onBuy)
+            ShopItemRow(def, state, assets, onBuy, def.id == justBought)
         }
         item { Spacer(Modifier.height(8.dp)) }
     }
@@ -192,9 +235,10 @@ private fun ShopItemRow(
     state: GameState,
     assets: Assets,
     onBuy: (PurchasableDef) -> Unit,
+    justBought: Boolean,
 ) {
     val owned = state.owned(def.id)
-    val maxed = def.isMaxed(owned)
+    val maxed = def.isMaxed(owned, state)
     val price = def.price(owned)
     val affordable = state.money >= price
     val buyable = !maxed && affordable && def.buyableWhen(state)
@@ -202,11 +246,13 @@ private fun ShopItemRow(
     val icon = remember(def.icon) { assets.firstFrame(def.icon, 96)?.asImageBitmap() }
 
     val borderColor = when {
+        justBought -> UITheme.TextGood
         maxed -> UITheme.TextGood.copy(alpha = 0.65f)
         buyable -> UITheme.Gold
         else -> Color(0xFF4A565A)
     }
     val bgColor = when {
+        justBought -> Color(0xFF3E6A44)
         maxed -> UITheme.SlotBgOwned
         buyable -> Color(0xFF33505C)
         else -> UITheme.SlotBg
@@ -217,8 +263,9 @@ private fun ShopItemRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
-            .border(2.dp, borderColor, RoundedCornerShape(10.dp))
-            .clickableNoRipple(buyable) { onBuy(def) }
+            .border(if (justBought) 3.dp else 2.dp, borderColor, RoundedCornerShape(10.dp))
+            // 整行可点 + 按下有缩放反馈
+            .pressable(buyable, pressedScale = 0.98f) { onBuy(def) }
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -255,7 +302,12 @@ private fun ShopItemRow(
                 )
                 if (def.maxPurchases > 1) {
                     Spacer(Modifier.width(5.dp))
-                    Text("$owned/${def.maxPurchases}", color = UITheme.TextDim, fontSize = 11.sp)
+                    Text(
+                        "$owned/${def.effectiveMax(state)}",
+                        color = if (justBought) UITheme.TextGood else UITheme.TextDim,
+                        fontSize = 11.sp,
+                        fontWeight = if (justBought) FontWeight.Bold else FontWeight.Normal,
+                    )
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -319,7 +371,13 @@ private fun describeEffect(def: PurchasableDef, state: GameState): String {
 
 /** 水域列表：解锁新地图，每张图的鱼价值成倍提升。 */
 @Composable
-private fun MapList(state: GameState, assets: Assets, onUnlock: (FishingMap) -> Unit) {
+private fun MapList(
+    state: GameState,
+    assets: Assets,
+    onUnlock: (FishingMap) -> Unit,
+    revision: Int,
+) {
+    @Suppress("UNUSED_EXPRESSION") revision
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -352,8 +410,8 @@ private fun MapList(state: GameState, assets: Assets, onUnlock: (FishingMap) -> 
                         },
                         RoundedCornerShape(10.dp),
                     )
-                    .clickableNoRipple(canUnlock || (unlocked && !current)) {
-                        if (unlocked) onUnlock(map) else if (canUnlock) onUnlock(map)
+                    .pressable(canUnlock || (unlocked && !current), pressedScale = 0.98f) {
+                        if (unlocked || canUnlock) onUnlock(map)
                     }
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -416,7 +474,8 @@ private fun MapList(state: GameState, assets: Assets, onUnlock: (FishingMap) -> 
 
 /** 每日任务列表。每天 3 条，完成后自动入账。 */
 @Composable
-private fun DailyQuestList(state: GameState) {
+private fun DailyQuestList(state: GameState, revision: Int) {
+    @Suppress("UNUSED_EXPRESSION") revision
     val quests = state.todayQuests
 
     LazyColumn(
@@ -535,7 +594,8 @@ private fun DailyQuestList(state: GameState) {
 
 /** 鱼类图鉴：54 种鱼的收集册，按地图分组。 */
 @Composable
-private fun FishDex(state: GameState, assets: Assets) {
+private fun FishDex(state: GameState, assets: Assets, revision: Int) {
+    @Suppress("UNUSED_EXPRESSION") revision
     val caught = state.caughtSpecies
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -639,7 +699,8 @@ private fun SpeciesRow(sp: Species, isCaught: Boolean, assets: Assets) {
 
 /** 统计视图。 */
 @Composable
-private fun StatsView(state: GameState) {
+private fun StatsView(state: GameState, revision: Int) {
+    @Suppress("UNUSED_EXPRESSION") revision
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp),

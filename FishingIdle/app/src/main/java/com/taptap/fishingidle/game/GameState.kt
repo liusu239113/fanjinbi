@@ -48,8 +48,9 @@ class GameState {
     var legendReelSpeed: Double = 1.0
 
     // ---- 解锁标记 ----
-    var autoReelChance: Double = 0.0        // 自动收线概率（对应原版重翻）
-    var autoReelUnlocked: Boolean = false   // 悬停自动收线
+    var autoReelChance: Double = 0.0        // 自动重抛概率（对应原版重翻）
+    var autoReelUnlocked: Boolean = false   // 自动收线：咬钩后自动开始收线
+    var autoCastUnlocked: Boolean = false   // 自动抛竿：空闲时自己找鱼下竿
     var helperCanRare: Boolean = false
     var helperCanEpic: Boolean = false
     var helperCanLegend: Boolean = false
@@ -369,6 +370,7 @@ class GameState {
             Attribute.AUTO_REEL_CHANCE -> autoReelChance += amount
 
             Attribute.AUTO_REEL_UNLOCK -> autoReelUnlocked = true
+            Attribute.AUTO_CAST_UNLOCK -> autoCastUnlocked = true
             Attribute.HELPER_CAN_RARE -> helperCanRare = true
             Attribute.HELPER_CAN_EPIC -> helperCanEpic = true
             Attribute.HELPER_CAN_LEGEND -> helperCanLegend = true
@@ -391,7 +393,7 @@ class GameState {
     /** 购买：校验 → 扣钱 → 应用效果。返回是否成功。 */
     fun buy(def: PurchasableDef): Boolean {
         val ownedCount = owned(def.id)
-        if (def.isMaxed(ownedCount)) return false
+        if (def.isMaxed(ownedCount, this)) return false
         if (!def.buyableWhen(this)) return false
         val p = def.price(ownedCount)
         if (money < p) return false
@@ -529,6 +531,7 @@ class GameState {
         comboPower = 0.0; comboKeep = 0.0; autoReelSpeed = 0.0; luckyHook = 0.0
         autoReelChance = 0.0
         autoReelUnlocked = false
+        autoCastUnlocked = false
         helperCanRare = false; helperCanEpic = false; helperCanLegend = false
         chainReaction = false
     }

@@ -144,14 +144,19 @@ fun BottomBar(
     }
 }
 
-private fun hintText(world: World): String = when (world.bobber.state) {
-    BobberState.IDLE -> "拖动浏览河面 · 点击水面抛竿"
-    BobberState.FLYING -> "浮标飞行中…"
-    BobberState.FLOATING ->
-        if (world.bobber.hookedFish != null) "有鱼靠近了，盯紧浮标…" else "这片水域没有鱼，换个位置"
-    BobberState.BITE -> "有鱼咬钩！快点击收线"
-    BobberState.REELING -> "收线中…连续点击加速"
-    BobberState.DONE -> "准备下一竿"
+private fun hintText(world: World): String {
+    val auto = world.gameState.autoCastUnlocked
+    return when (world.bobber.state) {
+        BobberState.IDLE ->
+            if (auto) "自动抛竿中…" else "拖动浏览河面 · 点击水面抛竿"
+        BobberState.FLYING -> "浮标飞行中…"
+        BobberState.FLOATING ->
+            if (world.bobber.hookedFish != null) "有鱼靠近了，盯紧浮标…" else "这片水域没有鱼，换个位置"
+        BobberState.BITE -> "有鱼咬钩！快点击收线"
+        BobberState.REELING ->
+            if (world.gameState.autoReelUnlocked) "自动收线中…" else "收线中…连续点击加速"
+        BobberState.DONE -> "准备下一竿"
+    }
 }
 
 /** 渔获图鉴条：显示已解锁的鱼种。[revision] 作用同 [MoneyBar]。 */

@@ -34,15 +34,23 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: 生成签名密钥
+      # 签名必须**每次都一样**，否则新包装不到旧包上，
+      # 玩家只能先卸载（存档一起没）。所以 keystore/fishingidle.jks
+      # 是提交进仓库的固定签名，只有真的丢了才临时补一个。
+      - name: 准备签名密钥
         run: |
-          mkdir -p keystore
-          keytool -genkeypair -v \
-            -keystore keystore/fishingidle.jks \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -alias fishingidle \
-            -storepass fishingidle -keypass fishingidle \
-            -dname "CN=Fishing Idle, OU=Game, O=TapTap, L=Shanghai, ST=Shanghai, C=CN"
+          if [ -f keystore/fishingidle.jks ]; then
+            echo "使用仓库里的固定签名文件 keystore/fishingidle.jks"
+          else
+            echo "::warning::仓库里没有签名文件，本次临时生成一个 —— 这样构建出来的包和之前的签名不一致，装上去要先卸载"
+            mkdir -p keystore
+            keytool -genkeypair -v \
+              -keystore keystore/fishingidle.jks \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias fishingidle \
+              -storepass fishingidle -keypass fishingidle \
+              -dname "CN=Fishing Idle, OU=Game, O=TapTap, L=Shanghai, ST=Shanghai, C=CN"
+          fi
 
       - name: 运行单元测试
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace

@@ -134,7 +134,8 @@ fun GameButton(
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .border(2.5.dp, UITheme.Ink, RoundedCornerShape(10.dp))
-            .clickableNoRipple(enabled) { onClick() }
+            // 按下时缩放 + 压暗，给玩家即时的触感反馈
+            .pressable(enabled) { onClick() }
             .padding(horizontal = 16.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

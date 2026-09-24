@@ -7,6 +7,8 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -29,12 +31,25 @@ class GameRenderer(
 ) {
     private companion object {
         /**
-         * 船的立绘高度（世界单位）。
+         * 船的立绘高度（世界单位），与逻辑层共用 [BoatArt.HEIGHT]。
          *
          * 按**高度**而不是宽度统一尺寸 —— 玩家与帮手的素材宽高比不同，
          * 按宽度统一会把正方形那张放大成"巨型船+巨型竿"。
          */
-        const val PLAYER_BOAT_WORLD_H = 170f
+        const val BOAT_WORLD_H = BoatArt.HEIGHT
+
+        /** 主角船下的水花宽度（世界单位）。 */
+        const val PLAYER_SPLASH_W = 210f
+
+        /**
+         * 抛竿动画帧的目标高度（世界单位）。
+         *
+         * 这两个数是按"动画里的船体看起来和静止立绘一样大"量出来的：
+         * 甩竿会把画面撑大，帧高直接照抄立绘高会让船在抛竿的一瞬间缩小。
+         * 换抛竿素材要重新量（tools/measure_boat.py 会给建议值）。
+         */
+        const val PLAYER_CAST_H = 184f
+        const val HELPER_CAST_H = 140f
     }
 
     // 稀有度颜色在构造时查表一次，避免每帧对每条鱼做 Map 查找
@@ -67,6 +82,12 @@ class GameRenderer(
     private var bmpHelper: Bitmap? = null
     /** 玩家立绘：钓手 + 小船 + 鱼竿一体。 */
     private var bmpPlayerBoat: Bitmap? = null
+    /** 主角船底的水花（帮手立绘自带，主角单独一张）。 */
+    private var bmpPlayerSplash: Bitmap? = null
+
+    /** 抛竿逐帧动画：主角与帮手各一套。 */
+    private var playerCastFrames: List<Bitmap> = emptyList()
+    private var helperCastFrames: List<Bitmap> = emptyList()
 
     /** 每种鱼的逐帧动画。key 为精灵名（不含 _anim 后缀）。 */
     private val fishFrames = HashMap<String, List<Bitmap>>()
@@ -77,8 +98,28 @@ class GameRenderer(
     private var seaweedFrames: List<Bitmap> = emptyList()
     private var seaweedSpots: List<Triple<Float, Float, Float>> = emptyList()
 
-    /** 天空的云（两种形状轮流用）。 */
+    /** 天空的云（当前水域的那一套）。 */
     private var cloudFrames: List<Bitmap> = emptyList()
+
+    /** 当前已加载的环境素材属于哪张水域。 */
+    private var envMapId: String = ""
+
+    /**
+     * 最近一次摆放船只得到的屏幕矩形（left/top/width/height）。
+     * 钓线要先取竿尖坐标再画船，所以摆放与描画分成两步。
+     */
+    private val boatRect = FloatArray(4)
+
+    /**
+     * 抛竿动画**每一帧**的船底比例高度与竿尖位置。
+     *
+     * 逐帧动画每格的留白都不一样（裁到内容包围盒再补边），
+     * 用同一个比例会让船每帧上下跳；竿尖更是每帧都在动。
+     */
+    private var playerCastHull: FloatArray = floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
+    private var helperCastHull: FloatArray = floatArrayOf(BoatArt.HELPER_HULL_FRAC)
+    private var playerCastTips: List<FloatArray> = emptyList()
+    private var helperCastTips: List<FloatArray> = emptyList()
 
     private var waterShader: Shader? = null
     private var riverbedShader: Shader? = null
@@ -100,9 +141,34 @@ class GameRenderer(
         // 玩家立绘与帮手立绘按**高度**统一。
         // 两张素材宽高比不同（玩家 3:2、帮手 1:1），若按宽度统一，
         // 正方形那张会被等比放大到远超预期的高度，看起来就是一根巨大的竿。
-        val boatH = (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28)
+        val boatH = (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28)
         bmpPlayerBoat = assets.scaledToHeight("player_boat", boatH)
         bmpHelper = assets.scaledToHeight("helper_boat", boatH)
+        // 主角船底的水花：和帮手立绘里自带的那圈同一套视觉
+        bmpPlayerSplash = assets.scaled("boat_splash", (PLAYER_SPLASH_W * t.scale).toInt().coerceAtLeast(24))
+        // 抛竿逐帧动画（素材缺失时退回静止立绘，不会画出空白）。
+        // 目标高度按"船体看上去和静止立绘一样大"折算出来（量自素材）：
+        // 动画帧里竿子甩出去会把画面撑大，按帧高直接等于立绘高会显得船变小。
+        playerCastFrames = loadAnimation(
+            "player_cast", 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
+        )
+        helperCastFrames = loadAnimation(
+            "helper_cast", 0, (HELPER_CAST_H * t.scale).toInt().coerceAtLeast(20),
+        )
+        // 动画帧的画布尺幅和静止立绘不同，船底比例与竿尖都得逐帧量，
+        // 否则一抛竿船体就会上下跳、线也不再接在竿尖上
+        playerCastHull = if (playerCastFrames.isEmpty()) {
+            floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
+        } else {
+            FloatArray(playerCastFrames.size) { hullFracOf(playerCastFrames[it]) }
+        }
+        helperCastHull = if (helperCastFrames.isEmpty()) {
+            floatArrayOf(BoatArt.HELPER_HULL_FRAC)
+        } else {
+            FloatArray(helperCastFrames.size) { hullFracOf(helperCastFrames[it]) }
+        }
+        playerCastTips = playerCastFrames.map { tipFracOf(it) }
+        helperCastTips = helperCastFrames.map { tipFracOf(it) }
         fishFrames.clear()
         fishFrameDuration.clear()
         // 一张精灵可能被多个稀有度档复用，取其中最高的档决定目标尺寸
@@ -116,7 +182,8 @@ class GameRenderer(
                 Rarity.EPIC -> 185f
                 Rarity.LEGEND -> 220f
             }
-            val frames = loadAnimation(sprite, (base * t.scale).toInt().coerceAtLeast(24))
+            // base 是**整张图集**的目标宽度（4 帧并排），单帧要除以列数
+            val frames = loadAnimation(sprite, (base / 4f * t.scale).toInt().coerceAtLeast(24))
             if (frames.isEmpty()) continue
             fishFrames[sprite] = frames
             // 小鱼摆尾快、大鱼慢，看起来更自然
@@ -127,29 +194,71 @@ class GameRenderer(
                 Rarity.LEGEND -> 0.115f
             }
         }
-        loadSeaweed(t)
-
-        // 云：用形状干净的 cloud_c，尺寸压小一点免得占满天空
-        cloudFrames = listOfNotNull(
-            assets.scaled("cloud_c", (170 * t.scale).toInt().coerceAtLeast(36)),
-            assets.scaled("cloud_c", (120 * t.scale).toInt().coerceAtLeast(28)),
-        )
+        // 环境素材随水域切换重载（换成当前水域的云 / 水草 / 河床）
+        envMapId = ""
+        ensureEnv(t)
 
         waterShader = null
         riverbedShader = null
     }
 
     /**
-     * 把 `<name>_anim.png` 精灵表按配置切成单帧。
+     * 换水域时重载环境素材。
+     *
+     * 之前所有水域共用同一张云、同一丛水草、同一条河床 ——
+     * 解锁新地图后水下看着和村口小河一模一样。现在每张水域都有自己的
+     * 云朵、水草帧动画、河床与水体配色，解锁新区域立刻能看出区别。
+     */
+    private fun ensureEnv(t: ViewTransform) {
+        val map = world.currentMap
+        if (map.env.id == envMapId) return
+        envMapId = map.env.id
+
+        // 云：一张图集里有好几朵不同形状的云，轮流用（单帧目标约 200 世界单位宽）
+        cloudFrames = loadAnimation(
+            map.env.cloud,
+            (200 * t.scale).toInt().coerceAtLeast(36),
+        ).ifEmpty {
+            listOfNotNull(
+                assets.scaled("cloud_c", (170 * t.scale).toInt().coerceAtLeast(36)),
+                assets.scaled("cloud_c", (120 * t.scale).toInt().coerceAtLeast(28)),
+            )
+        }
+
+        // 水草：每张水域一套独立的帧动画（单帧目标宽约 33 世界单位）
+        seaweedFrames = loadAnimation(
+            map.env.seaweed,
+            (33 * t.scale).toInt().coerceAtLeast(24),
+        ).ifEmpty { loadAnimation("seaweed", (33 * t.scale).toInt().coerceAtLeast(24)) }
+        buildSeaweedSpots(map.env.id)
+
+        // 水体与河床共用同一套底纹，靠每张图的染色（waterTint/bedTint）
+        // 和渐变配色区分 —— 既省一份素材，又保证风格统一
+        bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
+        bmpWater = assets.scaled("water_tile", (512 * t.scale).toInt().coerceIn(256, 768))
+        waterShader = null
+        riverbedShader = null
+    }
+
+    /**
+     * 把 `<name>_anim.png` 精灵表切成单帧。
      *
      * 之前这里直接读 `<name>.png`（单帧图），而实际素材是 `_anim` 后缀的
      * 动画图集，文件名对不上 → 加载失败 → 每张图退化成洋红方块。
+     *
+     * [targetFrameW] / [targetFrameH] 是**单帧**的目标像素尺寸（至少给一个）：
+     * 整张图集会按同样比例缩放再切格 —— 注意别按整张表的宽度算，
+     * 4 列的图集按表宽缩放会让每帧只有预期的四分之一大。
      */
-    private fun loadAnimation(name: String, targetW: Int): List<Bitmap> {
-        val sheet = assets.scaled("${name}_anim", targetW) ?: return emptyList()
+    private fun loadAnimation(name: String, targetFrameW: Int, targetFrameH: Int = 0): List<Bitmap> {
         val cfg = assets.frameConfig("${name}_anim") ?: return emptyList()
         val (cols, rows) = cfg
         if (cols <= 0 || rows <= 0) return emptyList()
+        val sheet = if (targetFrameH > 0) {
+            assets.scaledToHeight("${name}_anim", targetFrameH * rows)
+        } else {
+            assets.scaled("${name}_anim", targetFrameW * cols)
+        } ?: return emptyList()
         val fw = sheet.width / cols
         val fh = sheet.height / rows
         if (fw <= 0 || fh <= 0) return emptyList()
@@ -166,6 +275,16 @@ class GameRenderer(
         return frames
     }
 
+    /** 给平铺纹理套一层乘法染色（白色 = 保持原色）。 */
+    private fun applyTint(color: Int) {
+        tilePaint.colorFilter =
+            if (color == Color.WHITE) null else PorterDuffColorFilter(color, PorterDuff.Mode.MULTIPLY)
+    }
+
+    /** 取颜色的 RGB 配上指定 alpha。 */
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
     /** 取当前应显示的帧。 */
     private fun frameAt(frames: List<Bitmap>, duration: Float, phase: Float): Bitmap? {
         if (frames.isEmpty()) return null
@@ -174,15 +293,28 @@ class GameRenderer(
         return frames[(t * frames.size).toInt().coerceIn(0, frames.size - 1)]
     }
 
-    /** 把水草精灵表切成单帧，并沿水底撒点。 */
-    private fun loadSeaweed(t: ViewTransform) {
-        seaweedFrames = loadAnimation("seaweed", (130 * t.scale).toInt().coerceAtLeast(32))
-        if (seaweedFrames.isEmpty()) return
+    /**
+     * 沿水底给水草撒点。
+     *
+     * 随机种子按水域区分：同一张图每次进来布局一致（不会每次重进都跳位置），
+     * 不同图之间布局不同。密度按水域配置微调，芦苇荡密、急流滩稀。
+     */
+    private fun buildSeaweedSpots(mapId: String) {
+        buildSpots(mapId, spacing = 320f)
+    }
+
+    private fun buildSpots(mapId: String, spacing: Float) {
+        if (seaweedFrames.isEmpty()) {
+            seaweedSpots = emptyList()
+            return
+        }
 
         // 沿水底均匀撒点，加点随机抖动避免看起来像栅栏
         val spots = mutableListOf<Triple<Float, Float, Float>>()
-        val count = (Space.W / 320f).toInt()
-        val rnd = kotlin.random.Random(20260924)
+        val count = (Space.W / spacing).toInt()
+        var seed = 20260924L
+        for (ch in mapId) seed = seed * 31 + ch.code
+        val rnd = kotlin.random.Random(seed)
         for (i in 0 until count) {
             val x = Space.POND_L + (Space.POND_R - Space.POND_L) * (i + 0.5f) / count +
                 (rnd.nextFloat() - 0.5f) * 160f
@@ -195,6 +327,9 @@ class GameRenderer(
     }
 
     fun render(canvas: Canvas, t: ViewTransform) {
+        // 换水域后立刻把环境素材换成新图的（云 / 水草 / 河床）
+        ensureEnv(t)
+
         shakeX = sin(world.time * 1.7f) * 2.2f
         shakeY = sin(world.time * 2.3f) * 1.6f
 
@@ -220,11 +355,12 @@ class GameRenderer(
     // ---------------- 天空 ----------------
 
     private fun drawSky(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val env = world.currentMap.env
         val top = t.toScreenY(0f)
         val surfaceY = t.toScreenY(Space.SURFACE_Y)
         val shader = LinearGradient(
             0f, top, 0f, surfaceY,
-            intArrayOf(Color.rgb(26, 58, 72), Color.rgb(64, 126, 138)),
+            intArrayOf(env.skyTop, env.skyBottom),
             null, Shader.TileMode.CLAMP
         )
         fillPaint.shader = shader
@@ -254,13 +390,14 @@ class GameRenderer(
     // ---------------- 水体 ----------------
 
     private fun drawWater(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val env = world.currentMap.env
         val surfaceY = t.toScreenY(Space.SURFACE_Y)
         val bottom = t.screenH
 
-        // 水体基础渐变
+        // 水体基础渐变（每张水域一套配色）
         val shader = LinearGradient(
             0f, surfaceY, 0f, bottom,
-            intArrayOf(Palette.WATER_TOP, Palette.WATER_MID, Palette.WATER_BOTTOM),
+            intArrayOf(env.waterTop, env.waterMid, env.waterBottom),
             floatArrayOf(0f, 0.45f, 1f),
             Shader.TileMode.CLAMP
         )
@@ -285,10 +422,12 @@ class GameRenderer(
             )
             shader.setLocalMatrix(m)
             tilePaint.shader = shader
+            applyTint(env.waterTint)
             tilePaint.alpha = 42
             canvas.drawRect(0f, surfaceY, t.screenW, bottom, tilePaint)
             tilePaint.alpha = 255
             tilePaint.shader = null
+            applyTint(Color.WHITE)
         }
 
         // 水底河床：只贴在屏幕最底部一条，保持原始宽高比横向平铺，
@@ -303,15 +442,17 @@ class GameRenderer(
             m.postTranslate(-camX * t.scale % (bed.width * t.scale), 0f)
             shader.setLocalMatrix(m)
             tilePaint.shader = shader
+            applyTint(env.bedTint)
             tilePaint.alpha = 170
             val bedH = bed.height * t.scale
             canvas.drawRect(0f, bottom - bedH, t.screenW, bottom, tilePaint)
             tilePaint.alpha = 255
             tilePaint.shader = null
+            applyTint(Color.WHITE)
         }
 
         // 水面高光线
-        strokePaint.color = Color.argb(150, 200, 245, 255)
+        strokePaint.color = withAlpha(env.beam, 150)
         strokePaint.strokeWidth = 5f * t.scale
         val path = Path()
         path.moveTo(0f, surfaceY)
@@ -325,7 +466,7 @@ class GameRenderer(
         canvas.drawPath(path, strokePaint)
 
         // 水面亮带
-        fillPaint.color = Color.argb(30, 190, 240, 255)
+        fillPaint.color = withAlpha(env.beam, 30)
         canvas.drawRect(0f, surfaceY, t.screenW, surfaceY + 46f * t.scale, fillPaint)
 
         // 水下光柱：几道斜向的柔和光带，缓慢左右摆动
@@ -338,7 +479,7 @@ class GameRenderer(
             val width = (110f + (i % 3) * 55f) * t.scale
             val bottomY = t.screenH
             val alpha = (14 + (i % 2) * 6)
-            fillPaint.color = Color.argb(alpha, 200, 245, 255)
+            fillPaint.color = withAlpha(env.beam, alpha)
             val path = Path()
             path.moveTo(topX - width * 0.35f, surfaceY)
             path.lineTo(topX + width * 0.35f, surfaceY)
@@ -461,35 +602,147 @@ class GameRenderer(
         canvas.drawCircle(x, y - bounce, s * 0.2f, strokePaint)
     }
 
+    // ---------------- 船只摆放（主角与帮手共用）----------------
+
+    /**
+     * 量一张立绘里"船底"（木色船体最低点）的比例高度。
+     *
+     * 为什么不直接取"最下面的不透明像素"：帮手立绘里船底还带一圈蓝色水花，
+     * 取最低像素会量到水花下沿，船就被抬高了一截。这里只认木色船体，
+     * 水花和水面高光都会被跳过。
+     *
+     * 逐帧动画的图集裁切方式与静止立绘不同，帧内留白也不一样，
+     * 所以每个动画帧都要各量一次 —— 否则一抛竿船就会上下跳。
+     */
+    private fun hullFracOf(bmp: Bitmap): Float {
+        val w = bmp.width
+        val row = IntArray(w)
+        for (y in bmp.height - 1 downTo 0) {
+            bmp.getPixels(row, 0, w, 0, y, w, 1)
+            for (x in 0 until w) {
+                val c = row[x]
+                if (Color.alpha(c) <= 12) continue
+                val r = Color.red(c)
+                val g = Color.green(c)
+                val b = Color.blue(c)
+                // 木色：暖色、红明显大于蓝
+                if (r > b + 25 && r > 90 && g > b) return (y + 1f) / bmp.height
+            }
+        }
+        return bottomContentFrac(bmp)
+    }
+
+    /** 兜底：整张图最下面的不透明像素。 */
+    private fun bottomContentFrac(bmp: Bitmap): Float {
+        val w = bmp.width
+        val row = IntArray(w)
+        for (y in bmp.height - 1 downTo 0) {
+            bmp.getPixels(row, 0, w, 0, y, w, 1)
+            for (x in 0 until w) {
+                if (Color.alpha(row[x]) > 12) return (y + 1f) / bmp.height
+            }
+        }
+        return 0.9f
+    }
+
+    /**
+     * 量竿尖在立绘里的位置：取"最靠上、且偏右"的内容像素。
+     * 抛竿动画的每一帧竿尖角度都不同，只能逐帧量。
+     */
+    private fun tipFracOf(bmp: Bitmap): FloatArray {
+        val w = bmp.width
+        val h = bmp.height
+        val row = IntArray(w)
+        var bestScore = Float.MAX_VALUE
+        var bestX = 0.9f
+        var bestY = 0.25f
+        for (y in 0 until h) {
+            bmp.getPixels(row, 0, w, 0, y, w, 1)
+            for (x in 0 until w) {
+                if (Color.alpha(row[x]) <= 40) continue
+                val score = y.toFloat() / h - 0.55f * (x.toFloat() / w)
+                if (score < bestScore) {
+                    bestScore = score
+                    bestX = (x + 1f) / w
+                    bestY = y.toFloat() / h
+                }
+            }
+        }
+        return floatArrayOf(bestX, bestY)
+    }
+
+    /**
+     * 算出立绘在屏幕上的矩形（只算不画，供钓线先取竿尖坐标）。
+     * 结果写进 [boatRect]，顺序是 left / top / width / height。
+     */
+    private fun layoutBoat(
+        bmp: Bitmap,
+        worldX: Float,
+        waterY: Float,
+        hullFrac: Float,
+        t: ViewTransform,
+        camX: Float,
+    ) {
+        val w = bmp.width * t.scale
+        val h = bmp.height * t.scale
+        // 立绘里的船底像素正好落在水位线上 —— 主角和帮手用的是同一套规则
+        val cx = t.toScreenX(worldX - camX)
+        val cy = t.toScreenY(waterY) - (hullFrac - 0.5f) * h
+        boatRect[0] = cx - w / 2f
+        boatRect[1] = cy - h / 2f
+        boatRect[2] = w
+        boatRect[3] = h
+    }
+
+    /** [boatRect] 内某个比例点的屏幕 x（朝左时按镜像取）。 */
+    private fun anchorX(fracX: Float, facing: Float): Float {
+        val fx = if (facing < 0f) 1f - fracX else fracX
+        return boatRect[0] + boatRect[2] * fx
+    }
+
+    /** [boatRect] 内某个比例点的屏幕 y。 */
+    private fun anchorY(fracY: Float): Float = boatRect[1] + boatRect[3] * fracY
+
     // ---------------- 钓手（水面的小船）----------------
 
     private fun drawHelpers(canvas: Canvas, t: ViewTransform, camX: Float) {
         val bmp = bmpHelper ?: return
         val halfView = t.screenW / t.scale / 2f
+        val castFrames = helperCastFrames
         for (h in world.helpers) {
-            if (abs(h.x - camX) > halfView + 200f) continue
-            val cx = t.toScreenX(h.x - camX)
-            val cy = t.toScreenY(h.y)
+            if (abs(h.x - camX) > halfView + 220f) continue
 
-            // 钓线垂到水下的目标鱼
-            if (h.state == HelperState.CASTING) {
-                strokePaint.color = Color.argb(180, 240, 240, 240)
-                strokePaint.strokeWidth = 2f * t.scale
-                canvas.drawLine(cx, cy + 18f * t.scale, t.toScreenX(h.lineX - camX), t.toScreenY(h.lineY), strokePaint)
+            // 抛竿时播逐帧动画（甩竿），平时用静止立绘
+            val playing = castFrames.isNotEmpty() && h.castAnim >= 0f
+            val idx = if (playing) castFrameIndex(h.castAnim, castFrames.size) else -1
+            val frame = if (idx >= 0) castFrames[idx] else bmp
+            val hullFrac = if (idx >= 0) helperCastHull[idx] else BoatArt.HELPER_HULL_FRAC
+
+            layoutBoat(frame, h.x, h.y, hullFrac, t, camX)
+            val tip = if (idx >= 0) helperCastTips.getOrNull(idx) else null
+            val tipX = anchorX(tip?.get(0) ?: BoatArt.HELPER_ROD_TIP_X, h.facing)
+            val tipY = anchorY(tip?.get(1) ?: BoatArt.HELPER_ROD_TIP_Y)
+
+            // 钓线：从**竿尖**垂到每条目标鱼（并行作业时会有好几条）
+            for (f in h.targets) {
+                strokePaint.color = Color.argb(170, 240, 240, 240)
+                strokePaint.strokeWidth = 1.8f * t.scale
+                canvas.drawLine(tipX, tipY, t.toScreenX(f.x - camX), t.toScreenY(f.y), strokePaint)
             }
 
             SpriteDraw.draw(
-                canvas, bmp, cx, cy,
+                canvas, frame, boatRect[0] + boatRect[2] / 2f, boatRect[1] + boatRect[3] / 2f,
                 scale = t.scale,
                 alpha = 240,
                 flipX = h.facing < 0f,
                 rotation = sin(h.wiggle * 0.6f) * 3.5f,
             )
 
-            if (h.state == HelperState.CASTING) {
+            // 竿尖上一个小金点：表示这条船正在作业
+            if (h.targets.isNotEmpty()) {
                 paint.color = Palette.TEXT_GOLD
                 paint.alpha = 220
-                canvas.drawCircle(cx, cy - bmp.height * 0.55f, 6f * t.scale, paint)
+                canvas.drawCircle(tipX, tipY, 4f * t.scale, paint)
                 paint.alpha = 255
             }
         }
@@ -501,8 +754,26 @@ class GameRenderer(
         val b = world.bobber
         if (!b.isActive) return
 
-        val rodX = t.toScreenX(world.boatX - camX + 40f)
-        val rodY = t.toScreenY(Space.SURFACE_Y - 120f)
+        // 线的起点是**竿尖**：先按当前立绘（含抛竿动画帧）摆一次位置，
+        // 从里面取竿尖的屏幕坐标。之前这里写死成"船右边 40、水面上方 120"，
+        // 船一翻身或者换素材，线就从船身上穿过去了。
+        val idx = playerCastIndex()
+        val frame = if (idx >= 0) playerCastFrames[idx] else bmpPlayerBoat
+        val rodX: Float
+        val rodY: Float
+        if (frame != null) {
+            layoutBoat(
+                frame, world.boatX, playerWaterY(),
+                if (idx >= 0) playerCastHull[idx] else BoatArt.PLAYER_HULL_FRAC, t, camX,
+            )
+            val tip = if (idx >= 0) playerCastTips.getOrNull(idx) else null
+            rodX = anchorX(tip?.get(0) ?: BoatArt.PLAYER_ROD_TIP_X, world.boatFacing)
+            rodY = anchorY(tip?.get(1) ?: BoatArt.PLAYER_ROD_TIP_Y)
+        } else {
+            rodX = t.toScreenX(world.boatX - camX)
+            rodY = t.toScreenY(Space.BOAT_WATERLINE - 100f)
+        }
+
         val bx = t.toScreenX(b.x - camX)
         val by = t.toScreenY(b.y)
 
@@ -555,20 +826,82 @@ class GameRenderer(
     // ---------------- 玩家的船（停在水面）----------------
 
     /**
-     * 玩家的船：**带钓手立绘的侧视小船**，骑在水面线上。
+     * 玩家的船：**带钓手立绘的侧视小船**，船底贴在水位线上。
      *
      * 用 [bmpPlayerBoat]（人物+船+竿一体的立绘），而不是
      * 「空船 + 单独一根放大鱼竿」—— 后者会画出一根巨大的竿，
      * 且和帮手的立绘风格对不上。
+     *
+     * 与帮手共用 [layoutBoat] 的对齐规则，并按 [World.boatFacing] 左右翻转。
      */
     private fun drawPlayerBoat(canvas: Canvas, t: ViewTransform, camX: Float) {
         val bmp = bmpPlayerBoat ?: return
+        val facing = world.boatFacing
+        val waterY = playerWaterY()
+
+        // 水花先画（在船底下），船再压上去 —— 和帮手立绘下面那圈同一个效果
+        drawPlayerSplash(canvas, t, camX, waterY)
+
+        // 抛竿时播逐帧动画，其余时间用静止立绘
+        val idx = playerCastIndex()
+        val frame = if (idx >= 0) playerCastFrames[idx] else bmp
+        val hullFrac = if (idx >= 0) playerCastHull[idx] else BoatArt.PLAYER_HULL_FRAC
+
+        layoutBoat(frame, world.boatX, waterY, hullFrac, t, camX)
+        SpriteDraw.draw(
+            canvas, frame, boatRect[0] + boatRect[2] / 2f, boatRect[1] + boatRect[3] / 2f,
+            scale = t.scale,
+            flipX = facing < 0f,
+        )
+    }
+
+    /** 抛竿动画当前该播第几帧。 */
+    private fun castFrameIndex(animTime: Float, frameCount: Int): Int =
+        ((animTime / Helper.CAST_ANIM_TIME) * frameCount)
+            .toInt().coerceIn(0, frameCount - 1)
+
+    /** 主角当前该显示的抛竿帧下标；不在抛竿动画中则返回 -1。 */
+    private fun playerCastIndex(): Int {
+        if (playerCastFrames.isEmpty() || world.castAnim < 0f) return -1
+        return castFrameIndex(world.castAnim, playerCastFrames.size)
+    }
+
+    /** 主角船当前的水位线（带轻微起伏，让船看着是浮着的）。 */
+    private fun playerWaterY(): Float =
+        Space.BOAT_WATERLINE + sin(world.time * 1.5f) * 3f
+
+    /** 主角船底的水花：静止时轻轻荡，划船时更宽更亮。 */
+    private fun drawPlayerSplash(canvas: Canvas, t: ViewTransform, camX: Float, waterY: Float) {
+        val splash = bmpPlayerSplash ?: return
         val cx = t.toScreenX(world.boatX - camX)
-        // 轻微起伏，让船看起来是浮在水上的
-        val bob = sin(world.time * 1.5f) * 3f
-        // 船底压在水面线上，吃水线以下被水色盖住
-        val cy = t.toScreenY(Space.SURFACE_Y) - bmp.height * t.scale * 0.30f + bob * t.scale
-        SpriteDraw.draw(canvas, bmp, cx, cy, scale = t.scale)
+        val cy = t.toScreenY(waterY)
+        val moving = world.isBoatMoving()
+        val breathe = 1f + sin(world.time * 2.4f) * 0.06f
+        SpriteDraw.draw(
+            canvas, splash, cx, cy,
+            scale = t.scale * breathe * (if (moving) 1.12f else 1f),
+            alpha = if (moving) 255 else 225,
+        )
+
+        // 划船时在船尾拖出一串涟漪，表现"正在破水前进"
+        if (moving) {
+            val dir = world.boatFacing
+            for (i in 1..3) {
+                val p = ((world.time * 1.6f + i * 0.33f) % 1f)
+                val rx = cx - dir * (30f + p * 90f) * t.scale
+                val ry = cy + (i - 1) * 3f * t.scale
+                strokePaint.color = Color.argb(((1f - p) * 120).toInt(), 220, 250, 255)
+                strokePaint.strokeWidth = 2f * t.scale
+                canvas.drawOval(
+                    RectF(
+                        rx - 26f * p * t.scale - 8f * t.scale,
+                        ry - 7f * p * t.scale - 3f * t.scale,
+                        rx + 26f * p * t.scale + 8f * t.scale,
+                        ry + 7f * p * t.scale + 3f * t.scale,
+                    ), strokePaint
+                )
+            }
+        }
     }
 
     // ---------------- 粒子与文字 ----------------

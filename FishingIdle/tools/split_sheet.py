@@ -333,8 +333,17 @@ def main():
     dst = sys.argv[2]
     out_json = sys.argv[3] if len(sys.argv) > 3 else None
     out_cols = int(sys.argv[4]) if len(sys.argv) > 4 else 4
+    # 第 5 个参数可强制网格 "行x列"（例如 2x2）。
+    # 自动探测会在"内容恰好被切成上下两半也不触边"时选错网格，
+    # 那种情况必须人工指定 —— 和 build_animations.py 的 forced 是同一个用途。
+    forced = sys.argv[5] if len(sys.argv) > 5 else None
 
-    im, (rows, cols), score = detect_grid(src)
+    if forced:
+        rows, cols = (int(v) for v in forced.lower().split("x"))
+        im = Image.open(src).convert("RGBA")
+        score = 0.0
+    else:
+        im, (rows, cols), score = detect_grid(src)
     frames = extract_frames(im, rows, cols)
     norm = normalize(frames)
     if not norm:

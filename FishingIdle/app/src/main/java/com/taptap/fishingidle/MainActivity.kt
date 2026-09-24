@@ -401,12 +401,15 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // 商店
+            // 商店。onBuy / onUnlockMap 返回是否成功，面板据此给出购买反馈。
             if (showShop) {
                 ShopPanel(
                     state = gameState,
                     assets = assets,
                     world = world,
+                    // revision 必须在**面板打开期间持续变化**，
+                    // 否则商店里的数量/价格不会实时刷新（要退出去再进来才更新）
+                    revision = revision,
                     onUnlockMap = { map ->
                         val ok = gameState.unlockMap(map)
                         if (ok) {
@@ -418,6 +421,7 @@ class MainActivity : ComponentActivity() {
                             audio.play("sfx_cant_buy", 0.7f)
                         }
                         revision++
+                        ok
                     },
                     onBuy = { def ->
                         val ok = gameState.buy(def)
@@ -433,6 +437,7 @@ class MainActivity : ComponentActivity() {
                             audio.play("sfx_cant_buy", 0.7f)
                         }
                         revision++
+                        ok
                     },
                     onClose = {
                         audio.play("sfx_click", 0.6f)
@@ -459,6 +464,7 @@ class MainActivity : ComponentActivity() {
                 PrestigePanel(
                     state = gameState,
                     assets = assets,
+                    revision = revision,
                     onPrestige = {
                         val gained = gameState.doPrestige()
                         if (gained > 0) {
@@ -496,6 +502,20 @@ class MainActivity : ComponentActivity() {
                         saveManager.save(gameState, settings)
                     },
                     onReset = { showReset = true },
+                    // 之前这里没传回调，MenuPanel 内部默认是空实现，
+                    // 「返回主菜单」点了完全没反应。现在真的回得去了。
+                    onExitToMainMenu = {
+                        audio.play("sfx_click", 0.6f)
+                        saveManager.save(gameState, settings)
+                        showMenu = false
+                        showShop = false
+                        showPrestige = false
+                        showReset = false
+                        world.stopMoving()
+                        gameViewRef?.paused = true
+                        inGame = false
+                        revision++
+                    },
                     onClose = {
                         audio.play("sfx_click", 0.6f)
                         saveManager.save(gameState, settings)

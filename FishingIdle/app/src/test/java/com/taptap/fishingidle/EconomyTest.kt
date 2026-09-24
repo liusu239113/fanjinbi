@@ -6,6 +6,7 @@ import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.SaveData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,19 +44,95 @@ class EconomyTest {
         assertEquals(260.0, m.price(1), 0.001)
         assertEquals(338.0, m.price(2), 0.001)
 
-        // helper: base=1.45, mult=10
+        // helper: base=1.75, mult=500（门槛比早期版本高，总数收到 20 名）
         val h = def("helper")
-        assertEquals(120.0, h.price(0), 0.001)
-        assertEquals(192.0, h.price(1), 0.001)   // floor(1.6^1 * 120)
-        assertEquals(307.0, h.price(2), 0.001)   // floor(1.6^2 * 120)
+        assertEquals(500.0, h.price(0), 0.001)
+        assertEquals(875.0, h.price(1), 0.001)     // floor(1.75 * 500)
+        assertEquals(1531.0, h.price(2), 0.001)    // floor(1.75^2 * 500)
+        assertEquals(20, h.maxPurchases)
+    }
+
+    @Test
+    fun `钓手要先自己钓上几条鱼才会出现`() {
+        val s = GameState()
+        assertFalse("开局就有钓手可买的话，等于一进游戏就能挂机", def("helper").visibleWhen(s))
+        repeat(8) { s.onCatchSuccess() }
+        assertTrue(def("helper").visibleWhen(s))
+    }
+
+    @Test
+    fun `钓手上限是20名`() {
+        val s = GameState()
+        s.money = 1e30
+        val h = def("helper")
+        repeat(20) { assertTrue("第 ${it + 1} 名应该买得起", s.buy(h)) }
+        assertEquals(20, s.helpers)
+        assertFalse("第 21 名不该再买得到", s.buy(h))
+        assertEquals(20, s.helpers)
+    }
+
+    @Test
+    fun `鱼群聚集技能会提高鱼苗购买上限`() {
+        val s = GameState()
+        s.money = 1e30
+        val d = def("common_fish")
+        assertEquals(100, d.effectiveMax(s))
+        // 技能「鱼群聚集」10 级 → 每种鱼 +100 容量，以前完全没接线
+        s.skillFishCapacity = 100
+        assertEquals(200, d.effectiveMax(s))
+        repeat(200) { assertTrue(s.buy(d)) }
+        assertFalse(s.buy(d))
+        assertEquals(GameState.INITIAL_COMMON_FISH + 200, s.commonFish)
+    }
+
+    /** 把状态里所有会变的字段拼成一个指纹，用来判断一次购买到底动没动东西。 */
+    private fun fingerprint(s: GameState): String = buildString {
+        append(s.money)
+        append(s.commonFish).append(s.rareFish).append(s.epicFish).append(s.legendFish)
+        append(s.helpers)
+        append(s.commonValueAdd).append(s.rareValueAdd)
+        append(s.epicValueAdd).append(s.legendValueAdd)
+        append(s.commonValueMul).append(s.rareValueMul).append(s.epicValueMul).append(s.legendValueMul)
+        append(s.commonReelSpeed).append(s.rareReelSpeed).append(s.epicReelSpeed).append(s.legendReelSpeed)
+        append(s.helperEfficiency).append(s.autoReelChance)
+        append(s.autoReelUnlocked).append(s.autoCastUnlocked)
+        append(s.helperCanRare).append(s.helperCanEpic).append(s.helperCanLegend)
+        append(s.chainReaction)
+        append(s.rarityMul).append(s.mapBonus).append(s.helperSpeed).append(s.helperParallel)
+        append(s.comboPower).append(s.comboKeep).append(s.autoReelSpeed).append(s.luckyHook)
+        for (kind in Rarity.entries) append(s.catchValue(kind)).append(s.reelSpeed(kind))
+    }
+
+    /**
+     * 每个商店条目都必须真的改变点什么。
+     *
+     * 「买了没效果」这种 bug 光看代码很难发现 —— 之前「并行作业」「鱼群聚集」
+     * 「自动绞盘」三条升级就是这样挂在那里白卖的。这条测试直接对每条购买项
+     * 取一次状态指纹，买了没变化就报错。
+     */
+    @Test
+    fun `每个商店条目买了都真的有效果`() {
+        assertEquals("购买项数量变了，记得补这条测试", 33, Content.purchasables.size)
+        for (def in Content.purchasables) {
+            val s = GameState()
+            s.money = 1e30
+            val before = fingerprint(s)
+            assertTrue("买不了：${def.name}(${def.id})", s.buy(def))
+            assertNotEquals("买了没任何变化：${def.name}(${def.id})", before, fingerprint(s))
+        }
     }
 
     @Test
     fun `一次性解锁价格恒定`() {
         val d = def("auto_reel_unlock")
-        assertEquals(1000.0, d.price(0), 0.001)
-        assertEquals(1000.0, d.price(5), 0.001)
+        assertEquals(1200.0, d.price(0), 0.001)
+        assertEquals(1200.0, d.price(5), 0.001)
         assertEquals(1, d.maxPurchases)
+        // 自动收线要一开始就买得到，否则玩家永远在手动点屏幕
+        assertTrue("自动收线应当开局可见", d.visibleWhen(GameState()))
+        val cast = def("auto_cast_unlock")
+        assertEquals(1, cast.maxPurchases)
+        assertEquals(15000.0, cast.price(0), 0.001)
     }
 
     @Test

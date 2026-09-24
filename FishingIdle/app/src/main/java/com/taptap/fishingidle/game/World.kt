@@ -20,6 +20,15 @@ object Space {
     /** 水面线。上方是天空与船，下方是水下的钓场。 */
     const val SURFACE_Y = 330f
 
+    /**
+     * 船底（龙骨）所在的水位线。
+     *
+     * 主角与**所有**帮手都以这条线对齐 —— 之前主角按立绘中心画、
+     * 帮手按另一套偏移画，两者相差二十多个世界单位，看起来就是一高一低。
+     * 现在两边都按"立绘里的船底像素贴这条线"来画。
+     */
+    const val BOAT_WATERLINE = SURFACE_Y + 16f
+
     /** 鱼群活动区域。 */
     const val POND_L = 90f
     const val POND_R = W - 90f
@@ -34,6 +43,44 @@ object Space {
      * 收到 190 大约占屏宽 28%，必须真的抛到鱼边上才行。
      */
     const val MAX_BITE_RANGE = 190f
+}
+
+/**
+ * 船只立绘的几何参数（世界单位）。
+ *
+ * 渲染层用这些值把立绘摆到水位线上，[World] 用同一份数据算竿尖坐标，
+ * 两边共用一处定义 —— 否则线、水花、船三者很容易各按各的偏移画，对不齐。
+ *
+ * 比例值都是从素材里量出来的（见 tools/measure_boat.py）：
+ * 换船体素材必须同步更新这里，不然船会沉进水里或浮在半空。
+ */
+object BoatArt {
+    /** 立绘高度（世界单位）。主角与帮手按高度统一，视觉大小才一致。 */
+    const val HEIGHT = 170f
+
+    /** 船底（龙骨最低点）像素所在高度占立绘高度的比例。 */
+    const val PLAYER_HULL_FRAC = 0.902f
+    const val HELPER_HULL_FRAC = 0.807f
+
+    /** 竿尖在立绘中的位置（比例坐标，朝右时；朝左按镜像取）。 */
+    const val PLAYER_ROD_TIP_X = 0.924f
+    const val PLAYER_ROD_TIP_Y = 0.258f
+    const val HELPER_ROD_TIP_X = 0.901f
+    const val HELPER_ROD_TIP_Y = 0.266f
+
+    /** 主角立绘宽高比（384×256）。 */
+    const val PLAYER_ASPECT = 384f / 256f
+    /** 帮手立绘宽高比（192×192）。 */
+    const val HELPER_ASPECT = 1f
+
+    /** 以立绘中心绘制时，中心相对水位线的 y 偏移（朝上的负方向）。 */
+    fun centerOffsetY(hullFrac: Float): Float = -(hullFrac - 0.5f) * HEIGHT
+
+    /** 主角竿尖相对船中心的偏移。 */
+    fun rodTipOffset(boatFacing: Float): Pair<Float, Float> = Pair(
+        (PLAYER_ROD_TIP_X - 0.5f) * HEIGHT * PLAYER_ASPECT * boatFacing,
+        centerOffsetY(PLAYER_HULL_FRAC) + (PLAYER_ROD_TIP_Y - 0.5f) * HEIGHT,
+    )
 }
 
 enum class FishState { SWIMMING, APPROACHING, BITING, HOOKED, CAUGHT, ESCAPED }
@@ -257,90 +304,101 @@ class Bobber {
 
 enum class BobberEvent { Landed, Bite, Missed, Reeled, Empty }
 
-/** 自动钓手状态。 */
-enum class HelperState { IDLE, ROWING, CASTING }
-
 /**
  * 自动钓手：一条漂在水面上的小船，会划到目标鱼上方抛线把它钓上来。
- * 船始终在水面（SURFACE_Y），钓线垂到水下的鱼身上 —— 与玩家自己的钓法一致。
+ * 船始终停在水位线 [Space.BOAT_WATERLINE] 上，钓线垂到水下的鱼身上 ——
+ * 与玩家自己的钓法一致。
+ *
+ * 「并行作业」升级（[GameState.helperParallel]）解锁后，一条船可以同时
+ * 照看多条鱼：每条鱼各占一条钓线，一起收线、一起入账。
  */
 class Helper(var x: Float) {
-    /** 船始终浮在水面。 */
-    var y = Space.SURFACE_Y - 24f
+    /** 船底（龙骨）所在的水位线，渲染层按它对齐立绘。 */
+    var y = Space.BOAT_WATERLINE
 
-    var state = HelperState.IDLE
-        set(value) {
-            field = value
-            stateTime = 0f
-        }
-    var stateTime = 0f
-    var idleDuration = 0.6f
-    var targetFish: Fish? = null
+    /** 当前照看的鱼，与 [lineProgress] 一一对应。 */
+    val targets = mutableListOf<Fish>()
+    /** 各条钓线的收线进度 0..1，满了就把鱼钓上来。 */
+    private val lineProgress = mutableListOf<Float>()
+
     var facing = 1f
     var wiggle = Random.nextFloat() * 6.2832f
-    /** 钓线终点（目标鱼的位置）。 */
-    var lineX = x
-    var lineY = Space.SURFACE_Y
+
+    /**
+     * 抛竿帧动画计时（秒）。< 0 表示不播放。
+     * 新认领一条鱼时归零，渲染层据此播放"甩竿"的逐帧动画。
+     */
+    var castAnim = -1f
+
     /** 划船时的上下浮动相位。 */
     private var bobPhase = Random.nextFloat() * 6.2832f
 
     fun update(dt: Float, gameState: GameState, world: World) {
-        stateTime += dt
         wiggle += dt * 3.2f
         bobPhase += dt * 2.4f
-        y = Space.SURFACE_Y - 24f + sin(bobPhase) * 5f
+        y = Space.BOAT_WATERLINE + sin(bobPhase) * 5f
+        if (castAnim >= 0f) {
+            castAnim += dt
+            if (castAnim > CAST_ANIM_TIME) castAnim = -1f
+        }
 
-        when (state) {
-            HelperState.IDLE -> {
-                if (stateTime >= idleDuration) {
-                    val t = world.pickTargetForHelper(this)
-                    if (t != null) {
-                        targetFish = t
-                        state = HelperState.ROWING
-                    } else {
-                        stateTime = 0f
-                        idleDuration = 0.5f
-                    }
-                }
-            }
-
-            HelperState.ROWING -> {
-                val f = targetFish
-                if (f == null || f.state != FishState.SWIMMING) {
-                    world.releaseClaim(this)
-                    targetFish = null
-                    state = HelperState.IDLE
-                    idleDuration = 0.3f
-                } else {
-                    val dx = f.x - x
-                    val speed = 260f *
-                        (gameState.helperEfficiency * gameState.skillHelperMultiplier +
-                            gameState.helperSpeed).toFloat()
-                    if (abs(dx) < 24f) {
-                        state = HelperState.CASTING
-                        lineX = f.x
-                        lineY = f.y
-                    } else {
-                        x += (if (dx > 0f) 1f else -1f) * speed * dt
-                        x = x.coerceIn(Space.POND_L, Space.POND_R)
-                        facing = if (dx > 0f) 1f else -1f
-                    }
-                }
-            }
-
-            HelperState.CASTING -> {
-                val f = targetFish
-                if (f != null) { lineX = f.x; lineY = f.y }
-                if (stateTime >= 0.7f) {
-                    if (f != null && f.state == FishState.SWIMMING) {
-                        world.helperCatch(this, f)
-                    }
-                    state = HelperState.IDLE
-                    idleDuration = (0.35f + Random.nextFloat() * 0.5f) /
-                        (gameState.helperEfficiency * gameState.skillHelperMultiplier).toFloat()
-                }
+        // 目标被别的钓手带走 / 逃脱后，把这条线清掉重新找
+        for (i in targets.indices.reversed()) {
+            val f = targets[i]
+            if (f.state != FishState.SWIMMING) {
+                f.claimedBy = null
+                targets.removeAt(i)
+                lineProgress.removeAt(i)
             }
         }
+
+        // 补足到当前容量（1 + 并行作业等级）
+        val capacity = 1 + gameState.helperParallel
+        if (targets.size < capacity) {
+            val fresh = world.claimTargetsForHelper(this, capacity - targets.size)
+            if (fresh.isNotEmpty()) {
+                targets.addAll(fresh)
+                repeat(fresh.size) { lineProgress.add(0f) }
+                castAnim = 0f
+            }
+        }
+
+        if (targets.isEmpty()) return
+
+        // 朝当前所有目标的中位位置划过去，尽量站在鱼群中间
+        val avgX = targets.sumOf { it.x.toDouble() }.toFloat() / targets.size
+        val dx = avgX - x
+        val speed = 260f *
+            (gameState.helperEfficiency * gameState.skillHelperMultiplier +
+                gameState.helperSpeed).toFloat()
+        if (abs(dx) >= 24f) {
+            x += (if (dx > 0f) 1f else -1f) * speed * dt
+            x = x.coerceIn(Space.POND_L, Space.POND_R)
+            facing = if (dx > 0f) 1f else -1f
+        }
+
+        // 收线：每条线独立推进，效率越高收得越快
+        val gain = dt / (CATCH_TIME / (gameState.helperEfficiency * gameState.skillHelperMultiplier).toFloat())
+        for (i in targets.indices.reversed()) {
+            val f = targets[i]
+            val p = lineProgress[i] + gain
+            if (p >= 1f) {
+                world.helperCatch(this, f)
+                f.claimedBy = null
+                targets.removeAt(i)
+                lineProgress.removeAt(i)
+            } else {
+                lineProgress[i] = p
+            }
+        }
+    }
+
+    companion object {
+        /** 抛竿动画总时长（秒），与渲染层的帧数对应。 */
+        const val CAST_ANIM_TIME = 0.55f
+
+        /** 钓上一条鱼所需的时间（秒，未计效率加成）。 */
+        const val CATCH_TIME = 2.4f
     }
 }
 
@@ -423,6 +481,20 @@ class World(val gameState: GameState) {
     var boatX = Space.W / 2f
         private set
 
+    /**
+     * 玩家船的朝向：1 = 朝右（立绘原始方向），-1 = 朝左。
+     * 按左右键划船时翻转立绘，竿尖与鱼线随之镜像。
+     */
+    var boatFacing = 1f
+        private set
+
+    /**
+     * 玩家抛竿动画计时（秒）。< 0 表示不播放。
+     * [castLine] 时归零，渲染层据此播放甩竿的逐帧动画。
+     */
+    var castAnim = -1f
+        private set
+
     /** 船的移动速度（世界单位/秒）。 */
     private val boatSpeed = 520f
 
@@ -446,6 +518,7 @@ class World(val gameState: GameState) {
         if (isMovingLeft) dir -= 1f
         if (isMovingRight) dir += 1f
         if (dir == 0f) return
+        boatFacing = dir
         boatX = (boatX + dir * boatSpeed * dt).coerceIn(Space.POND_L, Space.POND_R)
         keepBoatOnScreen()
     }
@@ -468,6 +541,9 @@ class World(val gameState: GameState) {
         cameraX = cameraX.coerceIn(minX, maxX)
     }
 
+    /** 玩家此刻是否正按着左/右键划船（渲染层据此放大水花、拖出尾迹）。 */
+    fun isBoatMoving(): Boolean = isMovingLeft || isMovingRight
+
     fun setMoveLeft(pressed: Boolean) {
         isMovingLeft = pressed
     }
@@ -484,7 +560,9 @@ class World(val gameState: GameState) {
 
     /** 点击水面把船划过去（点哪走哪）。 */
     fun sailTo(targetX: Float) {
-        boatX = targetX.coerceIn(Space.POND_L, Space.POND_R)
+        val clamped = targetX.coerceIn(Space.POND_L, Space.POND_R)
+        if (abs(clamped - boatX) > 2f) boatFacing = if (clamped > boatX) 1f else -1f
+        boatX = clamped
         keepBoatOnScreen()
     }
 
@@ -573,6 +651,17 @@ class World(val gameState: GameState) {
 
     // ---------------- 玩家操作 ----------------
 
+    /** 玩家竿尖的世界坐标（浮标起飞点）。 */
+    fun rodTipX(): Float {
+        val (dx, _) = BoatArt.rodTipOffset(boatFacing)
+        return boatX + dx
+    }
+
+    fun rodTipY(): Float {
+        val (_, dy) = BoatArt.rodTipOffset(boatFacing)
+        return Space.BOAT_WATERLINE + dy
+    }
+
     /** 落点附近 [Space.MAX_BITE_RANGE] 内是否有可钓的鱼。 */
     fun hasFishNear(x: Float, y: Float): Boolean = fishes.any {
         it.state == FishState.SWIMMING && hypot(it.x - x, it.y - y) <= Space.MAX_BITE_RANGE
@@ -594,19 +683,27 @@ class World(val gameState: GameState) {
         val cx = tx.coerceIn(Space.POND_L, Space.POND_R)
         val cy = ty.coerceIn(Space.POND_T, Space.POND_B)
 
-        // 挑落点附近的空闲鱼，太远的够不着
+        // 挑落点附近的空闲鱼，太远的够不着。
+        // 技能「深渊直觉」（skillRareWeightBonus）让稀有鱼更抢食：
+        // 稀有度越高，等效距离越近，于是更容易选中它。
         val fish = fishes
+            .asSequence()
             .filter { it.state == FishState.SWIMMING }
             .filter { hypot(it.x - cx, it.y - cy) <= Space.MAX_BITE_RANGE }
-            .minByOrNull { hypot(it.x - cx, it.y - cy) }
+            .minByOrNull {
+                hypot(it.x - cx, it.y - cy) /
+                    (1.0 + gameState.skillRareWeightBonus * it.kind.ordinal).toFloat()
+            }
 
         fish?.let {
             it.setTarget(cx, cy)
             it.state = FishState.APPROACHING
         }
 
-        bobber.cast(boatX, Space.SURFACE_Y - 70f, cx, cy)
+        // 浮标从**竿尖**飞出去，而不是从船肚子——线必须接在竿尖上
+        bobber.cast(rodTipX(), rodTipY(), cx, cy)
         bobber.hookedFish = fish
+        castAnim = 0f
         if (fish != null) {
             val range = Content.biteDelay(fish.kind)
             bobber.biteTimer = range.start + Random.nextFloat() * (range.endInclusive - range.start)
@@ -655,24 +752,30 @@ class World(val gameState: GameState) {
 
     // ---------------- 钓手 ----------------
 
-    /** 为指定钓手挑一个目标：优先近的、可钓的、没被其他钓手预定的鱼。 */
-    fun pickTargetForHelper(helper: Helper): Fish? {
-        val reachable = fishes.filter { f ->
-            f.state == FishState.SWIMMING && f.claimedBy == null && when (f.kind) {
-                Rarity.COMMON -> true
-                Rarity.RARE -> gameState.helperCanRare
-                Rarity.EPIC -> gameState.helperCanEpic
-                Rarity.LEGEND -> gameState.helperCanLegend
+    /**
+     * 为指定钓手认领 [count] 条鱼：优先近的、可钓的、没被其他钓手预定的。
+     * 「并行作业」升级后一次可以认领多条。
+     */
+    fun claimTargetsForHelper(helper: Helper, count: Int): List<Fish> {
+        if (count <= 0) return emptyList()
+        val reachable = fishes.asSequence()
+            .filter { f ->
+                f.state == FishState.SWIMMING && f.claimedBy == null &&
+                    helperCatchable(f.kind)
             }
-        }
-        val target = reachable.minByOrNull { hypot(it.x - helper.x, it.y - helper.y) } ?: return null
-        target.claimedBy = helper
-        return target
+            .sortedBy { hypot(it.x - helper.x, it.y - helper.y) }
+            .take(count)
+            .toList()
+        reachable.forEach { it.claimedBy = helper }
+        return reachable
     }
 
-    /** 释放钓手对目标的预定。 */
-    fun releaseClaim(helper: Helper) {
-        fishes.forEach { if (it.claimedBy === helper) it.claimedBy = null }
+    /** 钓手当前是否能钓这个稀有度（由「钓手进阶」类升级解锁）。 */
+    private fun helperCatchable(kind: Rarity): Boolean = when (kind) {
+        Rarity.COMMON -> true
+        Rarity.RARE -> gameState.helperCanRare
+        Rarity.EPIC -> gameState.helperCanEpic
+        Rarity.LEGEND -> gameState.helperCanLegend
     }
 
     /** 钓手钓上一条鱼，立即结算，随后鱼回到水里。 */
@@ -691,24 +794,44 @@ class World(val gameState: GameState) {
         // 玩家划船
         moveBoat(dt)
 
+        // 抛竿帧动画推进（播完自动回到静止立绘）
+        if (castAnim >= 0f) {
+            castAnim += dt
+            if (castAnim > Helper.CAST_ANIM_TIME) castAnim = -1f
+        }
+
         for (f in fishes) f.update(dt)
 
         val ev = bobber.update(dt, currentReelSpeed(), tapsThisFrame)
         tapsThisFrame = 0
         ev?.let { handleBobberEvent(it) }
 
+        // 自动收线：浮标一下沉就替玩家把线收起来。
+        // 之前这里只做了"悬停自动抛竿"，手机上没有悬停这回事，
+        // 玩家买了升级还是得每竿手动点一下。
+        if (gameState.autoReelUnlocked && bobber.state == BobberState.BITE) {
+            if (bobber.onTap()) pendingSounds.add("reel")
+        }
+
         // 清理失效预定：目标已不再空闲时释放，让钓手重新选目标
         fishes.forEach { if (it.claimedBy != null && it.state != FishState.SWIMMING) it.claimedBy = null }
 
         for (h in helpers) h.update(dt, gameState, this)
 
-        // 自动收线：悬停在小鱼上时自动抛竿（智能浮标）
+        // 自动抛竿（智能浮标）与自动重抛（自动重抛升级）：
+        // 手上没竿、冷却也过了，就自己找条鱼下竿。
+        // 这两条路以前分散在 View 层和这里各写一半，现在统一在 World 里推进。
         autoReelCooldown -= dt
-        if (gameState.autoReelUnlocked && !bobber.isActive && autoReelCooldown <= 0f) {
-            val target = hoverFish
-            if (target != null && target.state == FishState.SWIMMING) {
-                castLine(target.x, target.y)
-                autoReelCooldown = 0.4f
+        if (bobber.isActive) {
+            pendingAutoRecast = false
+        } else if (autoReelCooldown <= 0f) {
+            val byUpgrade = gameState.autoCastUnlocked
+            if (byUpgrade || pendingAutoRecast) {
+                pendingAutoRecast = false
+                if (autoCastOnce()) {
+                    autoReelCooldown =
+                        autoRecastDelay(if (byUpgrade) AUTO_CAST_INTERVAL else AUTO_RECAST_INTERVAL)
+                }
             }
         }
 
@@ -720,6 +843,41 @@ class World(val gameState: GameState) {
         for (p in particles) p.update(dt)
         particles.removeAll { it.dead }
         for (b in bubbles) b.update(dt, time)
+    }
+
+    /**
+     * 自动重抛 / 自动抛竿的间隔。
+     * 「自动绞盘」升级（[GameState.autoReelSpeed]）会把它缩短 —— 这个升级
+     * 以前只写在商店描述里、实际没接线，现在真的生效。
+     */
+    private fun autoRecastDelay(base: Float): Float =
+        (base / (1.0 + gameState.autoReelSpeed).toFloat()).coerceAtLeast(0.05f)
+
+    /**
+     * 自动抛竿一竿：优先抛向玩家点/悬停的那条鱼（桌面端的悬停手感），
+     * 否则自己挑一条船附近有鱼的鱼。返回是否真的抛了出去。
+     */
+    fun autoCastOnce(): Boolean {
+        if (bobber.isActive) return false
+        // 悬停/点中的那条鱼只在船附近时才认 —— 手机上 hoverFish 会一直留着，
+        // 不然自动抛竿会永远盯着很久以前点过的那条鱼
+        val hovered = hoverFish?.takeIf {
+            it.state == FishState.SWIMMING && abs(it.x - boatX) <= AUTO_CAST_RANGE
+        }
+        val target = hovered ?: pickAutoCastTarget() ?: return false
+        return castLine(target.x, target.y)
+    }
+
+    /** 自动抛竿的目标：船附近几条最近的鱼里随机挑一条，免得每次都钓同一条。 */
+    private fun pickAutoCastTarget(): Fish? {
+        val near = fishes.asSequence()
+            .filter { it.state == FishState.SWIMMING }
+            .filter { abs(it.x - boatX) <= AUTO_CAST_RANGE }
+            .sortedBy { hypot(it.x - boatX, it.y - Space.BOAT_WATERLINE) }
+            .take(4)
+            .toList()
+        if (near.isEmpty()) return null
+        return near.random()
     }
 
     private fun currentReelSpeed(): Double {
@@ -755,7 +913,11 @@ class World(val gameState: GameState) {
             BobberEvent.Reeled -> {
                 val f = bobber.hookedFish
                 if (f != null) {
-                    if (Random.nextFloat() < Content.escapeChance(f.kind) * (1.0 - gameState.skillEscapeReduce).toFloat() * 0.35f) {
+                    // 鱼的个体逃跑系数（escapeMul）也要算进去，
+                    // 否则越大的鱼和普通鱼一样容易上岸，体型差别白做了
+                    val chance = Content.escapeChance(f.kind) * f.species.escapeMul *
+                        (1.0 - gameState.skillEscapeReduce).toFloat() * 0.35f
+                    if (Random.nextFloat() < chance) {
                         f.state = FishState.ESCAPED
                         f.vx = if (Random.nextBoolean()) 110f else -110f
                         f.vy = 70f
@@ -770,7 +932,7 @@ class World(val gameState: GameState) {
 
                         if (gameState.chainReaction) triggerChain(bobber.x, bobber.y, f)
                         if (Random.nextDouble() < gameState.autoReelChance) {
-                            autoReelCooldown = 0.35f
+                            autoReelCooldown = autoRecastDelay(0.35f)
                             pendingAutoRecast = true
                         }
                     }
@@ -798,6 +960,17 @@ class World(val gameState: GameState) {
 
     /** 本帧新解锁的成就，供 UI 弹提示。 */
     val pendingAchievements = mutableListOf<AchievementDef>()
+
+    companion object {
+        /** 自动抛竿两竿之间的间隔（秒，未计「自动绞盘」加速）。 */
+        const val AUTO_CAST_INTERVAL = 0.9f
+
+        /** 自动重抛两竿之间的间隔（秒）。 */
+        const val AUTO_RECAST_INTERVAL = 0.35f
+
+        /** 自动抛竿只在船附近这个范围内找鱼。 */
+        const val AUTO_CAST_RANGE = 620f
+    }
 
     /**
      * 结算一次渔获：加钱、记录、生成表现。

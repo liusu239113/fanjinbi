@@ -88,15 +88,8 @@ class GameView(
                 accumulator -= FIXED_STEP
                 steps++
             }
-            if (world.pendingAutoRecast) {
-                world.pendingAutoRecast = false
-                if (!world.bobber.isActive) {
-                    world.castLine(
-                        world.cameraX,
-                        Space.POND_T + (Space.POND_B - Space.POND_T) * 0.5f,
-                    )
-                }
-            }
+            // 自动抛竿 / 自动重抛由 World 自己推进（见 World.update），
+            // 这里以前还会朝镜头中心空抛一竿 —— 那里多半没鱼，白费一竿
             flushSounds()
         }
 

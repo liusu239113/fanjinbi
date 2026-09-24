@@ -114,7 +114,7 @@ fun MenuPanel(
                     HintLine("浮标下沉时点击收线，连续点击收得更快")
                     HintLine("越稀有的鱼越容易挣脱，升级线轮能提速")
                     HintLine("购买鱼苗增加鱼群，雇佣钓手自动钓鱼")
-                    HintLine("智能浮标解锁后可悬停自动抛竿")
+                    HintLine("升级「自动收线」「智能浮标」后可以彻底放手")
                 }
 
                 Spacer(Modifier.height(2.dp))

@@ -29,7 +29,20 @@ data class PurchasableDef(
         return floor(priceBase.pow(owned) * priceMultiplier + flatOffset)
     }
 
-    fun isMaxed(owned: Int): Boolean = owned >= maxPurchases
+    /**
+     * 实际购买上限。
+     *
+     * 技能「鱼群聚集」（[GameState.skillFishCapacity]）会额外放大鱼苗类的容量 ——
+     * 这个技能以前只写进状态、没人读，等于白买。
+     */
+    fun effectiveMax(state: GameState): Int = when (attribute) {
+        Attribute.COMMON_FISH, Attribute.RARE_FISH,
+        Attribute.EPIC_FISH, Attribute.LEGEND_FISH,
+        -> maxPurchases + state.skillFishCapacity
+        else -> maxPurchases
+    }
+
+    fun isMaxed(owned: Int, state: GameState): Boolean = owned >= effectiveMax(state)
 }
 
 /** 购买项影响的属性。沿用原版枚举语义。 */
@@ -42,6 +55,7 @@ enum class Attribute {
     HELPER_EFFICIENCY,
     AUTO_REEL_CHANCE,
     AUTO_REEL_UNLOCK,
+    AUTO_CAST_UNLOCK,
     HELPER_CAN_RARE,
     HELPER_CAN_EPIC,
     HELPER_CAN_LEGEND,

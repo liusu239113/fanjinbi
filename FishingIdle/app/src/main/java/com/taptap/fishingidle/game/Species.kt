@@ -112,6 +112,37 @@ enum class FishTint(val display: String) {
 }
 
 /**
+ * 一张水域的环境外观。
+ *
+ * 每张图的天空、水体、云、水草、河床都不一样 —— 解锁新水域之后，
+ * 画面本身要能让人一眼看出"换地方了"。配色走代码（渐变 + 染色），
+ * 云与水草是各自的帧动画素材（`cloud_<id>_anim` / `seaweed_<id>_anim`）。
+ */
+class MapEnv(
+    /** 与地图 id 相同，渲染层用它判断该不该重载环境素材。 */
+    val id: String,
+    /** 云朵图集名（不含 _anim 后缀）。 */
+    val cloud: String,
+    /** 水草图集名（不含 _anim 后缀）。 */
+    val seaweed: String,
+    /** 天空渐变：上 → 水面。 */
+    val skyTop: Int,
+    val skyBottom: Int,
+    /** 水体渐变：水面 → 中层 → 河床。 */
+    val waterTop: Int,
+    val waterMid: Int,
+    val waterBottom: Int,
+    /** 水下光柱颜色。 */
+    val beam: Int,
+    /** 水体平铺纹理的染色（PorterDuff.MULTIPLY，白色=原色）。 */
+    val waterTint: Int,
+    /** 河床染色（同上）。 */
+    val bedTint: Int,
+    /** 水草间距（世界单位），越小越密。 */
+    val seaweedSpacing: Float = 320f,
+)
+
+/**
  * 钓场地图。地图倍率是长线成长主轴 —— 越后面的水域所有鱼价值越高，
  * 同时解锁新的稀有鱼种。
  */
@@ -122,6 +153,7 @@ class FishingMap(
     val valueMultiplier: Double,
     val unlockCost: Double,
     val species: List<Species>,
+    val env: MapEnv,
 ) {
     /**
      * 抽一条鱼。[luckBonus] 来自「幸运鱼钩」升级：
@@ -157,11 +189,73 @@ object Bestiary {
         tint: FishTint = FishTint.NONE,
     ): Species = Species(id, name, rarity, sprite, mul, scale.toFloat(), escape.toFloat(), tint)
 
+    /**
+     * 0xRRGGBB → ARGB 颜色值。
+     * 这里刻意不调 android.graphics.Color.rgb —— 游戏模型层不依赖 Android 图形库，
+     * 否则纯 JVM 单测里拿到的是桩返回值（全是 0），配色断言根本测不出问题。
+     */
+    private fun rgb(v: Int) = 0xFF shl 24 or v
+
+    /** 1. 村口小河：白天、明亮、水色偏青绿。 */
+    val ENV_CREEK = MapEnv(
+        "creek", "cloud_creek", "seaweed_creek",
+        skyTop = rgb(0x1A3A48), skyBottom = rgb(0x407E8A),
+        waterTop = rgb(0x2E6E78), waterMid = rgb(0x1E5460), waterBottom = rgb(0x103038),
+        beam = rgb(0xC8F5FF), waterTint = rgb(0xFFFFFF), bedTint = rgb(0xFFFFFF),
+        seaweedSpacing = 320f,
+    )
+
+    /** 2. 芦苇荡：黄昏、水色浑浊偏黄绿、水草密。 */
+    val ENV_MARSH = MapEnv(
+        "marsh", "cloud_marsh", "seaweed_marsh",
+        skyTop = rgb(0x4A3C2A), skyBottom = rgb(0xB99A5C),
+        waterTop = rgb(0x5E7A5A), waterMid = rgb(0x3C5A44), waterBottom = rgb(0x1E3228),
+        beam = rgb(0xFFE9A8), waterTint = rgb(0xD8E0A8), bedTint = rgb(0xC8B480),
+        seaweedSpacing = 240f,
+    )
+
+    /** 3. 深山碧潭：冷青、幽深、光柱偏冷。 */
+    val ENV_POOL = MapEnv(
+        "pool", "cloud_pool", "seaweed_pool",
+        skyTop = rgb(0x14282E), skyBottom = rgb(0x2E5C60),
+        waterTop = rgb(0x286068), waterMid = rgb(0x123C4A), waterBottom = rgb(0x081E2A),
+        beam = rgb(0xA8E8F0), waterTint = rgb(0xB8D8E0), bedTint = rgb(0x88A8A0),
+        seaweedSpacing = 340f,
+    )
+
+    /** 4. 急流险滩：灰蓝冷冽、水面亮、水草稀疏。 */
+    val ENV_RAPIDS = MapEnv(
+        "rapids", "cloud_rapids", "seaweed_rapids",
+        skyTop = rgb(0x30404E), skyBottom = rgb(0x7A9AAE),
+        waterTop = rgb(0x6090A0), waterMid = rgb(0x306074), waterBottom = rgb(0x18384A),
+        beam = rgb(0xE0F4FF), waterTint = rgb(0xC0DCF0), bedTint = rgb(0xA0A8A0),
+        seaweedSpacing = 460f,
+    )
+
+    /** 5. 月牙湖：月夜紫蓝、水面泛银光。 */
+    val ENV_LAKE = MapEnv(
+        "lake", "cloud_lake", "seaweed_lake",
+        skyTop = rgb(0x101436), skyBottom = rgb(0x464884),
+        waterTop = rgb(0x303A7C), waterMid = rgb(0x18225A), waterBottom = rgb(0x0A1030),
+        beam = rgb(0xD8E4FF), waterTint = rgb(0xA8B4F0), bedTint = rgb(0x8890C8),
+        seaweedSpacing = 300f,
+    )
+
+    /** 6. 龙渊秘境：深紫墨色、幽光、水草泛紫。 */
+    val ENV_ABYSS = MapEnv(
+        "abyss", "cloud_abyss", "seaweed_abyss",
+        skyTop = rgb(0x180A24), skyBottom = rgb(0x461A54),
+        waterTop = rgb(0x3A1A4C), waterMid = rgb(0x200E32), waterBottom = rgb(0x0C0618),
+        beam = rgb(0xE0B0FF), waterTint = rgb(0xC090E0), bedTint = rgb(0x9070B0),
+        seaweedSpacing = 280f,
+    )
+
     /** 1. 村口小河 —— 水浅鱼小，适合练手。 */
     val VILLAGE_CREEK = FishingMap(
         "creek", "村口小河", "水浅鱼小，适合练手。",
         1.0, 0.0,
-        listOf(
+        env = ENV_CREEK,
+        species = listOf(
             sp("baitiao", "白条", Rarity.COMMON, "fish_common", 1.0, 0.85),
             sp("jiyu", "鲫鱼", Rarity.COMMON, "fw_jiyu", 1.5, 0.95),
             sp("niqiu", "泥鳅", Rarity.COMMON, "fw_niqiu", 2.0, 0.80),
@@ -178,7 +272,8 @@ object Bestiary {
     val REED_MARSH = FishingMap(
         "marsh", "芦苇荡", "水草丰茂，鱼肥水美。",
         3_840.0, 1_150_000.0,
-        listOf(
+        env = ENV_MARSH,
+        species = listOf(
             sp("maisui", "麦穗鱼", Rarity.COMMON, "fy_maisui", 1.0, 0.78),
             sp("moroko", "中华鳑鮍", Rarity.COMMON, "fy_moroko", 1.5, 0.80),
             sp("pangpi", "鳑鮍", Rarity.COMMON, "fy_pangpi", 2.0, 0.80),
@@ -195,7 +290,8 @@ object Bestiary {
     val DEEP_POOL = FishingMap(
         "pool", "深山碧潭", "潭深水冷，藏着年岁久远的老鱼。",
         14_700_000.0, 4_420_000_000.0,
-        listOf(
+        env = ENV_POOL,
+        species = listOf(
             sp("huaqiu", "花鳅", Rarity.COMMON, "fz_huaqiu", 1.0, 0.85),
             sp("dalinqiu", "大鳞泥鳅", Rarity.COMMON, "fz_dalinqiu", 1.5, 0.90),
             sp("tongyu", "铜鱼", Rarity.COMMON, "fy_tongyu", 2.0, 1.00),
@@ -212,7 +308,8 @@ object Bestiary {
     val RAPIDS = FishingMap(
         "rapids", "急流险滩", "水流湍急，只有强健的鱼能立足。",
         5.66e10, 1.70e13,
-        listOf(
+        env = ENV_RAPIDS,
+        species = listOf(
             sp("qiaozui", "翘嘴鲌", Rarity.COMMON, "fy_qiaozui", 1.0, 1.00),
             sp("hongqi", "红鳍鲌", Rarity.COMMON, "fy_hongqi", 1.5, 0.95),
             sp("huangwei", "黄尾鲴", Rarity.COMMON, "fz_huangwei", 2.0, 0.98),
@@ -229,7 +326,8 @@ object Bestiary {
     val CRESCENT_LAKE = FishingMap(
         "lake", "月牙湖", "月圆之夜，湖底会浮起金光。",
         2.17e14, 6.52e16,
-        listOf(
+        env = ENV_LAKE,
+        species = listOf(
             sp("ziyu", "鲻鱼", Rarity.COMMON, "fy_ziyu", 1.0, 0.98),
             sp("bailian", "白鲢", Rarity.COMMON, "fz_bailian", 1.5, 1.05),
             sp("huanyu", "鲩鱼", Rarity.COMMON, "fz_huanyu", 2.0, 1.08),
@@ -246,7 +344,8 @@ object Bestiary {
     val DRAGON_ABYSS = FishingMap(
         "abyss", "龙渊秘境", "传说中龙潜之渊，凡鱼皆已成精。",
         8.35e17, 2.50e20,
-        listOf(
+        env = ENV_ABYSS,
+        species = listOf(
             sp("wuli", "乌鲤", Rarity.COMMON, "fz_wuli", 1.0, 1.10),
             sp("daheiyu", "大黑鱼", Rarity.COMMON, "fz_daheiyu", 1.5, 1.20),
             sp("junian", "巨鲶", Rarity.COMMON, "fz_junian", 2.0, 1.25),
