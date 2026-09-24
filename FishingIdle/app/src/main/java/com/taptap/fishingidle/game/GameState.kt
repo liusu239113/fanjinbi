@@ -102,6 +102,18 @@ class GameState {
     var skillComboStep: Double = 0.04
     var skillPearlBonus: Double = 0.0
     var skillRareWeightBonus: Double = 0.0
+
+    // ---- 技能树：后期内容分支 ----
+    /** 「深海打捞」：潜水员下潜周期缩短比例。 */
+    var skillDiverSpeed: Double = 0.0
+    /** 「寻宝达人」：宝箱间隔缩短比例。 */
+    var skillChestSpeed: Double = 0.0
+    /** 「寻宝达人」：宝箱金币加成。 */
+    var skillChestValue: Double = 0.0
+    /** 「无人机编队」：自动抛竿间隔再缩短比例。 */
+    var skillDroneSpeed: Double = 0.0
+    /** 「鱼王克星」：鱼王拉力与奖励加成。 */
+    var skillKingPower: Double = 0.0
     var skillGlobalBonus: Double = 0.0
 
     /** 技能带来的总收益倍率。 */
@@ -141,6 +153,13 @@ class GameState {
 
     /** 已钓到过的鱼种 id（图鉴收集进度）。 */
     val caughtSpecies: MutableSet<String> = mutableSetOf()
+
+    /** 每个鱼种钓到过的最大体型（存 ordinal）。 */
+    val bestSize: MutableMap<String, Int> = mutableMapOf()
+
+    /** 后期玩法计数。 */
+    var chestsOpened: Long = 0
+    var kingsCaught: Long = 0
 
     /** 刚首次钓到、还没弹过提示的鱼种，由 UI 消费。 */
     val pendingDexUnlocks: MutableList<String> = mutableListOf()
@@ -319,6 +338,18 @@ class GameState {
         DailyTracker.onCombo(this)
     }
 
+    /** 每个鱼种的最佳体型（没有记录时是 NORMAL）。 */
+    fun bestSizeOf(speciesId: String): FishSize =
+        FishSize.entries.getOrElse(bestSize[speciesId] ?: 0) { FishSize.NORMAL }
+
+    /** 记录一次体型。返回是否**刷新了纪录**（用于弹提示）。 */
+    fun recordSize(speciesId: String, size: FishSize): Boolean {
+        val old = bestSize[speciesId] ?: 0
+        if (size.ordinal <= old) return false
+        bestSize[speciesId] = size.ordinal
+        return true
+    }
+
     /** 记录钓到某个鱼种。返回是否为**首次**发现（用于弹图鉴提示）。 */
     fun recordSpecies(id: String): Boolean {
         val isNew = caughtSpecies.add(id)
@@ -438,6 +469,8 @@ class GameState {
         dailyRareCatches = from.dailyProgress.rareCatches
         dailyMapChanges = from.dailyProgress.mapChanges
         dailyHelpersBought = from.dailyProgress.helpersBought
+        dailyChests = from.dailyProgress.chests
+        dailyKings = from.dailyProgress.kings
     }
 
     /** 从存档恢复当日进度。 */
@@ -451,6 +484,8 @@ class GameState {
         dailyProgress.rareCatches = from.dailyRareCatches
         dailyProgress.mapChanges = from.dailyMapChanges
         dailyProgress.helpersBought = from.dailyHelpersBought
+        dailyProgress.chests = from.dailyChests
+        dailyProgress.kings = from.dailyKings
     }
 
     fun toSave(): SaveData = SaveData().also {
@@ -466,6 +501,9 @@ class GameState {
         it.totalCatches = totalCatches
         it.unlockedAchievements = unlockedAchievements.toMutableSet()
         it.caughtSpecies = caughtSpecies.toMutableSet()
+        it.bestSize = bestSize.toMutableMap()
+        it.chestsOpened = chestsOpened
+        it.kingsCaught = kingsCaught
         it.unlockedMaps = unlockedMaps.toMutableSet()
         it.currentMapId = currentMapId
         it.syncDaily(this)
@@ -518,6 +556,10 @@ class GameState {
         unlockedAchievements.addAll(data.unlockedAchievements)
         caughtSpecies.clear()
         caughtSpecies.addAll(data.caughtSpecies)
+        bestSize.clear()
+        bestSize.putAll(data.bestSize)
+        chestsOpened = data.chestsOpened
+        kingsCaught = data.kingsCaught
         unlockedMaps.clear()
         if (data.unlockedMaps.isEmpty()) {
             unlockedMaps.add(Bestiary.maps.first().id)

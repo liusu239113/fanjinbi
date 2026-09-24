@@ -39,6 +39,34 @@ class Species(
     val dexNo: Int get() = Bestiary.allSpecies.indexOf(this) + 1
 }
 
+/**
+ * 鱼的体型档。
+ *
+ * 同一条鱼也会有大有小：体型越少见、价值越高。体型在**入水时就抽好**
+ * （不是钓上来才决定），所以河里能直接看出大小差异；
+ * 钓到刷新该鱼种最大体型的鱼时，会像解锁图鉴那样弹一次中央提示。
+ */
+enum class FishSize(val label: String, val scale: Float, val valueMul: Double, val weight: Double) {
+    NORMAL("普通", 1.00f, 1.0, 0.790),
+    BIG("大只", 1.18f, 2.5, 0.165),
+    HUGE("巨大", 1.40f, 8.0, 0.040),
+    KING("王者", 1.68f, 30.0, 0.005),
+    ;
+
+    companion object {
+        /** 按权重抽一个体型（王者 0.5%）。 */
+        fun roll(): FishSize {
+            val total = entries.sumOf { it.weight }
+            var r = kotlin.random.Random.nextDouble() * total
+            for (e in entries) {
+                r -= e.weight
+                if (r <= 0.0) return e
+            }
+            return NORMAL
+        }
+    }
+}
+
 /** 精灵色调变体。用 ColorMatrix 在渲染时套用，零额外内存。 */
 enum class FishTint(val display: String) {
     NONE("原色"),

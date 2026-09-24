@@ -52,6 +52,7 @@ import com.taptap.fishingidle.game.Settings
 import com.taptap.fishingidle.game.SkillTree
 import com.taptap.fishingidle.game.World
 import com.taptap.fishingidle.ui.AchievementToast
+import com.taptap.fishingidle.ui.UnlockPopupCard
 import com.taptap.fishingidle.ui.AppFontFamily
 import com.taptap.fishingidle.ui.BottomBar
 import com.taptap.fishingidle.ui.CatchStrip
@@ -182,12 +183,36 @@ class MainActivity : ComponentActivity() {
 
         // 成就提示：轮流展示本帧新解锁的成就，每条停留 2.6 秒
         var toast by remember { mutableStateOf<com.taptap.fishingidle.game.AchievementDef?>(null) }
+        // 图鉴解锁 / 体型新纪录的中央弹窗（一次只弹一个）
+        var unlockPopup by remember { mutableStateOf<com.taptap.fishingidle.ui.UnlockPopup?>(null) }
         LaunchedEffect(Unit) {
             while (true) {
-                if (toast == null && world.pendingAchievements.isNotEmpty()) {
+                // 无人机悬停的持续音：买了才响（这个方法自己防重入）
+                if (gameState.droneOwned) {
+                    audio.playLoop("sfx_drone", 0.3f)
+                } else {
+                    audio.stopLoop("sfx_drone")
+                }
+                // 新鱼种 / 新体型纪录：中央弹窗优先于成就条
+                if (unlockPopup == null && world.pendingNewSpecies.isNotEmpty()) {
+                    unlockPopup = com.taptap.fishingidle.ui.UnlockPopup(
+                        world.pendingNewSpecies.removeAt(0), null,
+                    )
+                    audio.play("legend", 1.0f)
+                    kotlinx.coroutines.delay(3400)
+                    unlockPopup = null
+                    kotlinx.coroutines.delay(200)
+                } else if (unlockPopup == null && world.pendingNewRecords.isNotEmpty()) {
+                    val (sp, tier) = world.pendingNewRecords.removeAt(0)
+                    unlockPopup = com.taptap.fishingidle.ui.UnlockPopup(sp, tier)
+                    audio.play("achievement", 1.0f)
+                    kotlinx.coroutines.delay(3400)
+                    unlockPopup = null
+                    kotlinx.coroutines.delay(200)
+                } else if (toast == null && world.pendingAchievements.isNotEmpty()) {
                     val def = world.pendingAchievements.removeAt(0)
                     toast = def
-                    audio.play("sfx_success", 1.0f)
+                    audio.play("sfx_achievement", 1.0f)
                     kotlinx.coroutines.delay(2600)
                     toast = null
                     kotlinx.coroutines.delay(260)
@@ -376,6 +401,11 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(8.dp))
                 AchievementToast(toast)
+                UnlockPopupCard(
+                    popup = unlockPopup,
+                    assets = assets,
+                    onDismiss = { unlockPopup = null },
+                )
 
                 Spacer(Modifier.weight(1f))
 
@@ -470,7 +500,7 @@ class MainActivity : ComponentActivity() {
                     onPrestige = {
                         val gained = gameState.doPrestige()
                         if (gained > 0) {
-                            audio.play("sfx_success", 1.0f)
+                            audio.play("sfx_prestige", 1.0f)
                             world.switchMap(gameState.currentMap)
                             saveManager.save(gameState, settings)
                         }

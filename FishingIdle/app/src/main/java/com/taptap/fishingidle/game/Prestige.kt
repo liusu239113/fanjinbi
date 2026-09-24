@@ -112,6 +112,38 @@ object SkillTree {
             requires = "school_density",
             effect = { s, lv -> s.skillRareWeightBonus = lv * 0.12 },
         ),
+        // ---- 后期内容分支：把第二梯队的功能也接进长线成长 ----
+        SkillDef(
+            "deep_diver", "深海打捞",
+            "潜水员下潜周期 -{v}%",
+            maxLevel = 8, costPerLevel = 3,
+            requires = "pearl_diver",
+            effect = { s, lv -> s.skillDiverSpeed = (lv * 0.09).coerceAtMost(0.72) },
+        ),
+        SkillDef(
+            "treasure_hunter", "寻宝达人",
+            "宝箱出现更快，奖励 +{v}%",
+            maxLevel = 8, costPerLevel = 4,
+            requires = "deep_diver",
+            effect = { s, lv ->
+                s.skillChestSpeed = (lv * 0.07).coerceAtMost(0.56)
+                s.skillChestValue = lv * 0.35
+            },
+        ),
+        SkillDef(
+            "drone_ai", "无人机编队",
+            "自动抛竿间隔再 -{v}%",
+            maxLevel = 10, costPerLevel = 4,
+            requires = "treasure_hunter",
+            effect = { s, lv -> s.skillDroneSpeed = (lv * 0.04).coerceAtMost(0.40) },
+        ),
+        SkillDef(
+            "king_slayer", "鱼王克星",
+            "鱼王拉力 +{v}%（奖励同步提高）",
+            maxLevel = 8, costPerLevel = 5,
+            requires = "drone_ai",
+            effect = { s, lv -> s.skillKingPower = lv * 0.25 },
+        ),
         SkillDef(
             "old_sailor", "老船长",
             "所有收益 +{v}%（对技能树全属性的总加成）",

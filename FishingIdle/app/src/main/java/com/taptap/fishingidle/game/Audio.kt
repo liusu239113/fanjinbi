@@ -62,6 +62,27 @@ class AudioManager(context: Context, private val settings: Settings) {
         soundPool.play(id, vol, vol, 1, 0, 1f)
     }
 
+    /** 正在循环播放的音效（无人机悬停那种持续音），name → streamId。 */
+    private val loops = mutableMapOf<String, Int>()
+
+    /**
+     * 循环播放一个音效（例如无人机一直在头顶悬停）。
+     * 已经在播就什么都不做 —— 这个方法会被每帧调用。
+     */
+    fun playLoop(name: String, volumeScale: Float = 0.5f) {
+        if (muted) return
+        if (loops.containsKey(name)) return
+        val id = soundIds[name] ?: return
+        val vol = (settings.masterVolume * settings.sfxVolume * volumeScale).coerceIn(0f, 1f)
+        if (vol <= 0.001f) return
+        loops[name] = soundPool.play(id, vol, vol, 0, -1, 1f)
+    }
+
+    /** 停掉某个循环音效。 */
+    fun stopLoop(name: String) {
+        loops.remove(name)?.let { soundPool.stop(it) }
+    }
+
     fun playBgm(context: Context, name: String) {
         if (bgmName == name && bgmPlayer?.isPlaying == true) return
         stopBgm()
@@ -121,6 +142,9 @@ class AudioManager(context: Context, private val settings: Settings) {
             "sfx_fail", "sfx_buy", "sfx_cant_buy", "sfx_coin", "sfx_click",
             // 后期玩法：拖网、鹈鹕、钓到巨物
             "sfx_net", "sfx_pelican", "sfx_legend",
+            // 后期第二梯队：宝箱、珍珠、潜水员、声呐、转生、成就、无人机悬停
+            "sfx_chest", "sfx_pearl", "sfx_diver", "sfx_sonar",
+            "sfx_prestige", "sfx_achievement", "sfx_drone",
         )
     }
 }

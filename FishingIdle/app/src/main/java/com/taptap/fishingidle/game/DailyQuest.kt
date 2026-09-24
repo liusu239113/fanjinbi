@@ -30,6 +30,10 @@ class DailyProgress {
     var mapChanges: Int = 0
     var helpersBought: Int = 0
 
+    /** 后期玩法：今日开箱数、今日拽上来的鱼王数。 */
+    var chests: Int = 0
+    var kings: Int = 0
+
     fun reset() {
         catches = 0
         moneyEarned = 0.0
@@ -37,6 +41,8 @@ class DailyProgress {
         rareCatches = 0
         mapChanges = 0
         helpersBought = 0
+        chests = 0
+        kings = 0
     }
 }
 
@@ -55,6 +61,9 @@ object DailyQuests {
         DailyQuest("earn_big", "日进斗金", "今日赚到 1000 万金币", 1e7, 500_000.0) { it.moneyEarned },
         DailyQuest("hire", "招兵买马", "今日雇佣 3 名钓手", 3.0, 60_000.0) { it.helpersBought.toDouble() },
         DailyQuest("explore", "四处探索", "切换 2 次水域", 2.0, 30_000.0) { it.mapChanges.toDouble() },
+        // 后期玩法的每日目标：挂在进度字段上，没买这些功能时天然是 0，不会误导
+        DailyQuest("chest2", "海底捞金", "今日打开 2 个沉船宝箱", 2.0, 120_000.0) { it.chests.toDouble() },
+        DailyQuest("king1", "王见王", "今日拽上 1 条鱼王", 1.0, 300_000.0) { it.kings.toDouble() },
     )
 
     const val DAILY_COUNT = 3

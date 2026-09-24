@@ -349,6 +349,34 @@ object Content {
         ),
     )
 
+    /**
+     * 「还没解锁的下一步」提示。
+     *
+     * 商店原本把没满足条件的条目**整个藏起来**，玩家看不到任何线索 ——
+     * 后期那串（拖网 → 声呐 → 鱼探仪 → 无人机 → 潜水员 → 沉船宝藏）
+     * 就变成了"我压根不知道有这东西"。这里给每条被藏起来的条目配一句条件，
+     * 商店底部会用灰条列出来（最多两条），玩家永远知道下一步能拿到什么。
+     */
+    val unlockHints: Map<String, String> = mapOf(
+        "helper" to "先自己钓上 8 条鱼",
+        "epic_fish" to "先放入 1 条鲤鱼",
+        "legend_fish" to "先放入 1 条锦鲤",
+        "auto_reel_chance" to "钓到过鲤鱼",
+        "auto_cast_unlock" to "累计钓上 12 条鱼",
+        "auto_reel_speed" to "买下「自动重抛」",
+        "helper_can_rare" to "先雇到 1 名钓手",
+        "helper_can_epic" to "买下「钓手进阶」",
+        "helper_can_legend" to "买下「钓手大师」",
+        "chain_reaction" to "买下「并行作业」",
+        "pelican" to "买下「拖网捕捞」",
+        "net_sweep" to "买下「鹈鹕」",
+        "sonar" to "买下「拖网捕捞」",
+        "fish_finder" to "买下「声呐」",
+        "drone" to "买下「鱼探仪」",
+        "diver" to "买下「无人机」",
+        "treasure" to "买下「潜水员」",
+    )
+
     /** 全部购买项，顺序即重放顺序（读档按这个顺序重放购买重建属性）。 */
     val purchasables: List<PurchasableDef> = fishItems + upgrades + lateGame + lateGame2
 

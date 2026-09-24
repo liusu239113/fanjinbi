@@ -2,9 +2,16 @@ package com.taptap.fishingidle.game
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONArray
 import org.json.JSONObject
 
-/** 存档读写。只保存购买次数与金钱类数值，其余靠重放重建。 */
+/**
+ * 存档读写。
+ *
+ * 普通属性（价格曲线、收益、解锁标记）靠**重放购买记录**重建，不用存；
+ * 但跨轮进度必须显式存下来：珍珠、技能等级、转生次数、图鉴收集、
+ * 已解锁水域、成就、体型纪录、统计数字 —— 这些重放不出来。
+ */
 class SaveManager(context: Context) {
 
     private val prefs: SharedPreferences =
@@ -24,6 +31,34 @@ class SaveManager(context: Context) {
         for ((k, v) in state.purchases) purchases.put(k, v)
         root.put("purchases", purchases)
 
+        // ---- 跨轮进度 ----
+        // 这几项以前**完全没写进存档**：珍珠、技能等级、转生次数、图鉴收集、
+        // 已解锁水域、成就、统计全部只存在内存里，重启就回退到初始值 ——
+        // 玩家会觉得"转生白转了、图鉴白收集了"。这里全部补齐。
+        root.put("pearls", state.pearls)
+        root.put("prestigeCount", state.prestigeCount)
+        val skills = JSONObject()
+        for ((k, v) in state.skillLevels) skills.put(k, v)
+        root.put("skillLevels", skills)
+        root.put("bestCombo", state.bestCombo)
+        root.put("totalCatches", state.totalCatches)
+        root.put("chestsOpened", state.chestsOpened)
+        root.put("kingsCaught", state.kingsCaught)
+        root.put("currentMapId", state.currentMapId)
+
+        root.put("unlockedAchievements", JSONArray().apply {
+            state.unlockedAchievements.forEach { put(it) }
+        })
+        root.put("caughtSpecies", JSONArray().apply {
+            state.caughtSpecies.forEach { put(it) }
+        })
+        root.put("unlockedMaps", JSONArray().apply {
+            state.unlockedMaps.forEach { put(it) }
+        })
+        root.put("bestSize", JSONObject().apply {
+            for ((k, v) in state.bestSize) put(k, v)
+        })
+
         // 每日任务进度
         root.put("dailyDay", state.dailyDayIndex)
         root.put("dailyCatches", state.dailyProgress.catches)
@@ -32,6 +67,8 @@ class SaveManager(context: Context) {
         root.put("dailyRare", state.dailyProgress.rareCatches)
         root.put("dailyMaps", state.dailyProgress.mapChanges)
         root.put("dailyHelpers", state.dailyProgress.helpersBought)
+        root.put("dailyChests", state.dailyProgress.chests)
+        root.put("dailyKings", state.dailyProgress.kings)
         val doneArr = org.json.JSONArray()
         for (d in state.dailyDone) doneArr.put(d)
         root.put("dailyDone", doneArr)
@@ -59,6 +96,8 @@ class SaveManager(context: Context) {
             data.dailyRareCatches = root.optLong("dailyRare", 0L)
             data.dailyMapChanges = root.optInt("dailyMaps", 0)
             data.dailyHelpersBought = root.optInt("dailyHelpers", 0)
+            data.dailyChests = root.optInt("dailyChests", 0)
+            data.dailyKings = root.optInt("dailyKings", 0)
             root.optJSONArray("dailyDone")?.let { arr ->
                 for (i in 0 until arr.length()) data.dailyDone.add(arr.optString(i))
             }
@@ -70,6 +109,31 @@ class SaveManager(context: Context) {
             root.optJSONObject("purchases")?.let { p ->
                 for (key in p.keys()) data.purchases[key] = p.optInt(key, 0)
             }
+
+            // ---- 跨轮进度（老存档没有这些字段时走默认值，不会崩）----
+            data.pearls = root.optLong("pearls", 0L)
+            data.prestigeCount = root.optInt("prestigeCount", 0)
+            root.optJSONObject("skillLevels")?.let { obj ->
+                for (key in obj.keys()) data.skillLevels[key] = obj.optInt(key, 0)
+            }
+            data.bestCombo = root.optInt("bestCombo", 0)
+            data.totalCatches = root.optLong("totalCatches", 0L)
+            data.chestsOpened = root.optLong("chestsOpened", 0L)
+            data.kingsCaught = root.optLong("kingsCaught", 0L)
+            data.currentMapId = root.optString("currentMapId", "creek")
+            root.optJSONArray("unlockedAchievements")?.let { arr ->
+                for (i in 0 until arr.length()) data.unlockedAchievements.add(arr.optString(i))
+            }
+            root.optJSONArray("caughtSpecies")?.let { arr ->
+                for (i in 0 until arr.length()) data.caughtSpecies.add(arr.optString(i))
+            }
+            root.optJSONArray("unlockedMaps")?.let { arr ->
+                for (i in 0 until arr.length()) data.unlockedMaps.add(arr.optString(i))
+            }
+            root.optJSONObject("bestSize")?.let { obj ->
+                for (key in obj.keys()) data.bestSize[key] = obj.optInt(key, 0)
+            }
+
             state.loadFrom(data)
 
             root.optJSONObject("options")?.let { o ->

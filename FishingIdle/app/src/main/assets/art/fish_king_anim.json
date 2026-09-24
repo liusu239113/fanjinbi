@@ -1,0 +1,8 @@
+{
+  "image": "fish_king_anim.png",
+  "frameWidth": 220,
+  "frameHeight": 201,
+  "columns": 4,
+  "rows": 2,
+  "frameCount": 8
+}

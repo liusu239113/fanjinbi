@@ -108,7 +108,11 @@ class Fish(val species: Species, var x: Float, var y: Float) {
     var facing = 1f
     var wiggle = Random.nextFloat() * 6.2832f
     var stateTime = 0f
-    var scale = species.scale * (0.9f + Random.nextFloat() * 0.25f)
+
+    /** 入水时就定下来的体型档：河里能直接看出大小差异。 */
+    val size: FishSize = FishSize.roll()
+
+    var scale = species.scale * size.scale * (0.94f + Random.nextFloat() * 0.12f)
     var targetX = 0f
     var targetY = 0f
 
@@ -526,10 +530,13 @@ class Diver {
 
     /** 本次下潜是否已经结算过珍珠，避免一个周期发两次。 */
     private var rewarded = true
+
+    /** 本次下潜是否已经播过入水声。 */
+    private var diveAnnounced = false
     private var phase = 0.85f
 
     fun update(dt: Float, world: World) {
-        phase += dt / DIVE_CYCLE
+        phase += dt / world.diverCycle()
         if (phase >= 1f) {
             phase -= 1f
             rewarded = false
@@ -544,11 +551,72 @@ class Diver {
             rewarded = true
             world.diverSurfacePearl()
         }
+        // 刚下水的那一帧给个入水声（一个周期只响一次）
+        if (!diveAnnounced && phase < 0.22f) {
+            diveAnnounced = true
+            world.pendingSounds.add("diver")
+        } else if (phase >= 0.60f) {
+            diveAnnounced = false
+        }
     }
 
     companion object {
         /** 一个完整下潜周期（秒）。 */
         const val DIVE_CYCLE = 180f
+    }
+}
+
+/**
+ * 鱼王：时不时现身的大鱼，**靠连点**把它拉上来。
+ *
+ * 和普通钓鱼区分开：普通钓鱼是"抛竿 → 等咬钩 → 点收线"，
+ * 鱼王是自己游过来、要玩家一直戳它，拉力条满了才算拽上岸。
+ * 点得慢了它会跑（到期就溜）。
+ */
+class FishKing(var x: Float, var y: Float) {
+    var life = LIFE
+        private set
+
+    /** 拉力进度 0..1。 */
+    var progress = 0f
+
+    var bob = 0f
+    var dir = 1f
+    var vx = 0f
+
+    /** 被拽上来了。 */
+    var caught = false
+
+    /** 溜掉了。 */
+    var escaped = false
+
+    val alive: Boolean get() = life > 0f && !caught && !escaped
+    val done: Boolean get() = !alive
+
+    fun update(dt: Float) {
+        if (!alive) return
+        life -= dt
+        bob += dt
+        x += vx * dt
+        if (x < Space.POND_L + 120f) { x = Space.POND_L + 120f; vx = -vx; dir = 1f }
+        if (x > Space.POND_R - 120f) { x = Space.POND_R - 120f; vx = -vx; dir = -1f }
+        // 拉力会慢慢回退：不连点就拉不上来
+        progress = (progress - dt * PROGRESS_DECAY).coerceAtLeast(0f)
+        if (life <= 0f) escaped = true
+    }
+
+    companion object {
+        /** 鱼王在河面停留多久（秒）。 */
+        const val LIFE = 22f
+
+        /** 点击判定的半径（世界单位），大鱼给宽一点。 */
+        const val TAP_RADIUS = 190f
+
+        /** 点一下加多少拉力。 */
+        const val TAP_POWER = 0.075f
+
+        /** 拉力每秒回退多少。 */
+        const val PROGRESS_DECAY = 0.16f
     }
 }
 
@@ -596,6 +664,13 @@ class World(val gameState: GameState) {
 
     /** 距离下一次浮出宝箱还有多久（秒）。 */
     private var chestTimer = CHEST_INTERVAL
+
+    /** 现身的鱼王（没现身时为 null）。 */
+    var king: FishKing? = null
+        private set
+
+    /** 距离下一次鱼王现身还有多久（秒）。 */
+    private var kingTimer = KING_INTERVAL
 
     /** 拖网倒计时（秒）。 */
     private var netTimer = NET_INTERVAL
@@ -960,8 +1035,16 @@ class World(val gameState: GameState) {
             bobber.biteTimer = wait / sonarBiteSpeed(fish.kind)
         }
         pendingSounds.add("cast")
+        // 声呐：稀有及以上的鱼咬钩时来一声探测音
+        if (fish != null && gameState.sonarOwned && fish.kind != Rarity.COMMON) {
+            pendingSounds.add("sonar")
+        }
         return true
     }
+
+    /** 潜水员一个完整下潜周期的实际秒数（技能「深海打捞」会缩短）。 */
+    internal fun diverCycle(): Float =
+        (Diver.DIVE_CYCLE * (1.0 - gameState.skillDiverSpeed)).toFloat().coerceAtLeast(20f)
 
     /** 声呐对咬钩速度的加成：只对稀有及以上的鱼生效。 */
     internal fun sonarBiteSpeed(kind: Rarity): Float =
@@ -991,7 +1074,13 @@ class World(val gameState: GameState) {
      * 只要浮标处于活动状态，点哪里都算数。
      */
     fun onTap(wx: Float, wy: Float): Boolean {
-        // 宝箱优先：点到了就直接开箱（它比浮标大，也不跟收线抢操作）
+        // 鱼王最优先：它只存在十几秒，点到就该算数
+        king?.let { k ->
+            if (k.alive && hypot(wx - k.x, wy - k.y) <= FishKing.TAP_RADIUS) {
+                return tapKing(k)
+            }
+        }
+        // 宝箱其次：点到了就直接开箱（它比浮标大，也不跟收线抢操作）
         val c = chest
         if (c != null && hypot(wx - c.x, wy - c.y) <= Chest.TAP_RADIUS) {
             openChest(c)
@@ -1050,7 +1139,7 @@ class World(val gameState: GameState) {
         gameState.pearls += 1
         spawnText(boatX, Space.BOAT_WATERLINE - 150f, "珍珠 +1", Palette.TEXT_GOLD, 1.25f)
         spawnCoinBurst(boatX, Space.BOAT_WATERLINE - 60f)
-        pendingSounds.add("legend")
+        pendingSounds.add("pearl")
     }
 
     /**
@@ -1068,7 +1157,7 @@ class World(val gameState: GameState) {
 
         chestTimer -= dt
         if (chest == null && chestTimer <= 0f) {
-            chestTimer = CHEST_INTERVAL
+            chestTimer = CHEST_INTERVAL * chestIntervalScale()
             val x = (boatX + (Random.nextFloat() * 2f - 1f) * CHEST_SPAWN_SPREAD)
                 .coerceIn(Space.POND_L + 60f, Space.POND_R - 60f)
             val y = Space.POND_T + 120f + Random.nextFloat() * 380f
@@ -1079,9 +1168,75 @@ class World(val gameState: GameState) {
         }
     }
 
+    /**
+     * 鱼王：声呐解锁后才有机会撞见（先用声呐找到它，才谈得上钓它）。
+     * 每隔 [KING_INTERVAL] 秒现身一次，在河面上慢慢游，等玩家连点。
+     */
+    private fun updateKing(dt: Float) {
+        val k = king
+        if (k != null) {
+            k.update(dt)
+            if (k.done) {
+                if (k.escaped) {
+                    spawnText(k!!.x, k!!.y - 40f, "鱼王跑了…", Palette.TEXT_BAD, 1.4f)
+                    pendingSounds.add("fail")
+                }
+                king = null
+            }
+        }
+        if (!gameState.sonarOwned) return
+
+        kingTimer -= dt
+        if (king == null && kingTimer <= 0f) {
+            kingTimer = KING_INTERVAL
+            val x = (boatX + (Random.nextFloat() * 2f - 1f) * 500f)
+                .coerceIn(Space.POND_L + 150f, Space.POND_R - 150f)
+            val y = Space.POND_T + 200f + Random.nextFloat() * 320f
+            king = FishKing(x, y).apply {
+                vx = (Random.nextFloat() * 2f - 1f) * 90f
+                dir = if (vx >= 0f) 1f else -1f
+            }
+            spawnText(x, y - 90f, "鱼王现身！连点它", Palette.TEXT_GOLD, 1.6f)
+            spawnSplash(x, y, Rarity.LEGEND)
+            pendingSounds.add("legend")
+        }
+    }
+
+    /** 点鱼王：加拉力，满了就拽上岸。返回是否点中了。 */
+    private fun tapKing(k: FishKing): Boolean {
+        k.progress = (k.progress + FishKing.TAP_POWER * kingTapScale()).coerceAtMost(1f)
+        if (k.progress < 1f) return true
+
+        k.caught = true
+        gameState.kingsCaught++
+        gameState.dailyProgress.kings++
+        val value = gameState.catchValue(Rarity.LEGEND) * KING_VALUE_MULT * kingRewardScale()
+        gameState.money += value
+        val pearls = KING_PEARLS
+        gameState.pearls += pearls
+
+        spawnText(k.x, k.y - 50f, "+${formatNumber(value)}", Palette.TEXT_GOLD, 1.8f)
+        spawnText(k.x, k.y - 120f, "珍珠 +$pearls", Palette.TEXT_GOLD, 1.5f)
+        spawnCoinBurst(k.x, k.y)
+        spawnSplash(k.x, k.y, Rarity.LEGEND)
+        pendingSounds.add("legend")
+        pendingSounds.add("pearl")
+        king = null
+        return true
+    }
+
+    /** 技能「鱼王克星」：点一下的拉力倍率。 */
+    private fun kingTapScale(): Float = (1.0 + gameState.skillKingPower).toFloat()
+
+    /** 技能「鱼王克星」：鱼王奖励倍率。 */
+    private fun kingRewardScale(): Double = 1.0 + gameState.skillKingPower * 1.5
+
     /** 点开宝箱：一大笔金币（按当前鱼价折算），小概率再开出一颗珍珠。 */
     private fun openChest(c: Chest) {
-        val value = gameState.catchValue(Rarity.COMMON) * CHEST_VALUE_MULT
+        gameState.chestsOpened++
+        gameState.dailyProgress.chests++
+        val value = gameState.catchValue(Rarity.COMMON) * CHEST_VALUE_MULT *
+            (1.0 + gameState.skillChestValue)
         // 开箱算"打捞收入"，不计进渔获数/连击 —— 宝箱不该刷连击成就
         gameState.money += value
         gameState.recordEarning(Rarity.EPIC, Source.TREASURE, value)
@@ -1089,12 +1244,12 @@ class World(val gameState: GameState) {
         spawnText(c.x, c.y - 40f, "+${formatNumber(value)}", Palette.TEXT_GOLD, 1.5f)
         spawnCoinBurst(c.x, c.y)
         spawnSplash(c.x, c.y, Rarity.LEGEND)
-        pendingSounds.add("success")
+        pendingSounds.add("chest")
 
         if (Random.nextFloat() < CHEST_PEARL_CHANCE) {
             gameState.pearls += 1
             spawnText(c.x, c.y - 110f, "珍珠 +1", Palette.TEXT_GOLD, 1.3f)
-            pendingSounds.add("legend")
+            pendingSounds.add("pearl")
         }
         val newly = Achievements.checkUnlocks(gameState)
         if (newly.isNotEmpty()) pendingAchievements.addAll(newly)
@@ -1203,6 +1358,7 @@ class World(val gameState: GameState) {
         diver?.update(dt, this)
         updateNetSweep(dt)
         updateChest(dt)
+        updateKing(dt)
 
         // 自动抛竿（智能浮标）与自动重抛（自动重抛升级）：
         // 手上没竿、冷却也过了，就自己找条鱼下竿。
@@ -1294,9 +1450,15 @@ class World(val gameState: GameState) {
     internal fun autoCastRange(): Float =
         AUTO_CAST_RANGE * (if (gameState.droneOwned) DRONE_RANGE_MULT else 1f)
 
-    /** 自动抛竿的间隔倍率（无人机买了之后下竿更勤）。 */
-    internal fun autoCastIntervalScale(): Float =
-        if (gameState.droneOwned) DRONE_INTERVAL_MULT else 1f
+    /** 自动抛竿的间隔倍率（无人机 + 技能「无人机编队」）。 */
+    internal fun autoCastIntervalScale(): Float {
+        val drone = if (gameState.droneOwned) DRONE_INTERVAL_MULT else 1f
+        return (drone * (1f - gameState.skillDroneSpeed).toFloat()).coerceAtLeast(0.15f)
+    }
+
+    /** 宝箱间隔倍率（技能「寻宝达人」）。 */
+    private fun chestIntervalScale(): Float =
+        (1f - gameState.skillChestSpeed).toFloat().coerceAtLeast(0.2f)
 
     /** 自动抛竿的目标：船附近几条最近的鱼里随机挑一条，免得每次都钓同一条。 */
     private fun pickAutoCastTarget(): Fish? {
@@ -1391,6 +1553,12 @@ class World(val gameState: GameState) {
     /** 本帧新解锁的成就，供 UI 弹提示。 */
     val pendingAchievements = mutableListOf<AchievementDef>()
 
+    /** 本帧新解锁的鱼种（图鉴解锁弹窗）。 */
+    val pendingNewSpecies = mutableListOf<Species>()
+
+    /** 本帧刷新的体型纪录（鱼种 + 新体型）。 */
+    val pendingNewRecords = mutableListOf<Pair<Species, FishSize>>()
+
     companion object {
         /** 自动抛竿两竿之间的间隔（秒，未计「自动绞盘」加速）。 */
         const val AUTO_CAST_INTERVAL = 0.9f
@@ -1445,6 +1613,15 @@ class World(val gameState: GameState) {
 
         /** 宝箱开出珍珠的概率。 */
         const val CHEST_PEARL_CHANCE = 0.25f
+
+        /** 鱼王两次现身之间的间隔（秒）。 */
+        const val KING_INTERVAL = 240f
+
+        /** 鱼王奖励 = 当前巨口鱼价值 × 这个倍数。 */
+        const val KING_VALUE_MULT = 60.0
+
+        /** 拽上来一条鱼王给几颗珍珠。 */
+        const val KING_PEARLS = 2L
     }
 
     /**
@@ -1460,8 +1637,17 @@ class World(val gameState: GameState) {
             finalValue *= gameState.comboMultiplier
         }
 
-        // 图鉴收集：钓到就记一笔
-        gameState.recordSpecies(fish.species.id)
+        // 体型加成：大只/巨大/王者 明显更值钱
+        finalValue *= fish.size.valueMul
+
+        // 图鉴收集：钓到就记一笔（首次发现要弹中央解锁提示）
+        if (gameState.recordSpecies(fish.species.id)) {
+            pendingNewSpecies.add(fish.species)
+        }
+        // 体型纪录：刷新了就弹一次提示
+        if (gameState.recordSize(fish.species.id, fish.size)) {
+            pendingNewRecords.add(Pair(fish.species, fish.size))
+        }
 
         gameState.money += finalValue
         // 统一记账：累计统计 + 连击 + 每日任务进度。

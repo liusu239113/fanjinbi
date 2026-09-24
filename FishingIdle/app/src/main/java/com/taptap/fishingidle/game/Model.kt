@@ -177,6 +177,13 @@ class SaveData {
     var totalCatches: Long = 0
     var unlockedAchievements: MutableSet<String> = mutableSetOf()
     var caughtSpecies: MutableSet<String> = mutableSetOf()
+
+    /** 每个鱼种钓到过的最大体型（存 FishSize.ordinal）。 */
+    var bestSize: MutableMap<String, Int> = mutableMapOf()
+
+    /** 后期玩法的计数：开过的宝箱、拽上来的鱼王。 */
+    var chestsOpened: Long = 0
+    var kingsCaught: Long = 0
     var unlockedMaps: MutableSet<String> = mutableSetOf("creek")
     var currentMapId: String = "creek"
     var masterVolume: Float = 0.8f
@@ -196,4 +203,6 @@ class SaveData {
     var dailyRareCatches: Long = 0
     var dailyMapChanges: Int = 0
     var dailyHelpersBought: Int = 0
+    var dailyChests: Int = 0
+    var dailyKings: Int = 0
 }

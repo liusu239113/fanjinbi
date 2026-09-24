@@ -3,6 +3,7 @@ package com.taptap.fishingidle.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,9 +45,11 @@ import com.taptap.fishingidle.game.Content
 import com.taptap.fishingidle.game.Bestiary
 import com.taptap.fishingidle.game.DailyQuests
 import com.taptap.fishingidle.game.DexReward
+import com.taptap.fishingidle.game.FishSize
 import com.taptap.fishingidle.game.FishingMap
 import com.taptap.fishingidle.game.Rarity
 import com.taptap.fishingidle.game.Species
+import com.taptap.fishingidle.game.SpeciesLore
 import com.taptap.fishingidle.game.World
 import com.taptap.fishingidle.game.GameState
 import com.taptap.fishingidle.game.PurchasableDef
@@ -213,6 +217,12 @@ private fun ItemList(
         return
     }
 
+    // 还没解锁的下一步：灰条列在最后，最多两条，让玩家知道该往哪走
+    val locked = remember(revision, state.purchases.size, defs) {
+        defs.filter { !it.visibleWhen(state) && Content.unlockHints.containsKey(it.id) }
+            .take(2)
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -220,7 +230,53 @@ private fun ItemList(
         items(visible, key = { it.id }) { def ->
             ShopItemRow(def, state, assets, onBuy, def.id == justBought)
         }
+        if (locked.isNotEmpty()) {
+            item {
+                Text(
+                    "即将解锁",
+                    color = UITheme.TextDim,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+                )
+            }
+            items(locked, key = { "locked_" + it.id }) { def ->
+                LockedItemRow(def = def, hint = Content.unlockHints[def.id].orEmpty(), assets = assets)
+            }
+        }
         item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+/** 还没解锁的条目的灰条：显示图标、名字和"怎么解锁"。 */
+@Composable
+private fun LockedItemRow(def: PurchasableDef, hint: String, assets: Assets) {
+    val icon = remember(def.icon) { assets.firstFrame(def.icon, 96)?.asImageBitmap() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(UITheme.SlotBg.copy(alpha = 0.5f))
+            .border(1.5.dp, UITheme.TextDim.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+            .padding(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(UITheme.DeepWater),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (icon != null) {
+                Image(icon, contentDescription = null, modifier = Modifier.size(32.dp).alpha(0.25f))
+            }
+        }
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            Text("🔒 ${def.name}", color = UITheme.TextDim, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(hint, color = UITheme.TextDim.copy(alpha = 0.8f), fontSize = 10.sp)
+        }
     }
 }
 
@@ -597,6 +653,8 @@ private fun DailyQuestList(state: GameState, revision: Int) {
 private fun FishDex(state: GameState, assets: Assets, revision: Int) {
     @Suppress("UNUSED_EXPRESSION") revision
     val caught = state.caughtSpecies
+    // 点某一条鱼 → 展开资料页
+    var detail by remember { mutableStateOf<Species?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -632,15 +690,137 @@ private fun FishDex(state: GameState, assets: Assets, revision: Int) {
                 }
             }
             items(map.species, key = { it.id }) { sp ->
-                SpeciesRow(sp, caught.contains(sp.id), assets)
+                SpeciesRow(
+                    sp = sp,
+                    isCaught = caught.contains(sp.id),
+                    assets = assets,
+                    bestSize = state.bestSizeOf(sp.id),
+                    onClick = { detail = sp },
+                )
             }
         }
         item { Spacer(Modifier.height(8.dp)) }
     }
+
+    detail?.let { sp ->
+        SpeciesDetail(
+            sp = sp,
+            isCaught = caught.contains(sp.id),
+            bestSize = state.bestSizeOf(sp.id),
+            inWater = state.currentMap.species.any { it.id == sp.id },
+            assets = assets,
+            onClose = { detail = null },
+        )
+    }
+}
+
+/**
+ * 单条鱼的资料页。
+ *
+ * 没钓到的鱼也允许点开 —— 显示剪影、只露稀有度和出没水域，
+ * 留个"还差什么"的钩子，比整条灰掉更有收集欲。
+ */
+@Composable
+private fun SpeciesDetail(
+    sp: Species,
+    isCaught: Boolean,
+    bestSize: FishSize,
+    inWater: Boolean,
+    assets: Assets,
+    onClose: () -> Unit,
+) {
+    val fish = remember(sp.sprite) { assets.firstFrame(sp.sprite, 320)?.asImageBitmap() }
+    val rarity = when (sp.rarity) {
+        Rarity.COMMON -> UITheme.RarityCommon
+        Rarity.RARE -> UITheme.RarityRare
+        Rarity.EPIC -> UITheme.RarityEpic
+        Rarity.LEGEND -> UITheme.RarityLegend
+    }
+    val maps = Bestiary.maps.filter { m -> m.species.any { it.id == sp.id } }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xCC000000))
+            .clickable { onClose() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .width(320.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(UITheme.PanelBg)
+                .border(2.dp, rarity.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "#${sp.dexNo} · ${if (isCaught) sp.name else "？？？"}",
+                color = if (isCaught) rarity else UITheme.TextDim,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(UITheme.DeepWater),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (fish != null) {
+                    Image(
+                        fish, contentDescription = sp.name,
+                        modifier = Modifier.height(84.dp).alpha(if (isCaught) 1f else 0.22f),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            DetailRow("稀有度", "${sp.rarity.displayName} · ${sp.tint.display}")
+            DetailRow("最大体型", if (isCaught) bestSize.label else "未记录")
+            DetailRow("体价值", "×${String.format("%.2f", sp.valueMul)}")
+            DetailRow("出没水域", maps.joinToString("、") { it.name })
+            DetailRow("当前水域", if (inWater) "这片水里就有" else "这片水里没有")
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (isCaught) SpeciesLore.of(sp) else "还没钓到过它。去${maps.firstOrNull()?.name ?: "水域"}碰碰运气。",
+                color = UITheme.TextNormal,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            GameButton(
+                text = "关闭", onClick = onClose,
+                modifier = Modifier.fillMaxWidth().height(42.dp),
+                accent = UITheme.Gold, fontSize = 15,
+            )
+        }
+    }
 }
 
 @Composable
-private fun SpeciesRow(sp: Species, isCaught: Boolean, assets: Assets) {
+private fun DetailRow(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = UITheme.TextDim, fontSize = 12.sp)
+        Text(value, color = UITheme.GoldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun SpeciesRow(
+    sp: Species,
+    isCaught: Boolean,
+    assets: Assets,
+    bestSize: FishSize,
+    onClick: () -> Unit,
+) {
     val icon = remember(sp.sprite) { assets.firstFrame(sp.sprite, 128)?.asImageBitmap() }
     val rarity = when (sp.rarity) {
         Rarity.COMMON -> UITheme.RarityCommon
@@ -655,6 +835,7 @@ private fun SpeciesRow(sp: Species, isCaught: Boolean, assets: Assets) {
             .clip(RoundedCornerShape(8.dp))
             .background(UITheme.SlotBg)
             .border(1.5.dp, rarity.copy(alpha = if (isCaught) 0.7f else 0.2f), RoundedCornerShape(8.dp))
+            .clickable { onClick() }
             .padding(7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -682,11 +863,27 @@ private fun SpeciesRow(sp: Species, isCaught: Boolean, assets: Assets) {
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Text(
-                "${sp.rarity.displayName} · ${sp.tint.display}",
-                color = UITheme.TextDim,
-                fontSize = 10.sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${sp.rarity.displayName} · ${sp.tint.display}",
+                    color = UITheme.TextDim,
+                    fontSize = 10.sp,
+                )
+                // 体型纪录徽章：钓到过"大只"以上才显示
+                if (isCaught && bestSize != FishSize.NORMAL) {
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        bestSize.label,
+                        color = UITheme.GoldLight,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(UITheme.Gold.copy(alpha = 0.22f))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
+                    )
+                }
+            }
         }
         Text(
             "#${sp.dexNo}",
@@ -725,6 +922,14 @@ private fun StatsView(state: GameState, revision: Int) {
                 StatRow("锦鲤", "${state.epicFish} 条")
                 StatRow("巨口鱼", "${state.legendFish} 条")
                 StatRow("自动钓手", "${state.helpers} 名")
+                StatRow("珍珠", "${state.pearls} 颗", UITheme.GoldLight)
+                StatRow("已转生", "${state.prestigeCount} 次")
+                StatRow("打开宝箱", "${state.chestsOpened} 个")
+                StatRow("拽上鱼王", "${state.kingsCaught} 条", UITheme.GoldLight)
+                StatRow(
+                    "体型纪录",
+                    "${state.bestSize.count { it.value > 0 }} 种有纪录",
+                )
             }
         }
 
