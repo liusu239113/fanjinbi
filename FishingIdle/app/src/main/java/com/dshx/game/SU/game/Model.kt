@@ -194,6 +194,22 @@ class SaveData {
     /** 上次离开时的时间戳（毫秒），用于结算离线收益。 */
     var lastSeenMillis: Long = 0L
 
+    // ---- 换装 ----
+    var ownedCharacters: MutableSet<String> = mutableSetOf()
+    var currentCharacterId: String = ""
+    var currentHelperId: String = ""
+
+    // ---- 仓库 ----
+    /** 仓库里的鱼。用扁平的数值数组存，避免为存档单独再定义一个类。 */
+    var warehouseSpecies: MutableList<String> = mutableListOf()
+    var warehouseSize: MutableList<Int> = mutableListOf()
+    var warehouseValue: MutableList<Double> = mutableListOf()
+    var warehouseStoredAt: MutableList<Long> = mutableListOf()
+    var warehouseFirstCatch: MutableList<Boolean> = mutableListOf()
+    var warehouseUpgrades: Int = 0
+    var warehouseEarned: Double = 0.0
+    var merchantVisits: Int = 0
+
     // ---- 每日任务 ----
     var dailyDayIndex: Long = 0L
     var dailyDone: MutableSet<String> = mutableSetOf()
@@ -205,4 +221,9 @@ class SaveData {
     var dailyHelpersBought: Int = 0
     var dailyChests: Int = 0
     var dailyKings: Int = 0
+    var dailyCasts: Int = 0
+    var dailyPurchases: Int = 0
+    var dailyNewSpecies: Int = 0
+    var dailyStored: Int = 0
+    var dailySold: Int = 0
 }

@@ -70,6 +70,15 @@ class GameView(
         running = false
     }
 
+    /**
+     * 换装后调用：让渲染器按新角色重载立绘与甩竿动画。
+     * 竿尖会按新素材逐帧重新检测，鱼线依然接在竿尖上。
+     */
+    fun onCharacterChanged() {
+        renderer.onCharacterChanged()
+        postInvalidateOnAnimation()
+    }
+
     override fun onDraw(canvas: android.graphics.Canvas) {
         super.onDraw(canvas)
         val t = ViewTransform(width.toFloat(), height.toFloat())

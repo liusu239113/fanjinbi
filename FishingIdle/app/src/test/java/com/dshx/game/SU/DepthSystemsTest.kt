@@ -167,12 +167,20 @@ class DepthSystemsTest {
     fun `达到目标后自动结算并发奖`() {
         val s = GameState()
         // 找到今天的"钓上 30 条鱼"类任务，直接把进度打满
+        // 把所有进度字段都打满：任务池里任何一条抽中都能完成
         s.dailyProgress.catches = 10_000
         s.dailyProgress.moneyEarned = 1e12
         s.dailyProgress.bestCombo = 999
         s.dailyProgress.rareCatches = 999
         s.dailyProgress.helpersBought = 99
         s.dailyProgress.mapChanges = 99
+        s.dailyProgress.chests = 99
+        s.dailyProgress.kings = 99
+        s.dailyProgress.casts = 999
+        s.dailyProgress.anyPurchase = 99
+        s.dailyProgress.newSpecies = 99
+        s.dailyProgress.stored = 99
+        s.dailyProgress.sold = 99
 
         val moneyBefore = s.money
         val done = DailyQuests.claimCompleted(s)
@@ -185,12 +193,20 @@ class DepthSystemsTest {
     @Test
     fun `已完成的任务不会重复发奖`() {
         val s = GameState()
+        // 把所有进度字段都打满：任务池里任何一条抽中都能完成
         s.dailyProgress.catches = 10_000
         s.dailyProgress.moneyEarned = 1e12
         s.dailyProgress.bestCombo = 999
         s.dailyProgress.rareCatches = 999
         s.dailyProgress.helpersBought = 99
         s.dailyProgress.mapChanges = 99
+        s.dailyProgress.chests = 99
+        s.dailyProgress.kings = 99
+        s.dailyProgress.casts = 999
+        s.dailyProgress.anyPurchase = 99
+        s.dailyProgress.newSpecies = 99
+        s.dailyProgress.stored = 99
+        s.dailyProgress.sold = 99
 
         DailyQuests.claimCompleted(s)
         val afterFirst = s.money

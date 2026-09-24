@@ -54,6 +54,7 @@ import com.dshx.game.SU.game.SaveManager
 import com.dshx.game.SU.game.Settings
 import com.dshx.game.SU.game.SkillTree
 import com.dshx.game.SU.game.World
+import com.dshx.game.SU.game.formatNumber
 import com.dshx.game.SU.ads.AdDaily
 import com.dshx.game.SU.ui.AdGift
 import com.dshx.game.SU.ui.AdGiftButton
@@ -64,6 +65,7 @@ import com.dshx.game.SU.ui.UnlockPopupCard
 import com.dshx.game.SU.ui.AppFontFamily
 import com.dshx.game.SU.ui.BottomBar
 import com.dshx.game.SU.ui.BuffStrip
+import com.dshx.game.SU.ui.formatBuffTime
 import com.dshx.game.SU.ui.CatchStrip
 import com.dshx.game.SU.ui.ComplianceBlockedGate
 import com.dshx.game.SU.ui.ComplianceCheckingGate
@@ -110,6 +112,22 @@ class MainActivity : ComponentActivity() {
 
     /** 轻量提示（相当于 Toast），由 [showToast] 写入、游戏内顶部展示。 */
     private var toastText by mutableStateOf<String?>(null)
+
+    /** 商店刷新计数：广告刷新后 +1，商店面板据此重掷商品。 */
+    private var shopRefreshTick by mutableStateOf(0)
+
+    /** 广告礼包角标数量（当前可领的条目数）。 */
+    private val adGiftCount: Int get() = if (RewardAds.isReady()) AD_GIFT_COUNT else 0
+
+    /** buff 类型 → 图标资源名（HUD 的 buff 条用）。 */
+    private fun buffIconName(kind: String): String = when (kind) {
+        GameState.Buff.DOUBLE_INCOME -> "ad_double"
+        GameState.Buff.RARE_LURE -> "ad_bait"
+        GameState.Buff.HELPER_RUSH -> "ad_speed"
+        GameState.Buff.REEL_RUSH -> "ad_time"
+        GameState.Buff.DEX_BOOST -> "ad_dex"
+        else -> "ad_boost"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -340,6 +358,8 @@ class MainActivity : ComponentActivity() {
         // 之后切后台回来走 ON_RESUME 的实时累计，不再重复弹窗。
         var offlineResult by remember { mutableStateOf<OfflineEarnings.Result?>(null) }
         var offlineChecked by remember { mutableStateOf(false) }
+        // 离线收益是否已经用广告翻倍过（翻倍后按钮换成一行提示）
+        var offlineDoubled by remember { mutableStateOf(false) }
         // HUD 刷新计数。GameState 是普通 var，必须靠它变化来驱动重组，
         // 否则金币数字不会更新。
         var revision by remember { mutableIntStateOf(0) }
@@ -357,11 +377,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 合作 buff 倒计时：跟 HUD 同一节奏推进（50ms 一步）
+        // 广告限时 buff 倒计时：跟 HUD 同一节奏推进（50ms 一步）
         LaunchedEffect(Unit) {
             while (true) {
                 kotlinx.coroutines.delay(50)
-                if (gameState.buffActive) gameState.tickBuff(0.05f)
+                if (gameState.anyBuffActive) gameState.tickBuffs(0.05f)
             }
         }
 
@@ -385,20 +405,21 @@ class MainActivity : ComponentActivity() {
                 } else {
                     audio.stopLoop("sfx_drone")
                 }
-                // 新鱼种 / 新体型纪录：中央弹窗优先于成就条
+                // 新鱼种 / 新体型纪录：中央弹窗优先于成就条。
+                // 3 秒后自动关闭（玩家也可以随时点掉）。
                 if (unlockPopup == null && world.pendingNewSpecies.isNotEmpty()) {
                     unlockPopup = com.dshx.game.SU.ui.UnlockPopup(
                         world.pendingNewSpecies.removeAt(0), null,
                     )
                     audio.play("sfx_legend", 1.0f)
-                    kotlinx.coroutines.delay(3400)
+                    kotlinx.coroutines.delay(3000)
                     unlockPopup = null
                     kotlinx.coroutines.delay(200)
                 } else if (unlockPopup == null && world.pendingNewRecords.isNotEmpty()) {
                     val (sp, tier) = world.pendingNewRecords.removeAt(0)
                     unlockPopup = com.dshx.game.SU.ui.UnlockPopup(sp, tier)
                     audio.play("sfx_achievement", 1.0f)
-                    kotlinx.coroutines.delay(3400)
+                    kotlinx.coroutines.delay(3000)
                     unlockPopup = null
                     kotlinx.coroutines.delay(200)
                 } else if (toast == null && world.pendingAchievements.isNotEmpty()) {
@@ -461,13 +482,14 @@ class MainActivity : ComponentActivity() {
                 val perSec = OfflineEarnings.perHelperPerSecond(gameState)
                 val result = OfflineEarnings.settle(elapsed, perSec, gameState.helpers)
                 if (result.isMeaningful) {
-                    // 直接入账，弹窗只是告知。
-                    // 看过广告的「离线收益翻倍」在这里兑现（单次消费）。
-                    val doubled = gameState.consumeOfflineDouble()
-                    val gain = if (doubled) result.money * 2 else result.money
-                    gameState.money += gain
+                    // 先直接入账，弹窗里的「看广告翻倍」再补一笔等额的钱。
+                    // 这样玩家就算不看广告也不亏，看了才额外多一份。
+                    gameState.money += result.money
                     gameState.recordOfflineEarnings(result.catches)
+                    // 离线期间 buff 照样流逝（下线也计时的设计意图）
+                    gameState.decayBuffsOffline(elapsed)
                     offlineResult = result
+                    offlineDoubled = false
                     revision++
                 }
             }
@@ -603,7 +625,7 @@ class MainActivity : ComponentActivity() {
                     CatchStrip(gameState, revision)
                 }
 
-                // 金币旁的「广告礼包」入口 + 合作 buff 倒计时。
+                // 金币旁的「广告礼包」入口 + 限时 buff 倒计时。
                 // 紧贴金币条下方，是转化率最高的一类广告位。
                 Spacer(Modifier.height(6.dp))
                 Row(
@@ -612,16 +634,18 @@ class MainActivity : ComponentActivity() {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AdGiftButton(
-                        leftToday = (DAILY_GIFT_LIMIT - AdDaily.used(context, GIFT_DAILY_KEY))
-                            .coerceAtLeast(0),
+                        assets = assets,
+                        badge = adGiftCount,
+                        enabled = RewardAds.isReady(),
                         ready = RewardAds.isReady(),
                         onClick = { showAdGift = true },
                     )
-                    if (gameState.buffActive) {
+                    if (gameState.anyBuffActive) {
                         BuffStrip(
-                            label = "合作加成 +50% 收益",
-                            remainSeconds = gameState.buffRemain,
-                            totalSeconds = gameState.buffTotal,
+                            entries = gameState.activeBuffs().map { (kind, remain) ->
+                                Triple(buffIconName(kind), remain, gameState.buffTotal(kind))
+                            },
+                            assets = assets,
                         )
                     }
                 }
@@ -699,6 +723,8 @@ class MainActivity : ComponentActivity() {
                         if (ok) {
                             if (def.attribute == Attribute.HELPER) {
                                 DailyTracker.onHelperBought(gameState)
+                            } else {
+                                DailyTracker.onAnyPurchase(gameState)
                             }
                             audio.play("sfx_buy", 0.9f)
                             world.syncFishCount()
@@ -715,6 +741,37 @@ class MainActivity : ComponentActivity() {
                         audio.play("sfx_click", 0.6f)
                         showShop = false
                     },
+                    onUnlockCharacter = { def ->
+                        val ok = gameState.unlockCharacter(def)
+                        if (ok) {
+                            audio.play("sfx_buy", 0.95f)
+                            saveManager.save(gameState, settings)
+                        } else {
+                            audio.play("sfx_cant_buy", 0.7f)
+                        }
+                        revision++
+                        ok
+                    },
+                    onEquipCharacter = { def ->
+                        if (gameState.equipCharacter(def)) {
+                            audio.play("sfx_click", 0.7f)
+                            // 换装后立刻重载立绘：下一帧就画新角色
+                            gameViewRef?.onCharacterChanged()
+                            saveManager.save(gameState, settings)
+                        }
+                        revision++
+                    },
+                    onSellFish = { revision++ },
+                    onSellAll = {
+                        audio.play("sfx_buy", 0.9f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onUpgradeWarehouse = {
+                        audio.play("sfx_buy", 0.9f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
                 )
             }
 
@@ -724,10 +781,23 @@ class MainActivity : ComponentActivity() {
                 OfflinePanel(
                     result = result,
                     assets = assets,
+                    adReady = RewardAds.isReady(),
+                    alreadyDoubled = offlineDoubled,
                     onClaim = {
                         audio.play("sfx_success", 0.95f)
                         offlineResult = null
                         saveManager.save(gameState, settings)
+                    },
+                    onDouble = {
+                        // 再补一笔等额的钱 = 总收益翻倍
+                        requestAd(RewardAds.PLACEMENT_OFFLINE_DOUBLE) {
+                            gameState.money += result.money
+                            gameState.recordOfflineEarnings(result.catches)
+                            offlineDoubled = true
+                            saveManager.save(gameState, settings)
+                            showToast("离线收益已翻倍 +🪙${formatNumber(result.money)}")
+                            revision++
+                        }
                     },
                 )
             }
@@ -833,6 +903,7 @@ class MainActivity : ComponentActivity() {
                     gifts = buildAdGifts(context),
                     statusText = if (RewardAds.isReady()) "看完广告立即到账"
                     else RewardAds.statusText(),
+                    assets = assets,
                     onDismiss = { showAdGift = false },
                 )
             }
@@ -925,69 +996,208 @@ class MainActivity : ComponentActivity() {
     /**
      * 广告礼包内容。
      *
-     * 一次给多个选择比单个按钮的触发率高得多 —— 玩家总会挑一个看起来最划算的。
-     * 含**合作 buff**（限时 +50% 收益），是复访率最高的一类激励。
+     * 设计要点（都是围绕转化率的）：
+     *  1. **一次给 10+ 个选择** —— 玩家总会挑一个看起来最划算的，比单个按钮触发率高得多。
+     *  2. **不设每日上限** —— 想看就看，愿意看广告的玩家不该被拦住。
+     *  3. **有 buff 的条目带倒计时**，玩家随时知道还剩多久，是复投的最强动机。
+     *  4. 图标全用美术资源，不用 emoji（不同 ROM 渲染不一致，也不搭画风）。
+     *
+     * 「离线收益翻倍」**不在这里** —— 它属于离线结算弹窗，
+     * 放在礼包里玩家不知道该什么时候用。
      */
     private fun buildAdGifts(context: android.content.Context): List<AdGift> {
-        val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
-        val used = AdDaily.used(context, GIFT_DAILY_KEY)
-        val left = (DAILY_GIFT_LIMIT - used).coerceAtLeast(0)
         val list = mutableListOf<AdGift>()
+        val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
+        val fmt = { v: Double -> com.dshx.game.SU.game.formatNumber(v) }
 
-        if (left > 0) {
-            list += AdGift(
-                id = "gift_gold",
-                icon = "🪙",
-                title = "金币礼包",
-                desc = "立得 ${com.dshx.game.SU.game.formatNumber(gold)} 金币 · 今日还剩 $left 次",
-                action = {
-                    requestAd(RewardAds.PLACEMENT_GOLD_GIFT) {
-                        gameState.money += gold
-                        AdDaily.markUsed(context, GIFT_DAILY_KEY)
-                        saveManager.save(gameState, settings)
-                        showToast("金币礼包 +${com.dshx.game.SU.game.formatNumber(gold)}")
-                    }
-                },
-            )
-        } else {
-            list += AdGift(
-                id = "gift_gold_done",
-                icon = "🪙",
-                title = "金币礼包",
-                desc = "今日已领完，明天再来",
-                action = { showToast("今日礼包已领完") },
-            )
-        }
-
-        // 合作 buff：限时 +50% 收益。已激活时显示为"续时长"，动机更明确。
-        val buffLabel = if (gameState.buffActive) {
-            "合作加成 +50% 收益（剩余 ${gameState.buffRemain.toInt()}s）"
-        } else {
-            "合作加成 +50% 收益，持续 5 分钟"
-        }
+        // ---- 1. 双倍收益：10 分钟所有渔获 ×2（转化最高的一类）----
+        val doubleLeft = gameState.buffRemain(GameState.Buff.DOUBLE_INCOME)
         list += AdGift(
-            id = "gift_buff",
-            icon = "⚡",
-            title = "合作 Buff",
-            desc = buffLabel,
+            id = "g_double",
+            icon = "ad_double",
+            title = "双倍收益 · 10 分钟",
+            desc = if (doubleLeft > 0f)
+                "所有渔获 ×2（剩余 ${formatBuffTime(doubleLeft)}）"
+            else "10 分钟内所有渔获 ×2，下线也计时",
             action = {
-                requestAd(RewardAds.PLACEMENT_COOP_BUFF) {
-                    gameState.activateBuff(300f)
-                    showToast("合作加成已激活：+50% 收益 5 分钟")
+                requestAd(RewardAds.PLACEMENT_DOUBLE_INCOME) {
+                    gameState.activateBuff(GameState.Buff.DOUBLE_INCOME, 600f)
+                    showToast("双倍收益已开启：10 分钟")
                 }
             },
         )
 
-        // 离线收益翻倍：只在有离线收益待领时才出现
+        // ---- 2. 稀有鱼诱饵：3 分钟稀有鱼大爆发 ----
+        val lureLeft = gameState.buffRemain(GameState.Buff.RARE_LURE)
         list += AdGift(
-            id = "gift_offline",
-            icon = "🌙",
-            title = "离线收益翻倍",
-            desc = "下次离线结算的金币翻一倍",
+            id = "g_lure",
+            icon = "ad_bait",
+            title = "稀有鱼诱饵 · 3 分钟",
+            desc = if (lureLeft > 0f)
+                "稀有鱼抢食（剩余 ${formatBuffTime(lureLeft)}）"
+            else "3 分钟内稀有鱼出现率大幅提升",
             action = {
-                requestAd(RewardAds.PLACEMENT_OFFLINE_DOUBLE) {
-                    gameState.offlineDoubleReady = true
-                    showToast("离线收益翻倍已就绪，下次结算生效")
+                requestAd(RewardAds.PLACEMENT_RARE_LURE) {
+                    gameState.activateBuff(GameState.Buff.RARE_LURE, 180f)
+                    showToast("稀有鱼诱饵已投入水中：3 分钟")
+                }
+            },
+        )
+
+        // ---- 3. 钓手加速：5 分钟挂机产出翻倍 ----
+        val rushLeft = gameState.buffRemain(GameState.Buff.HELPER_RUSH)
+        list += AdGift(
+            id = "g_helper",
+            icon = "ad_speed",
+            title = "钓手加速 · 5 分钟",
+            desc = if (rushLeft > 0f)
+                "钓手产出 ×2（剩余 ${formatBuffTime(rushLeft)}）"
+            else "5 分钟内所有钓手产出 ×2",
+            action = {
+                requestAd(RewardAds.PLACEMENT_HELPER_RUSH) {
+                    gameState.activateBuff(GameState.Buff.HELPER_RUSH, 300f)
+                    showToast("钓手加速已开启：5 分钟")
+                }
+            },
+        )
+
+        // ---- 4. 收线加速：5 分钟收线快一倍 ----
+        val reelLeft = gameState.buffRemain(GameState.Buff.REEL_RUSH)
+        list += AdGift(
+            id = "g_reel",
+            icon = "ad_time",
+            title = "极速收线 · 5 分钟",
+            desc = if (reelLeft > 0f)
+                "收线速度 ×2（剩余 ${formatBuffTime(reelLeft)}）"
+            else "5 分钟内收线速度快一倍",
+            action = {
+                requestAd(RewardAds.PLACEMENT_REEL_RUSH) {
+                    gameState.activateBuff(GameState.Buff.REEL_RUSH, 300f)
+                    showToast("极速收线已开启：5 分钟")
+                }
+            },
+        )
+
+        // ---- 5. 金币掉落：立得一笔（按当前收益水平给）----
+        list += AdGift(
+            id = "g_gold",
+            icon = "ad_gold",
+            title = "金币掉落",
+            desc = "立得 ${fmt(gold)} 金币 · 不限次数",
+            action = {
+                requestAd(RewardAds.PLACEMENT_GOLD_DROP) {
+                    gameState.money += gold
+                    saveManager.save(gameState, settings)
+                    showToast("金币 +${fmt(gold)}")
+                }
+            },
+        )
+
+        // ---- 6. 珍珠礼包：给转生货币，永久保留（后期玩家最缺）----
+        val pearlGain = 1L + (gameState.prestigeCount / 2L)
+        list += AdGift(
+            id = "g_pearl",
+            icon = "ad_pearl",
+            title = "珍珠礼包",
+            desc = "立得 $pearlGain 颗珍珠（转生货币，永久保留）",
+            action = {
+                requestAd(RewardAds.PLACEMENT_PEARL) {
+                    gameState.pearls += pearlGain
+                    saveManager.save(gameState, settings)
+                    showToast("珍珠 +$pearlGain")
+                }
+            },
+        )
+
+        // ---- 7. 图鉴加成翻倍：2 分钟收集加成 ×2 ----
+        val dexLeft = gameState.buffRemain(GameState.Buff.DEX_BOOST)
+        list += AdGift(
+            id = "g_dex",
+            icon = "ad_dex",
+            title = "图鉴加成翻倍 · 2 分钟",
+            desc = if (dexLeft > 0f)
+                "图鉴加成 ×2（剩余 ${formatBuffTime(dexLeft)}）"
+            else "2 分钟内图鉴收集带来的加成本身翻倍",
+            action = {
+                requestAd(RewardAds.PLACEMENT_DEX_BOOST) {
+                    gameState.activateBuff(GameState.Buff.DEX_BOOST, 120f)
+                    showToast("图鉴加成翻倍：2 分钟")
+                }
+            },
+        )
+
+        // ---- 8. 宝箱钥匙：立刻刷一个必出珍珠的宝箱（买了宝藏才有意义）----
+        if (gameState.treasureOwned) {
+            list += AdGift(
+                id = "g_chest",
+                icon = "ad_chest",
+                title = "宝箱钥匙",
+                desc = "立刻在河面浮出一个必出珍珠的宝箱",
+                action = {
+                    requestAd(RewardAds.PLACEMENT_CHEST_KEY) {
+                        world.summonBonusChest()
+                        showToast("宝箱已浮出水面，快去找！")
+                    }
+                },
+            )
+        }
+
+        // ---- 9. 转生加速：本次转生珍珠 +50% ----
+        if (gameState.canPrestige()) {
+            val boostOn = gameState.prestigeBoostReady
+            list += AdGift(
+                id = "g_prestige",
+                icon = "ad_boost",
+                title = "转生加速",
+                desc = if (boostOn) "已就绪：本次转生珍珠 +50%"
+                else "本次转生获得的珍珠 +50%",
+                action = {
+                    if (boostOn) {
+                        showToast("转生加速已就绪")
+                        return@AdGift
+                    }
+                    requestAd(RewardAds.PLACEMENT_PRESTIGE_BOOST) {
+                        gameState.prestigeBoostReady = true
+                        showToast("转生加速已就绪：本次转生珍珠 +50%")
+                    }
+                },
+            )
+        }
+
+        // ---- 10. 每日赠礼：每天一次的额外签到奖励 ----
+        val dailyDone = AdDaily.used(context, DAILY_BONUS_KEY) > 0
+        val dailyGain = (gameState.money * 0.25).coerceAtLeast(1_000.0)
+        list += AdGift(
+            id = "g_daily",
+            icon = "ad_daily",
+            title = "每日赠礼",
+            desc = if (dailyDone) "今日已领取，明天再来"
+            else "每日一次：立得 ${fmt(dailyGain)} 金币",
+            locked = dailyDone,
+            action = {
+                if (dailyDone) {
+                    showToast("今日赠礼已领取")
+                    return@AdGift
+                }
+                requestAd(RewardAds.PLACEMENT_DAILY_BONUS) {
+                    gameState.money += dailyGain
+                    AdDaily.markUsed(context, DAILY_BONUS_KEY)
+                    saveManager.save(gameState, settings)
+                    showToast("每日赠礼 +${fmt(dailyGain)}")
+                }
+            },
+        )
+
+        // ---- 11. 免费刷新商店 ----
+        list += AdGift(
+            id = "g_refresh",
+            icon = "ad_fish",
+            title = "免费刷新商店",
+            desc = "重掷商店里的商品与价格",
+            action = {
+                requestAd(RewardAds.PLACEMENT_SHOP_REFRESH) {
+                    shopRefreshTick++
+                    showToast("商店已刷新")
                 }
             },
         )
@@ -996,9 +1206,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        /** 每日广告礼包次数上限。 */
-        const val DAILY_GIFT_LIMIT = 5
-        const val GIFT_DAILY_KEY = "gift_daily"
+        /** 每日赠礼的键（唯一保留每日限制的条目 —— 它本身就是"每日"福利）。 */
+        const val DAILY_BONUS_KEY = "daily_bonus"
+
+        /** 广告礼包的条目数（角标显示用）。 */
+        const val AD_GIFT_COUNT = 11
     }
 
     override fun onDestroy() {

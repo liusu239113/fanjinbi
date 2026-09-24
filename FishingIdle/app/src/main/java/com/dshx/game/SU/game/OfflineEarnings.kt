@@ -9,8 +9,8 @@ package com.dshx.game.SU.game
  */
 object OfflineEarnings {
 
-    /** 最多累计 8 小时。 */
-    const val MAX_HOURS = 8.0
+    /** 最多累计 2 小时（再长会让挂机收益压过在线收益）。 */
+    const val MAX_HOURS = 2.0
 
     /** 离线效率折扣：只按在线效率的 55% 结算，鼓励在线玩。 */
     const val EFFICIENCY = 0.55

@@ -35,12 +35,15 @@ object DexReward {
     /**
      * 图鉴带来的总价值倍率。
      * 例：收集 30 种 + 集齐 2 张图 = 1 + 30×1.5% + 2×25% = 1.95×
+     *
+     * 看广告激活「图鉴加成翻倍」时，**加成部分**（不含基础 1.0）翻倍。
      */
     fun multiplier(state: GameState): Double {
         val speciesBonus = state.caughtSpecies.size * PER_SPECIES_BONUS
         val mapBonus = completedMaps(state) * PER_MAP_COMPLETE_BONUS
         val allBonus = if (completedMaps(state) == Bestiary.maps.size) ALL_COMPLETE_BONUS else 0.0
-        return 1.0 + speciesBonus + mapBonus + allBonus
+        val bonus = (speciesBonus + mapBonus + allBonus) * state.dexBoostMultiplier
+        return 1.0 + bonus
     }
 
     /** 距离下一个里程碑还差多少（用于 UI 进度条）。 */

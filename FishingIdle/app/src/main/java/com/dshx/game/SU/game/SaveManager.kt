@@ -59,6 +59,34 @@ class SaveManager(context: Context) {
             for ((k, v) in state.bestSize) put(k, v)
         })
 
+        // ---- 换装 ----
+        root.put("ownedCharacters", JSONArray().apply {
+            state.ownedCharacters.forEach { put(it) }
+        })
+        root.put("currentCharacterId", state.currentCharacterId)
+        root.put("currentHelperId", state.currentHelperId)
+
+        // ---- 仓库 ----
+        // 仓库里的鱼是玩家的资产，必须存；行情与鱼贩计时是临时的，不存。
+        root.put("warehouseSpecies", JSONArray().apply {
+            state.warehouse.forEach { put(it.speciesId) }
+        })
+        root.put("warehouseSize", JSONArray().apply {
+            state.warehouse.forEach { put(it.sizeOrdinal) }
+        })
+        root.put("warehouseValue", JSONArray().apply {
+            state.warehouse.forEach { put(it.baseValue) }
+        })
+        root.put("warehouseStoredAt", JSONArray().apply {
+            state.warehouse.forEach { put(it.storedAt) }
+        })
+        root.put("warehouseFirstCatch", JSONArray().apply {
+            state.warehouse.forEach { put(it.firstCatch) }
+        })
+        root.put("warehouseUpgrades", state.warehouseUpgrades)
+        root.put("warehouseEarned", state.warehouseEarned)
+        root.put("merchantVisits", state.merchantVisits)
+
         // 每日任务进度
         root.put("dailyDay", state.dailyDayIndex)
         root.put("dailyCatches", state.dailyProgress.catches)
@@ -69,6 +97,11 @@ class SaveManager(context: Context) {
         root.put("dailyHelpers", state.dailyProgress.helpersBought)
         root.put("dailyChests", state.dailyProgress.chests)
         root.put("dailyKings", state.dailyProgress.kings)
+        root.put("dailyCasts", state.dailyProgress.casts)
+        root.put("dailyPurchases", state.dailyProgress.anyPurchase)
+        root.put("dailyNewSpecies", state.dailyProgress.newSpecies)
+        root.put("dailyStored", state.dailyProgress.stored)
+        root.put("dailySold", state.dailyProgress.sold)
         val doneArr = org.json.JSONArray()
         for (d in state.dailyDone) doneArr.put(d)
         root.put("dailyDone", doneArr)
@@ -98,6 +131,11 @@ class SaveManager(context: Context) {
             data.dailyHelpersBought = root.optInt("dailyHelpers", 0)
             data.dailyChests = root.optInt("dailyChests", 0)
             data.dailyKings = root.optInt("dailyKings", 0)
+            data.dailyCasts = root.optInt("dailyCasts", 0)
+            data.dailyPurchases = root.optInt("dailyPurchases", 0)
+            data.dailyNewSpecies = root.optInt("dailyNewSpecies", 0)
+            data.dailyStored = root.optInt("dailyStored", 0)
+            data.dailySold = root.optInt("dailySold", 0)
             root.optJSONArray("dailyDone")?.let { arr ->
                 for (i in 0 until arr.length()) data.dailyDone.add(arr.optString(i))
             }
@@ -133,6 +171,32 @@ class SaveManager(context: Context) {
             root.optJSONObject("bestSize")?.let { obj ->
                 for (key in obj.keys()) data.bestSize[key] = obj.optInt(key, 0)
             }
+
+            // ---- 换装 ----
+            root.optJSONArray("ownedCharacters")?.let { arr ->
+                for (i in 0 until arr.length()) data.ownedCharacters.add(arr.optString(i))
+            }
+            data.currentCharacterId = root.optString("currentCharacterId", "")
+            data.currentHelperId = root.optString("currentHelperId", "")
+
+            // ---- 仓库 ----
+            val speciesArr = root.optJSONArray("warehouseSpecies")
+            val sizeArr = root.optJSONArray("warehouseSize")
+            val valueArr = root.optJSONArray("warehouseValue")
+            val atArr = root.optJSONArray("warehouseStoredAt")
+            val firstArr = root.optJSONArray("warehouseFirstCatch")
+            if (speciesArr != null) {
+                for (i in 0 until speciesArr.length()) {
+                    data.warehouseSpecies.add(speciesArr.optString(i))
+                    data.warehouseSize.add(sizeArr?.optInt(i, 0) ?: 0)
+                    data.warehouseValue.add(valueArr?.optDouble(i, 0.0) ?: 0.0)
+                    data.warehouseStoredAt.add(atArr?.optLong(i, 0L) ?: 0L)
+                    data.warehouseFirstCatch.add(firstArr?.optBoolean(i, false) ?: false)
+                }
+            }
+            data.warehouseUpgrades = root.optInt("warehouseUpgrades", 0)
+            data.warehouseEarned = root.optDouble("warehouseEarned", 0.0)
+            data.merchantVisits = root.optInt("merchantVisits", 0)
 
             state.loadFrom(data)
 

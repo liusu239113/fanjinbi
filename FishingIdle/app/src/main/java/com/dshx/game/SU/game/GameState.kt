@@ -120,13 +120,13 @@ class GameState {
     val skillValueMultiplier: Double
         get() = (1.0 + skillValueBonus) * (1.0 + skillGlobalBonus)
 
-    /** 技能带来的总收线速度倍率。 */
+    /** 技能带来的总收线速度倍率（含广告的收线加速 buff）。 */
     val skillReelMultiplier: Double
-        get() = (1.0 + skillReelBonus) * (1.0 + skillGlobalBonus)
+        get() = (1.0 + skillReelBonus) * (1.0 + skillGlobalBonus) * reelRushMultiplier
 
-    /** 技能带来的钓手效率倍率。 */
+    /** 技能带来的钓手效率倍率（含广告的钓手加速 buff）。 */
     val skillHelperMultiplier: Double
-        get() = (1.0 + skillHelperBonus) * (1.0 + skillGlobalBonus)
+        get() = (1.0 + skillHelperBonus) * (1.0 + skillGlobalBonus) * helperRushMultiplier
 
     fun skillLevel(id: String): Int = skillLevels[id] ?: 0
 
@@ -167,6 +167,78 @@ class GameState {
     /** 上次离开的时间戳（毫秒）。启动时据此结算离线收益。 */
     var lastSeenMillis: Long = 0L
 
+    // ---- 换装（角色）----
+
+    /** 已拥有的角色 id。 */
+    val ownedCharacters: MutableSet<String> = mutableSetOf(
+        Characters.defaultPlayer.id,
+        Characters.defaultHelper.id,
+    )
+
+    /** 当前使用的角色 id。 */
+    var currentCharacterId: String = Characters.defaultPlayer.id
+
+    /** 当前使用的帮手形象 id。 */
+    var currentHelperId: String = Characters.defaultHelper.id
+
+    /** 当前主角。 */
+    val currentCharacter: CharacterDef
+        get() = Characters.byId(currentCharacterId) ?: Characters.defaultPlayer
+
+    /** 当前帮手形象。 */
+    val currentHelper: CharacterDef
+        get() = Characters.byId(currentHelperId) ?: Characters.defaultHelper
+
+    /** 是否已拥有某角色。 */
+    fun ownsCharacter(id: String): Boolean = ownedCharacters.contains(id)
+
+    /**
+     * 解锁一个角色。金币不够返回 false。
+     * 珍珠角色走 [unlockCharacterWithPearls]。
+     */
+    fun unlockCharacter(def: CharacterDef): Boolean {
+        if (ownsCharacter(def.id)) return false
+        if (def.pearlPrice > 0) {
+            if (pearls < def.pearlPrice) return false
+            pearls -= def.pearlPrice
+        } else {
+            if (money < def.price) return false
+            money -= def.price
+        }
+        ownedCharacters.add(def.id)
+        return true
+    }
+
+    /** 切换使用的角色（必须已拥有）。 */
+    fun equipCharacter(def: CharacterDef): Boolean {
+        if (!ownsCharacter(def.id)) return false
+        if (def.isHelper) currentHelperId = def.id else currentCharacterId = def.id
+        return true
+    }
+
+    // ---- 仓库（渔获收藏 / 行情 / 鱼贩）----
+
+    /** 仓库里的鱼。新鱼种与破纪录的鱼入库，普通重复鱼直接折算金币。 */
+    val warehouse: MutableList<StoredFish> = mutableListOf()
+
+    /** 已购买的扩容次数。 */
+    var warehouseUpgrades: Int = 0
+
+    /** 鱼贩下一次到访的倒计时（秒）。不存档，重启就重置。 */
+    var merchantTimer: Float = Warehouse.MERCHANT_INTERVAL
+
+    /** 当前鱼贩报价；null = 没有鱼贩在。 */
+    var merchantOffer: MerchantOffer? = null
+
+    /** 鱼贩剩余停留时间（秒）。 */
+    var merchantStay: Float = 0f
+
+    /** 累计卖出渔获的金额（统计用）。 */
+    var warehouseEarned: Double = 0.0
+
+    /** 鱼贩来过的次数（统计用）。 */
+    var merchantVisits: Int = 0
+
     // ---- 每日任务 ----
     /** 当前是第几天（UTC 天数），用于判断是否要重置。 */
     var dailyDayIndex: Long = DailyQuests.currentDayIndex()
@@ -194,9 +266,11 @@ class GameState {
 
     /**
      * 连击收益加成。步长 = 技能「连击之势」+ 升级「行云流水」，上限 30 层。
+     * 角色「大力收线」会让连击加成翻倍。
      */
     val comboMultiplier: Double
-        get() = 1.0 + (combo.coerceAtMost(30) * (skillComboStep + comboPower))
+        get() = 1.0 + (combo.coerceAtMost(30) * (skillComboStep + comboPower) *
+            characterComboBonus)
 
     /**
      * 全局价值倍率。
@@ -205,31 +279,117 @@ class GameState {
      */
     val globalValueMultiplier: Double
         get() = (1.0 + rarityMul) * (1.0 + mapBonus) * DexReward.multiplier(this) *
-            prestigeMultiplier * buffMultiplier
+            prestigeMultiplier * doubleIncomeMultiplier
 
-    // ---- 广告合作 buff（限时收益加成）----
+    // ---- 广告限时 buff（看广告获得的加成）----
+    //
+    // 统一用一个「类型 → 剩余秒数」的表管理，[tickBuffs] 每帧推进。
+    // 全部**不存档**：限时加成重启后清零，否则等于把 10 分钟 buff 变成永久 buff。
+    // 离线期间照样流逝（[OfflineEarnings] 结算时按离开时长扣），这是设计意图 ——
+    // 「下线也计时」才逼玩家在线时把 buff 用足，也是广告复投的动力。
+
+    private val buffs: MutableMap<String, Float> = mutableMapOf()
+    private val buffTotals: MutableMap<String, Float> = mutableMapOf()
+
+    /** buff 类型常量。 */
+    object Buff {
+        /** 双倍收益：所有渔获 ×2。 */
+        const val DOUBLE_INCOME = "double_income"
+
+        /** 稀有鱼诱饵：高稀有度鱼出现率大增。 */
+        const val RARE_LURE = "rare_lure"
+
+        /** 钓手加速：自动钓手产出 ×2。 */
+        const val HELPER_RUSH = "helper_rush"
+
+        /** 收线加速：收线速度 ×2。 */
+        const val REEL_RUSH = "reel_rush"
+
+        /** 图鉴加成翻倍：图鉴收集加成 ×2。 */
+        const val DEX_BOOST = "dex_boost"
+    }
+
+    /** 某类 buff 剩余秒数。 */
+    fun buffRemain(kind: String): Float = buffs[kind] ?: 0f
+
+    /** 某类 buff 总时长（用于画进度条）。 */
+    fun buffTotal(kind: String): Float = buffTotals[kind] ?: 0f
+
+    /** 某类 buff 是否激活。 */
+    fun buffActive(kind: String): Boolean = buffRemain(kind) > 0f
+
+    /** 是否有任何 buff 在跑（HUD 用来决定要不要显示 buff 条）。 */
+    val anyBuffActive: Boolean get() = buffs.values.any { it > 0f }
+
+    /** 当前所有激活中的 buff（类型 → 剩余秒），按剩余时间倒序。 */
+    fun activeBuffs(): List<Pair<String, Float>> =
+        buffs.entries.filter { it.value > 0f }
+            .sortedByDescending { it.value }
+            .map { it.key to it.value }
 
     /**
-     * 合作 buff 剩余秒数 / 总时长。
-     *
-     * 不写进存档：它是限时加成，重启游戏不该把计时清零变成永久 buff。
-     * 由 MainActivity 的 20fps 心跳推进 [tickBuff]。
+     * 激活/延长一段 buff。
+     * 同类 buff 取**较长的剩余时间**而不是叠加 —— 叠加会让连看多条广告
+     * 滚出一个超长 buff，数值直接失控。
      */
-    var buffRemain: Float = 0f
-        private set
-    var buffTotal: Float = 0f
-        private set
+    fun activateBuff(kind: String, seconds: Float) {
+        buffs[kind] = maxOf(buffs[kind] ?: 0f, seconds)
+        buffTotals[kind] = maxOf(buffTotals[kind] ?: 0f, seconds)
+    }
 
-    val buffActive: Boolean get() = buffRemain > 0f
+    /** 推进所有 buff 计时。 */
+    fun tickBuffs(dt: Float) {
+        if (buffs.isEmpty()) return
+        val it = buffs.iterator()
+        while (it.hasNext()) {
+            val e = it.next()
+            val left = e.value - dt
+            if (left <= 0f) {
+                it.remove()
+                buffTotals.remove(e.key)
+            } else {
+                e.setValue(left)
+            }
+        }
+    }
 
-    /** 合作 buff 的收益倍率（+50%）。 */
-    val buffMultiplier: Double get() = if (buffActive) 1.5 else 1.0
+    /**
+     * 离线期间扣掉 buff 时长。
+     * 玩家下线时 buff 照样在流逝 —— 不这么做的话，睡前看一条 10 分钟广告，
+     * 早上起来还是满的，等于白送永久 buff。
+     */
+    fun decayBuffsOffline(elapsedSeconds: Long) {
+        tickBuffs(elapsedSeconds.toFloat())
+    }
+
+    /** 双倍收益倍率。 */
+    val doubleIncomeMultiplier: Double
+        get() = if (buffActive(Buff.DOUBLE_INCOME)) 2.0 else 1.0
+
+    /** 钓手加速倍率。 */
+    val helperRushMultiplier: Double
+        get() = if (buffActive(Buff.HELPER_RUSH)) 2.0 else 1.0
+
+    /** 收线加速倍率。 */
+    val reelRushMultiplier: Double
+        get() = if (buffActive(Buff.REEL_RUSH)) 2.0 else 1.0
+
+    /** 稀有鱼诱饵加成（叠加到 luckyHook 上）。 */
+    val rareLureBonus: Double
+        get() = if (buffActive(Buff.RARE_LURE)) 2.0 else 0.0
+
+    /** 图鉴加成倍率（激活时图鉴带来的加成本身翻倍）。 */
+    val dexBoostMultiplier: Double
+        get() = if (buffActive(Buff.DEX_BOOST)) 2.0 else 1.0
 
     /**
      * 看广告拿到的「离线收益翻倍」是否已就绪。
-     * 不存档：它是单次消费型道具，重启后失效比留着一个看不见的状态更干净。
+     * 不存档：单次消费型道具。
      */
     var offlineDoubleReady: Boolean = false
+
+    /** 看广告拿到的「转生珍珠 +50%」是否已就绪（转生时消费）。 */
+    var prestigeBoostReady: Boolean = false
 
     /** 消费掉翻倍权益，返回本次是否应该翻倍。 */
     fun consumeOfflineDouble(): Boolean {
@@ -238,22 +398,11 @@ class GameState {
         return v
     }
 
-    /** 激活/延长一段合作 buff（取较长的剩余时间，不叠加倍率）。 */
-    fun activateBuff(seconds: Float) {
-        buffRemain = maxOf(buffRemain, seconds)
-        buffTotal = maxOf(buffTotal, seconds)
-    }
-
-    /** 推进 buff 计时。返回本次是否刚好结束（UI 可据此提示）。 */
-    fun tickBuff(dt: Float): Boolean {
-        if (buffRemain <= 0f) return false
-        buffRemain -= dt
-        if (buffRemain <= 0f) {
-            buffRemain = 0f
-            buffTotal = 0f
-            return true
-        }
-        return false
+    /** 消费掉转生加成权益。 */
+    fun consumePrestigeBoost(): Boolean {
+        val v = prestigeBoostReady
+        prestigeBoostReady = false
+        return v
     }
 
     // ---- 转生 ----
@@ -267,11 +416,12 @@ class GameState {
     val prestigeMultiplier: Double
         get() = 1.0 + prestigeCount * PRESTIGE_VALUE_STEP
 
-    /** 本次转生可获得多少珍珠。 */
+    /** 本次转生可获得多少珍珠（含看广告的转生加速，由调用方先消费）。 */
     fun pendingPearls(): Long {
         val base = Prestige.pearlsFor(totalMoney)
         if (base <= 0) return 0
-        return (base * (1.0 + skillPearlBonus)).toLong().coerceAtLeast(1)
+        val boost = if (prestigeBoostReady) 1.5 else 1.0
+        return (base * (1.0 + skillPearlBonus) * boost).toLong().coerceAtLeast(1)
     }
 
     /** 是否可以转生。 */
@@ -409,7 +559,7 @@ class GameState {
         return isNew
     }
 
-    /** 某鱼种收线耗时倍率（越大越快），含技能加成。 */
+    /** 某鱼种收线耗时倍率（越大越快），含技能加成与角色鱼竿技能。 */
     fun reelSpeed(kind: Rarity): Double {
         val base = when (kind) {
             Rarity.COMMON -> commonReelSpeed
@@ -417,8 +567,31 @@ class GameState {
             Rarity.EPIC -> epicReelSpeed
             Rarity.LEGEND -> legendReelSpeed
         }
-        return base * skillReelMultiplier
+        return base * skillReelMultiplier * characterReelBonus
     }
+
+    /**
+     * 角色鱼竿技能带来的收线加成。
+     * 「均衡」小幅提速；「大力收线」大幅提速。
+     */
+    val characterReelBonus: Double
+        get() = when (currentCharacter.rodSkill) {
+            RodSkill.BALANCED -> 1.0 + World.BALANCED_REEL_BONUS
+            RodSkill.POWER_REEL -> 1.0 + World.POWER_REEL_BONUS
+            else -> 1.0
+        }
+
+    /** 角色鱼竿技能带来的连击加成倍率（「大力收线」翻倍）。 */
+    val characterComboBonus: Double
+        get() = if (currentCharacter.rodSkill == RodSkill.POWER_REEL) 2.0 else 1.0
+
+    /** 帮手形象带来的产出加成（「勤勉」）。 */
+    val helperCharacterBonus: Double
+        get() = if (currentHelper.rodSkill == RodSkill.HELPER_BOOST) {
+            1.0 + World.HELPER_BOOST_BONUS
+        } else {
+            1.0
+        }
 
     /** 该鱼种是否已解锁（拥有至少一条）。 */
     fun isUnlocked(kind: Rarity): Boolean = when (kind) {
@@ -520,6 +693,11 @@ class GameState {
         dailyHelpersBought = from.dailyProgress.helpersBought
         dailyChests = from.dailyProgress.chests
         dailyKings = from.dailyProgress.kings
+        dailyCasts = from.dailyProgress.casts
+        dailyPurchases = from.dailyProgress.anyPurchase
+        dailyNewSpecies = from.dailyProgress.newSpecies
+        dailyStored = from.dailyProgress.stored
+        dailySold = from.dailyProgress.sold
     }
 
     /** 从存档恢复当日进度。 */
@@ -535,6 +713,11 @@ class GameState {
         dailyProgress.helpersBought = from.dailyHelpersBought
         dailyProgress.chests = from.dailyChests
         dailyProgress.kings = from.dailyKings
+        dailyProgress.casts = from.dailyCasts
+        dailyProgress.anyPurchase = from.dailyPurchases
+        dailyProgress.newSpecies = from.dailyNewSpecies
+        dailyProgress.stored = from.dailyStored
+        dailyProgress.sold = from.dailySold
     }
 
     fun toSave(): SaveData = SaveData().also {
@@ -616,6 +799,34 @@ class GameState {
             unlockedMaps.addAll(data.unlockedMaps)
         }
         currentMapId = data.currentMapId.ifEmpty { Bestiary.maps.first().id }
+
+        // ---- 换装 ----
+        ownedCharacters.clear()
+        ownedCharacters.add(Characters.defaultPlayer.id)
+        ownedCharacters.add(Characters.defaultHelper.id)
+        ownedCharacters.addAll(data.ownedCharacters)
+        currentCharacterId = data.currentCharacterId.ifEmpty { Characters.defaultPlayer.id }
+        currentHelperId = data.currentHelperId.ifEmpty { Characters.defaultHelper.id }
+
+        // ---- 仓库 ----
+        warehouse.clear()
+        for (i in data.warehouseSpecies.indices) {
+            warehouse.add(
+                StoredFish(
+                    speciesId = data.warehouseSpecies.getOrElse(i) { "" },
+                    sizeOrdinal = data.warehouseSize.getOrElse(i) { 0 },
+                    baseValue = data.warehouseValue.getOrElse(i) { 0.0 },
+                    storedAt = data.warehouseStoredAt.getOrElse(i) { 0L },
+                    firstCatch = data.warehouseFirstCatch.getOrElse(i) { false },
+                )
+            )
+        }
+        warehouseUpgrades = data.warehouseUpgrades
+        warehouseEarned = data.warehouseEarned
+        merchantVisits = data.merchantVisits
+        merchantTimer = Warehouse.MERCHANT_INTERVAL
+        merchantOffer = null
+        merchantStay = 0f
 
         money = data.money
         totalMoney = data.totalMoney

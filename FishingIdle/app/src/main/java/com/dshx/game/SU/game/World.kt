@@ -382,16 +382,17 @@ class Helper(var x: Float) {
         val avgX = targets.sumOf { it.x.toDouble() }.toFloat() / targets.size
         val dx = avgX - x
         val speed = 260f *
-            (gameState.helperEfficiency * gameState.skillHelperMultiplier +
-                gameState.helperSpeed).toFloat()
+            (gameState.helperEfficiency * gameState.skillHelperMultiplier *
+                gameState.helperCharacterBonus + gameState.helperSpeed).toFloat()
         if (abs(dx) >= 24f) {
             x += (if (dx > 0f) 1f else -1f) * speed * dt
             x = x.coerceIn(Space.POND_L, Space.POND_R)
             facing = if (dx > 0f) 1f else -1f
         }
 
-        // 收线：每条线独立推进，效率越高收得越快
-        val gain = dt / (CATCH_TIME / (gameState.helperEfficiency * gameState.skillHelperMultiplier).toFloat())
+        // 收线：每条线独立推进，效率越高收得越快（帮手形象「勤勉」再叠一层）
+        val gain = dt / (CATCH_TIME / (gameState.helperEfficiency *
+            gameState.skillHelperMultiplier * gameState.helperCharacterBonus).toFloat())
         for (i in targets.indices.reversed()) {
             val f = targets[i]
             val p = lineProgress[i] + gain
@@ -573,8 +574,38 @@ class Diver {
  * 鱼王是自己游过来、要玩家一直戳它，拉力条满了才算拽上岸。
  * 点得慢了它会跑（到期就溜）。
  */
-class FishKing(var x: Float, var y: Float) {
-    var life = LIFE
+/**
+ * 鱼王的类型。
+ *
+ * 不同鱼王的手感不一样：有的硬拉（点多就行），有的只给你很短的时间，
+ * 有的奖励高但容易挣脱。这样"今天来的是哪种鱼王"就成了值得期待的事。
+ */
+enum class KingKind(
+    val displayName: String,
+    /** 停留时间倍率（越小越难）。 */
+    val lifeMult: Float,
+    /** 奖励倍率。 */
+    val rewardMult: Double,
+    /** 点一下的拉力倍率。 */
+    val tapMult: Float,
+    /** 提示色（ARGB）。 */
+    val color: Int,
+) {
+    /** 标准鱼王：平衡。 */
+    NORMAL("鱼王", 1.0f, 1.0, 1.0f, 0xFFE8B446.toInt()),
+
+    /** 金鳞鱼王：奖励翻倍，但跑得也快（时间短）。 */
+    GOLDEN("金鳞鱼王", 0.72f, 2.4, 1.0f, 0xFFFFD65C.toInt()),
+
+    /** 深渊巨口：时间充裕但极难拉（每点拉力小）。 */
+    ABYSS("深渊巨口", 1.45f, 1.8, 0.55f, 0xFFC69CF6.toInt()),
+
+    /** 疾影鱼王：一闪而过，必须手快。 */
+    SWIFT("疾影鱼王", 0.5f, 1.6, 1.5f, 0xFF96D696.toInt()),
+}
+
+class FishKing(var x: Float, var y: Float, val kind: KingKind = KingKind.NORMAL) {
+    var life = LIFE * kind.lifeMult
         private set
 
     /** 拉力进度 0..1。 */
@@ -592,6 +623,9 @@ class FishKing(var x: Float, var y: Float) {
 
     val alive: Boolean get() = life > 0f && !caught && !escaped
     val done: Boolean get() = !alive
+
+    /** 剩余时间比例（0..1），UI 画进度条用。 */
+    val lifeFrac: Float get() = (life / (LIFE * kind.lifeMult)).coerceIn(0f, 1f)
 
     fun update(dt: Float) {
         if (!alive) return
@@ -628,6 +662,9 @@ class Chest(var x: Float, var y: Float) {
 
     /** 上下浮动相位。 */
     var bob = 0f
+
+    /** 广告「宝箱钥匙」刷出的宝箱：必出珍珠。 */
+    var guaranteedPearl: Boolean = false
 
     val alive: Boolean get() = life > 0f
 
@@ -687,6 +724,12 @@ class World(val gameState: GameState) {
     val floatingTexts = mutableListOf<FloatingText>()
     val particles = mutableListOf<Particle>()
     val bobber = Bobber()
+
+    /**
+     * 角色鱼竿技能「多线齐发」的副线。
+     * 每条副线绑一条鱼，主漂收线时一起结算。
+     */
+    val extraLines = mutableListOf<ExtraLine>()
 
     /**
      * 环境气泡。让水下看起来一直在动，而不是一张静止的贴图。
@@ -1004,19 +1047,41 @@ class World(val gameState: GameState) {
         } else {
             null
         }
-        val cx = (snapped?.x ?: tx).coerceIn(Space.POND_L, Space.POND_R)
-        val cy = (snapped?.y ?: ty).coerceIn(Space.POND_T, Space.POND_B)
+        var cx = (snapped?.x ?: tx).coerceIn(Space.POND_L, Space.POND_R)
+        var cy = (snapped?.y ?: ty).coerceIn(Space.POND_T, Space.POND_B)
+
+        // 角色鱼竿技能「范围诱鱼」：落点先被拉向这一带的鱼群重心，
+        // 后面选鱼的半径也会放大，于是"一大片鱼全被吸过来"。
+        val rodSkill = gameState.currentCharacter.rodSkill
+        val biteRange = if (rodSkill == RodSkill.AREA_ATTRACT) {
+            Space.MAX_BITE_RANGE * AREA_ATTRACT_RANGE_MULT
+        } else {
+            Space.MAX_BITE_RANGE
+        }
+        if (rodSkill == RodSkill.AREA_ATTRACT) {
+            val near = fishes.filter {
+                it.state == FishState.SWIMMING && hypot(it.x - tx, it.y - ty) <= biteRange
+            }
+            if (near.isNotEmpty()) {
+                cx = near.map { it.x }.average().toFloat().coerceIn(Space.POND_L, Space.POND_R)
+                cy = near.map { it.y }.average().toFloat().coerceIn(Space.POND_T, Space.POND_B)
+            }
+        }
 
         // 挑落点附近的空闲鱼，太远的够不着。
         // 技能「深渊直觉」（skillRareWeightBonus）让稀有鱼更抢食：
         // 稀有度越高，等效距离越近，于是更容易选中它。
+        // 广告的「稀有鱼诱饵」（rareLureBonus）同理，强度更高。
+        // 角色「幸运竿」再叠一层稀有偏好。
+        val rareBias = gameState.skillRareWeightBonus + gameState.rareLureBonus +
+            (if (rodSkill == RodSkill.LUCKY_ROD) LUCKY_ROD_RARE_BIAS else 0.0)
         val fish = fishes
             .asSequence()
             .filter { it.state == FishState.SWIMMING }
-            .filter { hypot(it.x - cx, it.y - cy) <= Space.MAX_BITE_RANGE }
+            .filter { hypot(it.x - cx, it.y - cy) <= biteRange }
             .minByOrNull {
                 hypot(it.x - cx, it.y - cy) /
-                    (1.0 + gameState.skillRareWeightBonus * it.kind.ordinal).toFloat()
+                    (1.0 + rareBias * it.kind.ordinal).toFloat()
             }
 
         fish?.let {
@@ -1035,12 +1100,35 @@ class World(val gameState: GameState) {
             bobber.biteTimer = wait / sonarBiteSpeed(fish.kind)
         }
         pendingSounds.add("cast")
+        DailyTracker.onCast(gameState)
         // 声呐：稀有及以上的鱼咬钩时来一声探测音
         if (fish != null && gameState.sonarOwned && fish.kind != Rarity.COMMON) {
             pendingSounds.add("sonar")
         }
+
+        // 角色鱼竿技能「多线齐发」：主漂之外再补 2 条副线，
+        // 每条各自锁一条附近的鱼，形成"同时钓 3 个点"。
+        extraLines.clear()
+        if (rodSkill == RodSkill.MULTI_LINE) {
+            val taken = mutableSetOf<Fish>()
+            fish?.let { taken.add(it) }
+            val others = fishes.asSequence()
+                .filter { it.state == FishState.SWIMMING && it !in taken }
+                .filter { hypot(it.x - cx, it.y - cy) <= biteRange * MULTI_LINE_RANGE_MULT }
+                .sortedBy { hypot(it.x - cx, it.y - cy) }
+                .take(EXTRA_LINE_COUNT)
+                .toList()
+            for (f in others) {
+                f.setTarget(f.x, f.y)
+                f.state = FishState.APPROACHING
+                extraLines.add(ExtraLine(rodTipX(), rodTipY(), f))
+            }
+        }
         return true
     }
+
+    /** 多线齐发的副线：一条线绑一条鱼，收线时一起结算。 */
+    class ExtraLine(var x: Float, var y: Float, var fish: Fish?)
 
     /** 潜水员一个完整下潜周期的实际秒数（技能「深海打捞」会缩短）。 */
     internal fun diverCycle(): Float =
@@ -1169,6 +1257,57 @@ class World(val gameState: GameState) {
     }
 
     /**
+     * 广告「宝箱钥匙」：立刻在河面浮出一个宝箱，且**必出珍珠**。
+     *
+     * 买了「沉船宝藏」才用得上；没买的话当场把宝藏也一起开出来，
+     * 免得玩家花了广告却什么都没发生。
+     */
+    fun summonBonusChest() {
+        if (!gameState.treasureOwned) {
+            gameState.treasureOwned = true
+        }
+        val x = (boatX + (Random.nextFloat() * 2f - 1f) * CHEST_SPAWN_SPREAD)
+            .coerceIn(Space.POND_L + 60f, Space.POND_R - 60f)
+        val y = Space.POND_T + 120f + Random.nextFloat() * 380f
+        chest = Chest(x, y).apply { guaranteedPearl = true }
+        chestTimer = CHEST_INTERVAL * chestIntervalScale()
+        spawnText(x, y - 70f, "宝箱浮出！必出珍珠", Palette.TEXT_GOLD, 1.15f)
+        spawnSplash(x, y, Rarity.EPIC)
+        pendingSounds.add("bite")
+    }
+
+    /**
+     * 鱼贩子：每隔 [Warehouse.MERCHANT_INTERVAL] 秒来一次，停留 [Warehouse.MERCHANT_STAY] 秒。
+     *
+     * 他只对仓库里有货的情况感兴趣 —— 空仓库时不用来，省得玩家白等。
+     * 报价在到访瞬间随机生成一次，停留期间不变（想反悔只能等下一趟）。
+     */
+    private fun updateMerchant(dt: Float) {
+        if (gameState.warehouse.isEmpty()) {
+            // 没存货：计时不推进，避免玩家一有货就撞上倒计时尾巴
+            gameState.merchantOffer = null
+            gameState.merchantStay = 0f
+            return
+        }
+        if (gameState.merchantOffer != null) {
+            gameState.merchantStay -= dt
+            if (gameState.merchantStay <= 0f) {
+                gameState.merchantOffer = null
+                gameState.merchantTimer = Warehouse.MERCHANT_INTERVAL
+            }
+            return
+        }
+        gameState.merchantTimer -= dt
+        if (gameState.merchantTimer <= 0f) {
+            gameState.merchantOffer = Warehouse.rollOffer()
+            gameState.merchantStay = Warehouse.MERCHANT_STAY
+            gameState.merchantVisits++
+            spawnText(boatX, Space.POND_T + 90f, "鱼贩子来了！", Palette.TEXT_GOLD, 1.2f)
+            pendingSounds.add("chest")
+        }
+    }
+
+    /**
      * 鱼王：声呐解锁后才有机会撞见（先用声呐找到它，才谈得上钓它）。
      * 每隔 [KING_INTERVAL] 秒现身一次，在河面上慢慢游，等玩家连点。
      */
@@ -1192,11 +1331,18 @@ class World(val gameState: GameState) {
             val x = (boatX + (Random.nextFloat() * 2f - 1f) * 500f)
                 .coerceIn(Space.POND_L + 150f, Space.POND_R - 150f)
             val y = Space.POND_T + 200f + Random.nextFloat() * 320f
-            king = FishKing(x, y).apply {
+            // 随机一种鱼王：越难的类型越少见
+            val kind = when {
+                Random.nextFloat() < 0.08f -> KingKind.SWIFT
+                Random.nextFloat() < 0.16f -> KingKind.GOLDEN
+                Random.nextFloat() < 0.26f -> KingKind.ABYSS
+                else -> KingKind.NORMAL
+            }
+            king = FishKing(x, y, kind).apply {
                 vx = (Random.nextFloat() * 2f - 1f) * 90f
                 dir = if (vx >= 0f) 1f else -1f
             }
-            spawnText(x, y - 90f, "鱼王现身！连点它", Palette.TEXT_GOLD, 1.6f)
+            spawnText(x, y - 90f, "${kind.displayName}现身！连点它", kind.color, 1.6f)
             spawnSplash(x, y, Rarity.LEGEND)
             pendingSounds.add("legend")
         }
@@ -1204,18 +1350,21 @@ class World(val gameState: GameState) {
 
     /** 点鱼王：加拉力，满了就拽上岸。返回是否点中了。 */
     private fun tapKing(k: FishKing): Boolean {
-        k.progress = (k.progress + FishKing.TAP_POWER * kingTapScale()).coerceAtMost(1f)
+        k.progress = (k.progress + FishKing.TAP_POWER * k.kind.tapMult * kingTapScale())
+            .coerceAtMost(1f)
         if (k.progress < 1f) return true
 
         k.caught = true
         gameState.kingsCaught++
         gameState.dailyProgress.kings++
-        val value = gameState.catchValue(Rarity.LEGEND) * KING_VALUE_MULT * kingRewardScale()
+        val value = gameState.catchValue(Rarity.LEGEND) * KING_VALUE_MULT *
+            kingRewardScale() * k.kind.rewardMult
         gameState.money += value
-        val pearls = KING_PEARLS
+        // 越难缠的鱼王给越多珍珠
+        val pearls = (KING_PEARLS * k.kind.rewardMult).toLong().coerceAtLeast(1L)
         gameState.pearls += pearls
 
-        spawnText(k.x, k.y - 50f, "+${formatNumber(value)}", Palette.TEXT_GOLD, 1.8f)
+        spawnText(k.x, k.y - 50f, "${k.kind.displayName} +${formatNumber(value)}", k.kind.color, 1.8f)
         spawnText(k.x, k.y - 120f, "珍珠 +$pearls", Palette.TEXT_GOLD, 1.5f)
         spawnCoinBurst(k.x, k.y)
         spawnSplash(k.x, k.y, Rarity.LEGEND)
@@ -1246,7 +1395,8 @@ class World(val gameState: GameState) {
         spawnSplash(c.x, c.y, Rarity.LEGEND)
         pendingSounds.add("chest")
 
-        if (Random.nextFloat() < CHEST_PEARL_CHANCE) {
+        // 广告钥匙刷出的宝箱必出珍珠；普通宝箱小概率出
+        if (c.guaranteedPearl || Random.nextFloat() < CHEST_PEARL_CHANCE) {
             gameState.pearls += 1
             spawnText(c.x, c.y - 110f, "珍珠 +1", Palette.TEXT_GOLD, 1.3f)
             pendingSounds.add("pearl")
@@ -1359,6 +1509,7 @@ class World(val gameState: GameState) {
         updateNetSweep(dt)
         updateChest(dt)
         updateKing(dt)
+        updateMerchant(dt)
 
         // 自动抛竿（智能浮标）与自动重抛（自动重抛升级）：
         // 手上没竿、冷却也过了，就自己找条鱼下竿。
@@ -1450,10 +1601,15 @@ class World(val gameState: GameState) {
     internal fun autoCastRange(): Float =
         AUTO_CAST_RANGE * (if (gameState.droneOwned) DRONE_RANGE_MULT else 1f)
 
-    /** 自动抛竿的间隔倍率（无人机 + 技能「无人机编队」）。 */
+    /** 自动抛竿的间隔倍率（无人机 + 技能「无人机编队」+ 角色「极速出杆」）。 */
     internal fun autoCastIntervalScale(): Float {
         val drone = if (gameState.droneOwned) DRONE_INTERVAL_MULT else 1f
-        return (drone * (1f - gameState.skillDroneSpeed).toFloat()).coerceAtLeast(0.15f)
+        val rod = if (gameState.currentCharacter.rodSkill == RodSkill.FAST_CAST) {
+            FAST_CAST_INTERVAL_MULT
+        } else {
+            1f
+        }
+        return (drone * rod * (1f - gameState.skillDroneSpeed).toFloat()).coerceAtLeast(0.15f)
     }
 
     /** 宝箱间隔倍率（技能「寻宝达人」）。 */
@@ -1596,6 +1752,32 @@ class World(val gameState: GameState) {
         /** 鱼探仪把落点吸到鱼身上的最大距离（世界单位）。 */
         const val FINDER_SNAP_RADIUS = 220f
 
+        // ---- 角色鱼竿技能参数 ----
+
+        /** 「范围诱鱼」：咬钩判定半径倍率。 */
+        const val AREA_ATTRACT_RANGE_MULT = 2.6f
+
+        /** 「多线齐发」：副线数量（主漂之外）。 */
+        const val EXTRA_LINE_COUNT = 2
+
+        /** 「多线齐发」：副线找鱼的半径倍率。 */
+        const val MULTI_LINE_RANGE_MULT = 1.4f
+
+        /** 「幸运竿」：稀有偏好强度。 */
+        const val LUCKY_ROD_RARE_BIAS = 0.85
+
+        /** 「极速出杆」：自动抛竿间隔倍率。 */
+        const val FAST_CAST_INTERVAL_MULT = 0.4f
+
+        /** 「均衡」：收线速度加成。 */
+        const val BALANCED_REEL_BONUS = 0.10
+
+        /** 「大力收线」：收线速度加成。 */
+        const val POWER_REEL_BONUS = 0.45
+
+        /** 「勤勉」（帮手）：产出加成。 */
+        const val HELPER_BOOST_BONUS = 0.25
+
         /** 无人机的自动抛竿范围倍率。 */
         const val DRONE_RANGE_MULT = 1.7f
 
@@ -1641,15 +1823,42 @@ class World(val gameState: GameState) {
         finalValue *= fish.size.valueMul
 
         // 图鉴收集：钓到就记一笔（首次发现要弹中央解锁提示）
-        if (gameState.recordSpecies(fish.species.id)) {
+        val isFirstCatch = gameState.recordSpecies(fish.species.id)
+        if (isFirstCatch) {
             pendingNewSpecies.add(fish.species)
+            DailyTracker.onNewSpecies(gameState)
         }
         // 体型纪录：刷新了就弹一次提示
-        if (gameState.recordSize(fish.species.id, fish.size)) {
+        val isRecord = gameState.recordSize(fish.species.id, fish.size)
+        if (isRecord) {
             pendingNewRecords.add(Pair(fish.species, fish.size))
         }
 
-        gameState.money += finalValue
+        // 仓库：**新鱼种**与**破纪录**的鱼默认不入钱包，改为入库收藏。
+        // 仓库满时退回直接折算成金币，绝不凭空吞掉玩家的渔获。
+        val toWarehouse = isFirstCatch || isRecord
+        var banked = finalValue
+        if (toWarehouse) {
+            val stored = Warehouse.store(
+                gameState,
+                StoredFish(
+                    speciesId = fish.species.id,
+                    sizeOrdinal = fish.size.ordinal,
+                    baseValue = finalValue,
+                    storedAt = System.currentTimeMillis(),
+                    firstCatch = isFirstCatch,
+                ),
+            )
+            if (stored) {
+                banked = 0.0
+                DailyTracker.onStored(gameState)
+                spawnText(x, y - 106f, "已存入仓库", Palette.TEXT_GOOD, 0.95f)
+            } else {
+                spawnText(x, y - 106f, "仓库已满，已折现", Palette.TEXT_BAD, 0.95f)
+            }
+        }
+
+        gameState.money += banked
         // 统一记账：累计统计 + 连击 + 每日任务进度。
         // 手动与自动钓手都要计入每日任务，否则挂机就完不成任务。
         gameState.onCatchRecorded(fish.kind, finalValue)
@@ -1660,7 +1869,9 @@ class World(val gameState: GameState) {
         val scale = (finalValue / typical).toFloat().let {
             (0.9f + kotlin.math.ln(1f + it) * 0.22f).coerceIn(0.9f, 2.4f)
         }
-        spawnText(x, y - 30f, "+${formatNumber(finalValue)}", Palette.TEXT_GOLD, scale)
+        if (banked > 0.0) {
+            spawnText(x, y - 30f, "+${formatNumber(banked)}", Palette.TEXT_GOLD, scale)
+        }
 
         // 连击提示
         if (manual && gameState.combo >= 3) {

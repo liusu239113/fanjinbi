@@ -173,23 +173,9 @@ class GameRenderer(
         // 主角与帮手各自按**自己的立绘高度**画：
         // 主角素材更宽（384×256），照帮手的高度直接画会宽出 50%，
         // 船比帮手大一圈。PLAYER_BOAT_WORLD_H 就是为这个单列的。
-        bmpPlayerBoat = assets.scaledToHeight(
-            "player_boat", (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
-        )
-        bmpHelper = assets.scaledToHeight(
-            "helper_boat", (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
-        )
+        // 立绘与甩竿动画在 reloadCharacterSprites() 里按当前角色加载。
         // 主角船底的水花：和帮手立绘里自带的那圈同一套视觉
         bmpPlayerSplash = assets.scaled("boat_splash", (PLAYER_SPLASH_W * t.scale).toInt().coerceAtLeast(24))
-        // 抛竿逐帧动画（素材缺失时退回静止立绘，不会画出空白）。
-        // 目标高度按"船体看上去和静止立绘一样大"折算出来（量自素材）：
-        // 动画帧里竿子甩出去会把画面撑大，按帧高直接等于立绘高会显得船变小。
-        playerCastFrames = loadAnimation(
-            "player_cast", 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
-        )
-        helperCastFrames = loadAnimation(
-            "helper_cast", 0, (HELPER_CAST_H * t.scale).toInt().coerceAtLeast(20),
-        )
         // 后期单位：鹈鹕按高度缩放；渔网按宽度缩放（要能罩住几条鱼）
         pelicanFrames = loadAnimation(
             "pelican", 0, (PELICAN_WORLD_H * t.scale).toInt().coerceAtLeast(24),
@@ -202,20 +188,7 @@ class GameRenderer(
             "diver", 0, (DIVER_WORLD_H * t.scale).toInt().coerceAtLeast(20),
         )
         bmpChest = assets.scaled("chest", (CHEST_WORLD_W * t.scale).toInt().coerceAtLeast(24))
-        // 动画帧的画布尺幅和静止立绘不同，船底比例与竿尖都得逐帧量，
-        // 否则一抛竿船体就会上下跳、线也不再接在竿尖上
-        playerCastHull = if (playerCastFrames.isEmpty()) {
-            floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
-        } else {
-            FloatArray(playerCastFrames.size) { hullFracOf(playerCastFrames[it]) }
-        }
-        helperCastHull = if (helperCastFrames.isEmpty()) {
-            floatArrayOf(BoatArt.HELPER_HULL_FRAC)
-        } else {
-            FloatArray(helperCastFrames.size) { hullFracOf(helperCastFrames[it]) }
-        }
-        playerCastTips = playerCastFrames.map { tipFracOf(it) }
-        helperCastTips = helperCastFrames.map { tipFracOf(it) }
+        // 船底比例与竿尖的逐帧测量在 reloadCharacterSprites() 里做（按当前角色）
         fishFrames.clear()
         fishFrameDuration.clear()
         // 一张精灵可能被多个稀有度档复用，取其中最高的档决定目标尺寸
@@ -245,8 +218,88 @@ class GameRenderer(
         envMapId = ""
         ensureEnv(t)
 
+        reloadCharacterSprites(t)
+
         waterShader = null
         riverbedShader = null
+    }
+
+    /**
+     * 按**当前装备的角色**加载立绘与甩竿动画。
+     *
+     * 换装后必须重新调用：素材名跟着 [GameState.currentCharacter] /
+     * [GameState.currentHelper] 变，竿尖与船底的比例也得按新素材重新量。
+     *
+     * 竿尖是逐帧自动检测的（[tipFracOf]），所以任何新角色的鱼线都会
+     * 自动接在它自己的竿尖上 —— 不会出现线从船身里穿过去。
+     */
+    private var loadedPlayerSprite: String = ""
+    private var loadedHelperSprite: String = ""
+
+    private fun reloadCharacterSprites(t: ViewTransform) {
+        val p = gameState.currentCharacter
+        val h = gameState.currentHelper
+
+        if (p.sprite != loadedPlayerSprite) {
+            playerCastFrames = loadAnimation(
+                p.sprite, 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
+            )
+            bmpPlayerBoat = assets.scaledToHeight(
+                p.sprite, (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+            )
+            playerCastHull = if (playerCastFrames.isEmpty()) {
+                floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
+            } else {
+                FloatArray(playerCastFrames.size) { hullFracOf(playerCastFrames[it]) }
+            }
+            playerCastTips = playerCastFrames.map { tipFracOf(it) }
+            loadedPlayerSprite = p.sprite
+        }
+
+        if (h.sprite != loadedHelperSprite) {
+            helperCastFrames = loadAnimation(
+                h.sprite, 0, (HELPER_CAST_H * t.scale).toInt().coerceAtLeast(20),
+            )
+            bmpHelper = assets.scaledToHeight(
+                h.sprite, (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
+            )
+            helperCastHull = if (helperCastFrames.isEmpty()) {
+                floatArrayOf(BoatArt.HELPER_HULL_FRAC)
+            } else {
+                FloatArray(helperCastFrames.size) { hullFracOf(helperCastFrames[it]) }
+            }
+            helperCastTips = helperCastFrames.map { tipFracOf(it) }
+            loadedHelperSprite = h.sprite
+        }
+    }
+
+    /** 换装后由外部调用，立即重载素材（下一帧就会画新角色）。 */
+    fun onCharacterChanged() {
+        if (lastScreenW > 0f && lastScreenH > 0f) {
+            reloadCharacterSprites(ViewTransform(lastScreenW, lastScreenH))
+        }
+    }
+
+    /**
+     * 把浮漂染成当前角色的专属色。
+     *
+     * 用颜色矩阵做「保留明暗、只换色相」的近似：把原色向角色色混合。
+     * 比重新生成一套浮漂素材省得多，也让"换角色=换漂"立刻可见。
+     */
+    private fun bobberTintMatrix(): FloatArray {
+        val c = gameState.currentCharacter.bobberColor
+        val tr = ((c shr 16) and 0xFF) / 255f
+        val tg = ((c shr 8) and 0xFF) / 255f
+        val tb = (c and 0xFF) / 255f
+        // 每行：原色权重 0.55 + 角色色权重 0.45（作用在灰度上），保留原图明暗层次
+        val wr = 0.55f
+        val wa = 0.45f
+        return floatArrayOf(
+            wr, 0f, 0f, 0f, wa * tr * 255f,
+            0f, wr, 0f, 0f, wa * tg * 255f,
+            0f, 0f, wr, 0f, wa * tb * 255f,
+            0f, 0f, 0f, 1f, 0f,
+        )
     }
 
     /**
@@ -972,6 +1025,18 @@ class GameRenderer(
         strokePaint.strokeWidth = 2.4f * t.scale
         canvas.drawLine(rodX, rodY, bx, by, strokePaint)
 
+        // 角色鱼竿技能「多线齐发」：副线从同一个竿尖分出去，各自连到自己的鱼
+        for (line in world.extraLines) {
+            val f = line.fish ?: continue
+            strokePaint.color = Color.argb(150, 230, 230, 230)
+            strokePaint.strokeWidth = 1.8f * t.scale
+            canvas.drawLine(
+                rodX, rodY,
+                t.toScreenX(f.x - camX), t.toScreenY(f.y),
+                strokePaint,
+            )
+        }
+
         if (b.state == BobberState.FLOATING || b.state == BobberState.BITE) {
             val ripplePhase = (world.time * 1.3f) % 1f
             for (i in 0..1) {
@@ -1002,7 +1067,12 @@ class GameRenderer(
         }
 
         val bob = if (b.state == BobberState.BITE) sin(world.time * 24f) * 5f * t.scale else 0f
-        SpriteDraw.draw(canvas, bmpBobber, bx, by + bob, scale = t.scale)
+        // 浮漂用**当前角色的专属颜色**染色，换角色时漂也跟着换
+        SpriteDraw.draw(
+            canvas, bmpBobber, bx, by + bob,
+            scale = t.scale,
+            tintMatrix = bobberTintMatrix(),
+        )
 
         if (b.state == BobberState.BITE) {
             textPaint.textAlign = Paint.Align.CENTER

@@ -1,5 +1,6 @@
 package com.dshx.game.SU.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,56 +14,85 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.formatNumber
 
 /**
  * 金币旁的「广告礼包」入口。
  *
- * 放在金币条正下方、连击条上方 —— 玩家每次看金币都会扫到它，
- * 是转化率最高的一类广告位。
- *
- * 三种状态：
- *  - 有免费次数（金框 + 红点角标）：最显眼，点击直接看广告
- *  - 今日已用完：灰掉并显示倒计时提示
- *  - 广告未就绪：显示「接入中」，不误导玩家
+ * 放在金币条正下方 —— 玩家每次看金币都会扫到它，转化率最高的一类广告位。
+ * 图标用美术资源（ad_gift），不用 emoji：emoji 在不同 ROM 上渲染不一致，
+ * 也跟游戏画风不搭。
  */
 @Composable
 fun AdGiftButton(
-    leftToday: Int,
+    assets: Assets,
+    badge: Int,
+    enabled: Boolean,
     ready: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val enabled = leftToday > 0 && ready
-    val border = when {
-        enabled -> UITheme.Gold
-        else -> UITheme.TextDim.copy(alpha = 0.5f)
-    }
+    val icon = remember { assets.raw("ad_gift")?.asImageBitmap() }
+    val border = if (enabled) UITheme.Gold else UITheme.TextDim.copy(alpha = 0.5f)
+
     Row(
         modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(UITheme.DeepWater.copy(alpha = 0.88f))
+            .background(UITheme.DeepWater.copy(alpha = 0.9f))
             .border(2.dp, border, RoundedCornerShape(10.dp))
             .pressable(enabled) { onClick() }
-            .padding(horizontal = 9.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("🎁", fontSize = 15.sp)
-        Spacer(Modifier.width(5.dp))
+        Box(contentAlignment = Alignment.TopEnd) {
+            if (icon != null) {
+                Image(
+                    icon, contentDescription = "广告礼包",
+                    modifier = Modifier.size(26.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Box(Modifier.size(26.dp).background(UITheme.Gold, RoundedCornerShape(6.dp)))
+            }
+            // 有可领次数时挂一个数字角标，比单纯红点信息量大
+            if (enabled && badge > 0) {
+                Box(
+                    Modifier
+                        .size(14.dp)
+                        .background(UITheme.TextBad, RoundedCornerShape(7.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (badge > 9) "9+" else "$badge",
+                        color = Color.White,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(6.dp))
         Column {
             Text(
                 "广告礼包",
@@ -73,45 +103,39 @@ fun AdGiftButton(
             Text(
                 when {
                     !ready -> "接入中"
-                    leftToday <= 0 -> "今日已领完"
-                    else -> "还剩 $leftToday 次"
+                    enabled -> "$badge 项可领"
+                    else -> "稍后再来"
                 },
                 color = UITheme.TextDim,
                 fontSize = 9.sp,
             )
         }
-        // 有次数时挂一个红点，抓住视觉
-        if (enabled) {
-            Spacer(Modifier.width(4.dp))
-            Box(
-                Modifier
-                    .size(7.dp)
-                    .background(UITheme.TextBad, RoundedCornerShape(4.dp)),
-            )
-        }
     }
 }
 
-/** 广告礼包弹窗里的一个可选礼包。 */
+/** 广告礼包弹窗里的一个条目。 */
 class AdGift(
     val id: String,
+    /** 图标资源名（art/ 下的文件名，不含扩展名）。 */
     val icon: String,
     val title: String,
     val desc: String,
+    /** 已领完 / 条件不满足时置灰，点击只提示。 */
+    val locked: Boolean = false,
     val action: () -> Unit,
 )
 
 /**
  * 广告礼包面板：金币旁那个图标点开后弹出。
  *
- * 里面是若干「看广告领东西」的礼包，含**合作 buff**（限时收益加成）。
- * 一次弹窗里给多个选择，比单个按钮的广告触发率高得多 ——
- * 玩家总会挑一个看起来最划算的。
+ * 一次给多个选择比单个按钮的触发率高得多 —— 玩家总会挑一个看起来最划算的。
+ * 列表可滚动，条目多也不怕撑爆屏幕。
  */
 @Composable
 fun AdGiftDialog(
     gifts: List<AdGift>,
     statusText: String,
+    assets: Assets,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -128,7 +152,7 @@ fun AdGiftDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 22.dp)
+                    .padding(horizontal = 18.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(UITheme.PanelBg)
                     .border(3.dp, UITheme.Gold, RoundedCornerShape(16.dp))
@@ -137,55 +161,28 @@ fun AdGiftDialog(
             ) {
                 Text("广告礼包", color = UITheme.GoldLight, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
-                Text(
-                    "看一段广告，免费领取",
-                    color = UITheme.TextDim,
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(12.dp))
+                Text("看一段广告，免费领取", color = UITheme.TextDim, fontSize = 11.sp)
+                Spacer(Modifier.height(10.dp))
 
-                gifts.forEach { gift ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(UITheme.SlotBg)
-                            .border(1.5.dp, UITheme.GoldDark.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
-                            .pressable { gift.action() }
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(gift.icon, fontSize = 22.sp)
-                        Spacer(Modifier.width(9.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                gift.title,
-                                color = UITheme.GoldLight,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(gift.desc, color = UITheme.TextDim, fontSize = 10.sp, lineHeight = 14.sp)
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(UITheme.Gold)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                            Text("领取", color = UITheme.Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                Column(
+                    Modifier
+                        .height(360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    gifts.forEach { gift ->
+                        AdGiftRow(gift, assets)
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
 
+                Spacer(Modifier.height(10.dp))
                 Text(
                     statusText,
                     color = UITheme.TextDim,
                     fontSize = 10.sp,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 GameButton(
                     text = "关闭",
                     onClick = onDismiss,
@@ -198,60 +195,163 @@ fun AdGiftDialog(
     }
 }
 
-/**
- * 合作 buff 状态条：有激活中的 buff 时显示在金币条下方，带倒计时。
- *
- * 让玩家随时看得见「buff 还剩多久」，是促使他下次再点广告的最强动机。
- */
 @Composable
-fun BuffStrip(
-    label: String,
-    remainSeconds: Float,
-    totalSeconds: Float,
-    modifier: Modifier = Modifier,
-) {
-    val frac = (remainSeconds / totalSeconds).coerceIn(0f, 1f)
+private fun AdGiftRow(gift: AdGift, assets: Assets) {
+    val icon = remember(gift.icon) { assets.raw(gift.icon)?.asImageBitmap() }
+    val dim = gift.locked
+
     Row(
-        modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(UITheme.TextGood.copy(alpha = 0.20f))
-            .border(1.5.dp, UITheme.TextGood.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 9.dp, vertical = 4.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (dim) UITheme.SlotBg.copy(alpha = 0.5f) else UITheme.SlotBg)
+            .border(
+                1.5.dp,
+                if (dim) UITheme.TextDim.copy(alpha = 0.3f) else UITheme.GoldDark.copy(alpha = 0.7f),
+                RoundedCornerShape(10.dp),
+            )
+            .pressable(!dim) { gift.action() }
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("⚡", fontSize = 13.sp)
-        Spacer(Modifier.width(5.dp))
-        Column {
-            Text(label, color = UITheme.TextGood, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(3.dp))
-            Box(
-                Modifier
-                    .width(96.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(UITheme.DeepWater),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(frac)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(UITheme.TextGood),
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(UITheme.DeepWater),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (icon != null) {
+                Image(
+                    icon, contentDescription = gift.title,
+                    modifier = Modifier.size(32.dp).alpha(if (dim) 0.35f else 1f),
+                    contentScale = ContentScale.Fit,
                 )
             }
         }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                gift.title,
+                color = if (dim) UITheme.TextDim else UITheme.GoldLight,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                gift.desc,
+                color = if (dim) UITheme.TextDim.copy(alpha = 0.7f) else UITheme.TextNormal,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+            )
+        }
         Spacer(Modifier.width(6.dp))
-        Text(
-            "${remainSeconds.toInt()}s",
-            color = UITheme.TextGood,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-        )
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (dim) UITheme.TextDim.copy(alpha = 0.3f) else UITheme.Gold)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(
+                if (dim) "已领" else "领取",
+                color = if (dim) UITheme.TextDim else UITheme.Ink,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
-/** 把奖励数量格式化成礼包描述里的一行，避免各处重复拼字符串。 */
+/** 需要 alpha 修饰符时的辅助（避免重复 import）。 */
+
+/**
+ * 限时 buff 状态条：有激活中的 buff 时显示，带倒计时进度条。
+ *
+ * 让玩家随时看得见「buff 还剩多久」，是促使他下次再点广告的最强动机。
+ * 多个 buff 时纵向排开。
+ */
+@Composable
+fun BuffStrip(
+    entries: List<Triple<String, Float, Float>>,
+    assets: Assets,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        entries.forEach { (iconName, remain, total) ->
+            val icon = remember(iconName) { assets.raw(iconName)?.asImageBitmap() }
+            val frac = if (total > 0f) (remain / total).coerceIn(0f, 1f) else 0f
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(UITheme.TextGood.copy(alpha = 0.22f))
+                    .border(1.5.dp, UITheme.TextGood.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (icon != null) {
+                    Image(
+                        icon, contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                    Spacer(Modifier.width(5.dp))
+                }
+                Column {
+                    Text(
+                        buffLabel(iconName),
+                        color = UITheme.TextGood,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        Modifier
+                            .width(110.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(UITheme.DeepWater),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(frac)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(UITheme.TextGood),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    formatBuffTime(remain),
+                    color = UITheme.TextGood,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+/** buff 的中文名（用图标资源名反查）。 */
+fun buffLabel(iconName: String): String = when (iconName) {
+    "ad_double" -> "双倍收益"
+    "ad_bait" -> "稀有诱饵"
+    "ad_speed" -> "钓手加速"
+    "ad_time" -> "收线加速"
+    "ad_dex" -> "图鉴加成翻倍"
+    else -> "加成中"
+}
+
+/** 秒数格式化成 mm:ss，超过一小时显示 h:mm:ss。 */
+fun formatBuffTime(seconds: Float): String {
+    val s = seconds.toInt().coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+}
+
+/** 把奖励数量格式化成礼包描述里的一行。 */
 fun giftDesc(amount: Double, unit: String = "金币"): String = "立得 ${formatNumber(amount)} $unit"
 
-/** 兼容旧调用点：把 GameState 的当前金币换算成礼包基准量。 */
+/** 以当前金币为基准算礼包量（避免礼包在后期变得毫无意义）。 */
 fun giftBase(state: GameState): Double = (state.money * 0.08).coerceAtLeast(50.0)

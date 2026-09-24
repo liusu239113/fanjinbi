@@ -1,32 +1,43 @@
 package com.dshx.game.SU.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dshx.game.SU.BuildConfig
 import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.formatNumber
 
-/** 启动页：标题 + 开始/继续游戏 + 设置。 */
+/**
+ * 启动页：黄昏钓场背景图 + 游戏 LOGO + 开始/继续。
+ *
+ * 背景与 LOGO 都是美术资源，不再用文字标题 —— 文字标题在大屏上显得空，
+ * 而且不同 ROM 的字体差异会让观感跑偏。
+ *
+ * 底部只留一行**动态版本号**（读 BuildConfig.VERSION_NAME），
+ * 不再写操作提示 —— 那类文字放在启动页只会干扰主视觉。
+ */
 @Composable
 fun MainMenu(
     state: GameState,
@@ -37,93 +48,107 @@ fun MainMenu(
     onSettings: () -> Unit,
     onReset: () -> Unit,
 ) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF0E2830),
-                        Color(0xFF16414D),
-                        Color(0xFF0A1E26),
-                    )
-                )
+    val bg = remember { assets.raw("menu_bg")?.asImageBitmap() }
+    val logo = remember { assets.scaled("game_logo", 900)?.asImageBitmap() }
+
+    Box(Modifier.fillMaxSize().background(UITheme.DeepWater)) {
+        // 背景图铺满（居中裁剪，不拉伸变形）
+        if (bg != null) {
+            Image(
+                bg, contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
             )
-    ) {
+            // 顶部压一层暗色渐变，保证 LOGO 与按钮在任何背景上都清晰
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color(0x99000000),
+                            0.35f to Color(0x33000000),
+                            0.75f to Color(0x88000000),
+                            1f to Color(0xDD000000),
+                        )
+                    )
+            )
+        }
+
         Column(
             Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
                 .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
         ) {
-            Text(
-                "钓鱼人生:放置大师模拟",
-                color = UITheme.GoldLight,
-                fontSize = 46.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "FISHING IDLE",
-                color = UITheme.TextDim,
-                fontSize = 14.sp,
-                letterSpacing = 6.sp,
-            )
+            Spacer(Modifier.weight(1f))
 
-            Spacer(Modifier.height(28.dp))
-
-            // 存档概览
-            if (hasSave) {
-                WoodPanel(Modifier.fillMaxWidth(), assets = assets, cornerPx = 96) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("存档进度", color = UITheme.TextDim, fontSize = 12.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "🪙 ${formatNumber(state.money)}",
-                            color = UITheme.GoldLight,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "小鱼 ${state.commonFish} · 鲤鱼 ${state.rareFish} · " +
-                                "锦鲤 ${state.epicFish} · 钓手 ${state.helpers}",
-                            color = UITheme.TextDim,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(20.dp))
+            // 游戏 LOGO
+            if (logo != null) {
+                Image(
+                    logo, contentDescription = "钓鱼人生：放置大师模拟",
+                    modifier = Modifier.fillMaxWidth(0.92f),
+                    contentScale = ContentScale.Fit,
+                )
             } else {
-                Spacer(Modifier.height(20.dp))
+                Text(
+                    "钓鱼人生",
+                    color = UITheme.GoldLight,
+                    fontSize = 46.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
 
+            Spacer(Modifier.height(20.dp))
+
+            // 存档概览（只在有存档时显示，让"继续"更有分量）
+            if (hasSave) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "🪙 ${formatNumber(state.money)}",
+                        color = UITheme.GoldLight,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "图鉴 ${state.caughtSpecies.size} 种 · 钓手 ${state.helpers} 名 · " +
+                            "转生 ${state.prestigeCount} 次",
+                        color = UITheme.Cream.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
+            } else {
+                Spacer(Modifier.height(18.dp))
+            }
+
+            // 有存档 → 主按钮是「继续游戏」，这正是玩家最想要的那一个
             if (hasSave) {
                 MenuButton("继续游戏", UITheme.Gold, onContinue)
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 MenuButton("重新开始", UITheme.WaterTop, onReset)
             } else {
                 MenuButton("开始游戏", UITheme.Gold, onStart)
             }
-
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             MenuButton("设置", UITheme.WaterTop, onSettings)
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.weight(1f))
+
+            // 底部：只留动态版本号
             Text(
-                "点击水面抛竿 · 浮标下沉时点击收线",
-                color = UITheme.TextDim,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
+                "v${BuildConfig.VERSION_NAME}",
+                color = UITheme.Cream.copy(alpha = 0.55f),
+                fontSize = 11.sp,
             )
+            Spacer(Modifier.height(14.dp))
         }
     }
 }

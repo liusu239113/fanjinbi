@@ -51,12 +51,42 @@ object RewardAds {
         }
     }
 
-    /** 广告位用途。同一个激励视频位可复用，这里按用途分开统计。 */
-    const val PLACEMENT_GOLD_GIFT = "gold_gift"          // 金币旁的广告礼包
-    const val PLACEMENT_COOP_BUFF = "coop_buff"          // 合作 buff
-    const val PLACEMENT_DAILY_GIFT = "daily_gift"        // 每日赠礼
-    const val PLACEMENT_OFFLINE_DOUBLE = "offline_double" // 离线收益翻倍
-    const val PLACEMENT_DEX_REWARD = "dex_reward"        // 图鉴收集奖励翻倍
-    const val PLACEMENT_PRESTIGE_BOOST = "prestige_boost" // 转生前看广告加成
-    const val PLACEMENT_SHOP_REFRESH = "shop_refresh"    // 免费刷新商店
+    // ---------------- 广告位用途 ----------------
+    // 同一个激励视频位可复用，这里按用途分开统计，方便后台看哪类转化最好。
+
+    /** 双倍收益：10 分钟内所有渔获翻倍（下线也计时）。 */
+    const val PLACEMENT_DOUBLE_INCOME = "double_income"
+
+    /** 离线收益翻倍：下次离线结算翻倍。 */
+    const val PLACEMENT_OFFLINE_DOUBLE = "offline_double"
+
+    /** 立即到账一笔金币（按当前收益水平给）。 */
+    const val PLACEMENT_GOLD_DROP = "gold_drop"
+
+    /** 稀有鱼诱饵：3 分钟内高稀有度鱼出现率大增。 */
+    const val PLACEMENT_RARE_LURE = "rare_lure"
+
+    /** 钓手加速：5 分钟内自动钓手产出 +100%。 */
+    const val PLACEMENT_HELPER_RUSH = "helper_rush"
+
+    /** 自动收线：5 分钟内收线速度 +100%。 */
+    const val PLACEMENT_REEL_RUSH = "reel_rush"
+
+    /** 珍珠礼包：直接给珍珠（转生货币，永久保留）。 */
+    const val PLACEMENT_PEARL = "pearl_gift"
+
+    /** 宝箱钥匙：立刻在河面刷一个必定出珍珠的宝箱。 */
+    const val PLACEMENT_CHEST_KEY = "chest_key"
+
+    /** 图鉴加成翻倍：2 分钟内图鉴收集加成翻倍。 */
+    const val PLACEMENT_DEX_BOOST = "dex_boost"
+
+    /** 每日签到加领：每日一次的额外签到奖励。 */
+    const val PLACEMENT_DAILY_BONUS = "daily_bonus"
+
+    /** 转生加速：本次转生获得的珍珠 +50%（转生前看）。 */
+    const val PLACEMENT_PRESTIGE_BOOST = "prestige_boost"
+
+    /** 免费刷新商店（每次进店一次）。 */
+    const val PLACEMENT_SHOP_REFRESH = "shop_refresh"
 }

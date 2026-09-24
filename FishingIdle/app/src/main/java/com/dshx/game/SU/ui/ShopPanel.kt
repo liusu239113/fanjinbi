@@ -43,12 +43,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.dshx.game.SU.game.Assets
+import com.dshx.game.SU.game.CharacterDef
+import com.dshx.game.SU.game.Characters
 import com.dshx.game.SU.game.Content
 import com.dshx.game.SU.game.Bestiary
 import com.dshx.game.SU.game.DailyQuests
+import com.dshx.game.SU.game.DailyTracker
 import com.dshx.game.SU.game.DexReward
 import com.dshx.game.SU.game.FishSize
 import com.dshx.game.SU.game.FishingMap
+import com.dshx.game.SU.game.KingKind
 import com.dshx.game.SU.game.Rarity
 import com.dshx.game.SU.game.Species
 import com.dshx.game.SU.game.SpeciesLore
@@ -56,6 +60,7 @@ import com.dshx.game.SU.game.World
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.PurchasableDef
 import com.dshx.game.SU.game.Source
+import com.dshx.game.SU.game.Warehouse
 import com.dshx.game.SU.game.formatNumber
 
 /**
@@ -73,12 +78,17 @@ fun ShopPanel(
     revision: Int,
     onBuy: (PurchasableDef) -> Boolean,
     onUnlockMap: (FishingMap) -> Boolean,
+    onUnlockCharacter: (CharacterDef) -> Boolean,
+    onEquipCharacter: (CharacterDef) -> Unit,
+    onSellFish: (Int) -> Unit,
+    onSellAll: () -> Unit,
+    onUpgradeWarehouse: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "统计")
+    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "角色", "仓库", "统计")
 
     // 购买反馈条：成功/失败都在面板顶部闪一下，1.4 秒后自动收起
     var flash by remember { mutableStateOf<String?>(null) }
@@ -155,6 +165,55 @@ fun ShopPanel(
                         2 -> MapList(state, assets, unlock, revision)
                         3 -> DailyQuestList(state, revision)
                         4 -> FishDex(state, assets, revision)
+                        5 -> CharacterPanel(
+                            state = state, assets = assets, revision = revision,
+                            onUnlock = { def ->
+                                val ok = onUnlockCharacter(def)
+                                flash = if (ok) "已解锁 · ${def.name}" else "金币不足 · ${def.name}"
+                                flashOk = ok
+                                flashId++
+                                ok
+                            },
+                            onEquip = { def ->
+                                onEquipCharacter(def)
+                                flash = "已切换为 · ${def.name}"
+                                flashOk = true
+                                flashId++
+                            },
+                        )
+                        6 -> WarehousePanel(
+                            state = state, assets = assets, revision = revision,
+                            onSell = { idx ->
+                                val now = System.currentTimeMillis()
+                                val f = state.warehouse.getOrNull(idx)
+                                val gain = Warehouse.sell(state, idx, state.merchantOffer?.factor ?: 1.0, now)
+                                state.warehouseEarned += gain
+                                if (f != null) {
+                                    DailyTracker.onSold(state)
+                                    flash = "已卖出 · 🪙${formatNumber(gain)}"
+                                    flashOk = true
+                                    flashId++
+                                }
+                            },
+                            onSellAll = {
+                                val now = System.currentTimeMillis()
+                                val n = state.warehouse.size
+                                val gain = Warehouse.sellAll(state, state.merchantOffer?.factor ?: 1.0, now)
+                                state.warehouseEarned += gain
+                                if (n > 0) DailyTracker.onSold(state, n)
+                                flash = "全部卖出 · 🪙${formatNumber(gain)}"
+                                flashOk = gain > 0
+                                flashId++
+                            },
+                            onUpgrade = {
+                                val ok = Warehouse.upgrade(state)
+                                flash = if (ok) "仓库已扩容 · ${Warehouse.capacity(state)} 格"
+                                else "金币不足 · 扩容"
+                                flashOk = ok
+                                flashId++
+                            },
+                            onClose = onClose,
+                        )
                         else -> StatsView(state, revision)
                     }
                 }
@@ -710,6 +769,7 @@ private fun FishDex(state: GameState, assets: Assets, revision: Int) {
             isCaught = caught.contains(sp.id),
             bestSize = state.bestSizeOf(sp.id),
             inWater = state.currentMap.species.any { it.id == sp.id },
+            currentMapName = state.currentMap.name,
             assets = assets,
             onClose = { detail = null },
         )
@@ -733,6 +793,7 @@ private fun SpeciesDetail(
     isCaught: Boolean,
     bestSize: FishSize,
     inWater: Boolean,
+    currentMapName: String,
     assets: Assets,
     onClose: () -> Unit,
 ) {
@@ -772,10 +833,11 @@ private fun SpeciesDetail(
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(10.dp))
+                // 鱼图：撑满整行宽度，按高度适配，别缩成一个小点
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(110.dp)
+                        .height(150.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(UITheme.DeepWater),
                     contentAlignment = Alignment.Center,
@@ -783,7 +845,10 @@ private fun SpeciesDetail(
                     if (fish != null) {
                         Image(
                             fish, contentDescription = sp.name,
-                            modifier = Modifier.height(96.dp).alpha(if (isCaught) 1f else 0.22f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp)
+                                .alpha(if (isCaught) 1f else 0.22f),
                             contentScale = ContentScale.Fit,
                         )
                     }
@@ -792,14 +857,19 @@ private fun SpeciesDetail(
                 DetailRow("稀有度", "${sp.rarity.displayName} · ${sp.tint.display}")
                 DetailRow("最大体型", if (isCaught) bestSize.label else "未记录")
                 DetailRow("体价值", "×${String.format("%.2f", sp.valueMul)}")
+                // 说清楚是**游戏里的哪几张地图**，不能只写"这片水域"
                 DetailRow("出没水域", maps.joinToString("、") { it.name })
-                DetailRow("当前水域", if (inWater) "这片水里就有" else "这片水里没有")
+                DetailRow(
+                    "当前所在",
+                    "「${currentMapName}」" + if (inWater) " · 有" else " · 没有",
+                )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    if (isCaught) SpeciesLore.of(sp) else "还没钓到过它。去${maps.firstOrNull()?.name ?: "水域"}碰碰运气。",
+                    if (isCaught) SpeciesLore.of(sp)
+                    else "还没钓到过它。去「${maps.firstOrNull()?.name ?: "水域"}」碰碰运气。",
                     color = UITheme.TextNormal,
                     fontSize = 12.sp,
-                    lineHeight = 17.sp,
+                    lineHeight = 18.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -853,7 +923,7 @@ private fun SpeciesRow(
     ) {
         Box(
             Modifier
-                .size(42.dp)
+                .size(56.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(UITheme.DeepWater),
             contentAlignment = Alignment.Center,
@@ -861,7 +931,7 @@ private fun SpeciesRow(
             if (icon != null) {
                 Image(
                     icon, contentDescription = sp.name,
-                    modifier = Modifier.size(36.dp).alpha(if (isCaught) 1f else 0.18f),
+                    modifier = Modifier.size(50.dp).alpha(if (isCaught) 1f else 0.18f),
                     contentScale = ContentScale.Fit,
                     colorFilter = if (isCaught) null else null,
                 )
@@ -942,6 +1012,24 @@ private fun StatsView(state: GameState, revision: Int) {
                     "体型纪录",
                     "${state.bestSize.count { it.value > 0 }} 种有纪录",
                 )
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("仓库与角色")
+                Spacer(Modifier.height(6.dp))
+                StatRow("仓库容量", "${state.warehouse.size} / ${Warehouse.capacity(state)} 格")
+                StatRow(
+                    "仓库市值",
+                    formatNumber(Warehouse.marketTotal(state.warehouse, System.currentTimeMillis())),
+                    UITheme.GoldLight,
+                )
+                StatRow("卖鱼累计收入", formatNumber(state.warehouseEarned))
+                StatRow("鱼贩到访", "${state.merchantVisits} 次")
+                StatRow("当前角色", state.currentCharacter.name, UITheme.GoldLight)
+                StatRow("已解锁角色", "${state.ownedCharacters.size} / ${Characters.all.size} 人")
+                StatRow("鱼王类型", "${KingKind.entries.size} 种")
             }
         }
 

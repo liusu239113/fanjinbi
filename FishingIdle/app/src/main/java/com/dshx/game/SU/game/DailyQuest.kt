@@ -34,6 +34,18 @@ class DailyProgress {
     var chests: Int = 0
     var kings: Int = 0
 
+    // ---- 新增：陪伴型任务的进度 ----
+    /** 今日抛竿次数。 */
+    var casts: Int = 0
+    /** 今日任意购买次数（商店买任何东西都算）。 */
+    var anyPurchase: Int = 0
+    /** 今日新解锁的鱼种数。 */
+    var newSpecies: Int = 0
+    /** 今日存入仓库的鱼数。 */
+    var stored: Int = 0
+    /** 今日卖出的鱼数。 */
+    var sold: Int = 0
+
     fun reset() {
         catches = 0
         moneyEarned = 0.0
@@ -43,27 +55,57 @@ class DailyProgress {
         helpersBought = 0
         chests = 0
         kings = 0
+        casts = 0
+        anyPurchase = 0
+        newSpecies = 0
+        stored = 0
+        sold = 0
     }
 }
 
 /** 任务池与结算。 */
 object DailyQuests {
 
-    /** 全部任务模板，每天从中抽 3 条。 */
+    /**
+     * 全部任务模板，每天从中抽 3 条。
+     *
+     * **难度校准**（这是重点）：
+     *  - 所有任务都要保证**半小时到一小时**能完成，不看玩家进度。
+     *  - 老版本有「切换 2 次水域」「雇佣 3 名钓手」这种前期根本做不到的，
+     *    以及「今日赚 1000 万」这种只有后期才够得着的 —— 全部删掉或大幅下调。
+     *  - 奖励也相应下调：任务给的是**阶段性小奖励**，不该顶掉一整天的经营收入。
+     *  - 目标是"每天上线随便玩玩就能拿满"，而不是"逼玩家肝"。
+     */
     val pool: List<DailyQuest> = listOf(
-        DailyQuest("catch30", "小试身手", "钓上 30 条鱼", 30.0, 5_000.0) { it.catches.toDouble() },
-        DailyQuest("catch150", "勤学苦练", "钓上 150 条鱼", 150.0, 40_000.0) { it.catches.toDouble() },
-        DailyQuest("catch500", "废寝忘食", "钓上 500 条鱼", 500.0, 300_000.0) { it.catches.toDouble() },
-        DailyQuest("rare15", "寻珍觅宝", "钓上 15 条稀有以上的鱼", 15.0, 80_000.0) { it.rareCatches.toDouble() },
-        DailyQuest("combo15", "一气呵成", "达成 15 连击", 15.0, 25_000.0) { it.bestCombo.toDouble() },
-        DailyQuest("combo30", "炉火纯青", "达成 30 连击", 30.0, 150_000.0) { it.bestCombo.toDouble() },
-        DailyQuest("earn", "小有积蓄", "今日赚到 10 万金币", 100_000.0, 20_000.0) { it.moneyEarned },
-        DailyQuest("earn_big", "日进斗金", "今日赚到 1000 万金币", 1e7, 500_000.0) { it.moneyEarned },
-        DailyQuest("hire", "招兵买马", "今日雇佣 3 名钓手", 3.0, 60_000.0) { it.helpersBought.toDouble() },
-        DailyQuest("explore", "四处探索", "切换 2 次水域", 2.0, 30_000.0) { it.mapChanges.toDouble() },
-        // 后期玩法的每日目标：挂在进度字段上，没买这些功能时天然是 0，不会误导
-        DailyQuest("chest2", "海底捞金", "今日打开 2 个沉船宝箱", 2.0, 120_000.0) { it.chests.toDouble() },
-        DailyQuest("king1", "王见王", "今日拽上 1 条鱼王", 1.0, 300_000.0) { it.kings.toDouble() },
+        // ---- 钓鱼数量：最直观，任何阶段都能做 ----
+        DailyQuest("catch20", "小试身手", "钓上 20 条鱼", 20.0, 3_000.0) { it.catches.toDouble() },
+        DailyQuest("catch60", "渐入佳境", "钓上 60 条鱼", 60.0, 12_000.0) { it.catches.toDouble() },
+        DailyQuest("catch120", "勤学苦练", "钓上 120 条鱼", 120.0, 30_000.0) { it.catches.toDouble() },
+
+        // ---- 稀有鱼：不再要求 15 条那么高 ----
+        DailyQuest("rare3", "寻珍觅宝", "钓上 3 条稀有以上的鱼", 3.0, 15_000.0) { it.rareCatches.toDouble() },
+        DailyQuest("rare8", "慧眼识珠", "钓上 8 条稀有以上的鱼", 8.0, 45_000.0) { it.rareCatches.toDouble() },
+
+        // ---- 连击：手速类，几分钟就能达成 ----
+        DailyQuest("combo8", "一气呵成", "达成 8 连击", 8.0, 8_000.0) { it.bestCombo.toDouble() },
+        DailyQuest("combo18", "炉火纯青", "达成 18 连击", 18.0, 28_000.0) { it.bestCombo.toDouble() },
+
+        // ---- 收入：按"当天能赚多少"给，不再动辄千万 ----
+        DailyQuest("earn_s", "小有积蓄", "今日赚到 2 万金币", 20_000.0, 6_000.0) { it.moneyEarned },
+        DailyQuest("earn_m", "日进斗金", "今日赚到 20 万金币", 200_000.0, 25_000.0) { it.moneyEarned },
+        DailyQuest("earn_l", "财源广进", "今日赚到 200 万金币", 2_000_000.0, 80_000.0) { it.moneyEarned },
+
+        // ---- 日常操作类：随手就能完成的"陪伴型"任务 ----
+        DailyQuest("cast_any", "抛竿不辍", "抛竿 15 次", 15.0, 5_000.0) { it.casts.toDouble() },
+        DailyQuest("visit_map", "四处探索", "切换 1 次水域", 1.0, 6_000.0) { it.mapChanges.toDouble() },
+        DailyQuest("buy_any", "添置家当", "在商店购买 1 次", 1.0, 8_000.0) { it.anyPurchase.toDouble() },
+
+        // ---- 后期玩法的每日目标：挂在进度字段上，没买这些功能时天然是 0，不会误导 ----
+        DailyQuest("chest1", "海底捞金", "今日打开 1 个沉船宝箱", 1.0, 40_000.0) { it.chests.toDouble() },
+        DailyQuest("king1", "王见王", "今日拽上 1 条鱼王", 1.0, 90_000.0) { it.kings.toDouble() },
+        DailyQuest("dex1", "图鉴新页", "今日解锁 1 个新鱼种", 1.0, 60_000.0) { it.newSpecies.toDouble() },
+        DailyQuest("store1", "入库收藏", "今日有 1 条鱼存入仓库", 1.0, 25_000.0) { it.stored.toDouble() },
+        DailyQuest("sell1", "做笔买卖", "今日卖出 1 条仓库里的鱼", 1.0, 25_000.0) { it.sold.toDouble() },
     )
 
     const val DAILY_COUNT = 3
@@ -128,9 +170,35 @@ object DailyTracker {
 
     fun onHelperBought(state: GameState) {
         state.dailyProgress.helpersBought++
+        state.dailyProgress.anyPurchase++
+    }
+
+    /** 任何商店购买都记一笔（「添置家当」任务）。 */
+    fun onAnyPurchase(state: GameState) {
+        state.dailyProgress.anyPurchase++
     }
 
     fun onMapChanged(state: GameState) {
         state.dailyProgress.mapChanges++
+    }
+
+    /** 抛竿一次。 */
+    fun onCast(state: GameState) {
+        state.dailyProgress.casts++
+    }
+
+    /** 首次钓到某鱼种。 */
+    fun onNewSpecies(state: GameState) {
+        state.dailyProgress.newSpecies++
+    }
+
+    /** 有鱼存入仓库。 */
+    fun onStored(state: GameState) {
+        state.dailyProgress.stored++
+    }
+
+    /** 卖出一条仓库里的鱼。 */
+    fun onSold(state: GameState, count: Int = 1) {
+        state.dailyProgress.sold += count
     }
 }

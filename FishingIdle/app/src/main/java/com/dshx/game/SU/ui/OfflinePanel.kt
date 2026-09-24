@@ -22,12 +22,18 @@ import com.dshx.game.SU.game.formatNumber
 /**
  * 离线收益结算弹窗。
  * 玩家离开期间自动钓手仍在工作，回来时一次性结算。
+ *
+ * 「看广告翻倍」放在**这里**而不是广告礼包 —— 它只在结算这一刻有意义，
+ * 玩家看到具体金额时才是转化率最高的时机。
  */
 @Composable
 fun OfflinePanel(
     result: OfflineEarnings.Result,
     assets: Assets,
+    adReady: Boolean,
+    alreadyDoubled: Boolean,
     onClaim: () -> Unit,
+    onDouble: () -> Unit,
 ) {
     Scrim(onClaim) {
         WoodPanel(
@@ -73,6 +79,26 @@ fun OfflinePanel(
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                 )
+
+                // 看广告翻倍：只在还没翻倍时给这个选项
+                if (!alreadyDoubled) {
+                    GameButton(
+                        if (adReady) "看广告 · 收益翻倍"
+                        else "广告接入中",
+                        onDouble,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = adReady,
+                        accent = UITheme.TextGood,
+                        fontSize = 15,
+                    )
+                } else {
+                    Text(
+                        "已使用翻倍奖励",
+                        color = UITheme.TextGood,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
 
                 GameButton(
                     "收下",

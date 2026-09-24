@@ -144,16 +144,46 @@ class SizeAndUnlockTest {
     @Test
     fun `每日任务包含后期玩法目标`() {
         val ids = DailyQuests.pool.map { it.id }
-        assertTrue("缺少开宝箱的每日任务", ids.contains("chest2"))
+        assertTrue("缺少开宝箱的每日任务", ids.contains("chest1"))
         assertTrue("缺少鱼王的每日任务", ids.contains("king1"))
 
         val progress = com.dshx.game.SU.game.DailyProgress()
-        progress.chests = 2
+        progress.chests = 1
         progress.kings = 1
-        val chestQuest = DailyQuests.pool.first { it.id == "chest2" }
+        val chestQuest = DailyQuests.pool.first { it.id == "chest1" }
         val kingQuest = DailyQuests.pool.first { it.id == "king1" }
         assertTrue("开箱数要计入任务进度", chestQuest.track(progress) >= chestQuest.goal)
         assertTrue("鱼王数要计入任务进度", kingQuest.track(progress) >= kingQuest.goal)
+    }
+
+    /**
+     * 任务难度校准：所有任务都必须能在"随便玩玩"的量级内完成。
+     * 老版本有「切换 2 次水域」「雇佣 3 名钓手」这种前期根本做不到的，
+     * 这条守住"不再出现恶心任务"。
+     */
+    @Test
+    fun `每日任务难度都在合理区间`() {
+        // 数量类任务不超过 200（半小时能钓到）
+        DailyQuests.pool.filter { it.id.startsWith("catch") }.forEach {
+            assertTrue("${it.id} 数量门槛过高：${it.goal}", it.goal <= 200.0)
+        }
+        // 稀有鱼任务不超过 10 条
+        DailyQuests.pool.filter { it.id.startsWith("rare") }.forEach {
+            assertTrue("${it.id} 稀有鱼门槛过高：${it.goal}", it.goal <= 10.0)
+        }
+        // 连击任务不超过 20
+        DailyQuests.pool.filter { it.id.startsWith("combo") }.forEach {
+            assertTrue("${it.id} 连击门槛过高：${it.goal}", it.goal <= 20.0)
+        }
+        // 收入任务不超过 200 万
+        DailyQuests.pool.filter { it.id.startsWith("earn") }.forEach {
+            assertTrue("${it.id} 收入门槛过高：${it.goal}", it.goal <= 2_000_000.0)
+        }
+        // 不再有"雇 N 名钓手"这种前期做不到的任务
+        assertTrue(
+            "不该再有雇佣类任务（前期做不了）",
+            DailyQuests.pool.none { it.id == "hire" },
+        )
     }
 
     /** 稀有度只是数据，别让测试失去意义 —— 顺便确认底层稀有度表还在。 */
