@@ -64,8 +64,8 @@ jobs:
       - name: 收集产物
         run: |
           mkdir -p artifacts
-          cp app/build/outputs/apk/release/app-release.apk artifacts/钓鱼大师-release.apk
-          cp app/build/outputs/apk/debug/app-debug.apk artifacts/钓鱼大师-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk artifacts/钓鱼人生:放置大师模拟-release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/钓鱼人生:放置大师模拟-debug.apk
           ls -lh artifacts/
           echo "SHA256:" > artifacts/SHA256.txt
           sha256sum artifacts/*.apk >> artifacts/SHA256.txt
@@ -91,7 +91,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-${{ github.ref_name }}
-          name: 钓鱼大师 · ${{ github.ref_name }} (${{ github.run_number }})
+          name: 钓鱼人生:放置大师模拟 · ${{ github.ref_name }} (${{ github.run_number }})
           body: |
             自动构建产物
 
@@ -99,8 +99,8 @@ jobs:
             - 分支: `${{ github.ref_name }}`
             - 构建: #${{ github.run_number }}
           files: |
-            artifacts/钓鱼大师-release.apk
-            artifacts/钓鱼大师-debug.apk
+            artifacts/钓鱼人生:放置大师模拟-release.apk
+            artifacts/钓鱼人生:放置大师模拟-debug.apk
             artifacts/SHA256.txt
           prerelease: true
           make_latest: false

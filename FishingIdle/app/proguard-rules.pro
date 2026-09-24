@@ -1,2 +1,2 @@
 -dontwarn androidx.**
--keep class com.taptap.fishingidle.** { *; }
+-keep class com.dshx.game.SU.** { *; }

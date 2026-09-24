@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.taptap.fishingidle"
+    namespace = "com.dshx.game.SU"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.taptap.fishingidle"
+        applicationId = "com.dshx.game.SU"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

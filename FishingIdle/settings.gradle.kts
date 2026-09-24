@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FishingIdle"
+rootProject.name = "FishingLife"
 include(":app")

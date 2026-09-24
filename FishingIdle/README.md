@@ -1,4 +1,4 @@
-# 钓鱼大师 (Fishing Idle)
+# 钓鱼人生:放置大师模拟 (Fishing Idle)
 
 从 Godot 项目 [gamblers-table / fanjinbi](https://github.com/liusu239113/fanjinbi) 换皮重做的**原生 Android 游戏**。
 
@@ -6,7 +6,7 @@
 - **渲染**：Android Canvas（自绘 2D）
 - **UI**：Jetpack Compose
 - **构建**：Gradle + AGP 8.5.2 / Kotlin 2.0.21 / JDK 17
-- **包名**：`com.taptap.fishingidle`
+- **包名**：`com.dshx.game.SU`
 
 ## 玩法
 
@@ -106,7 +106,7 @@
 ## 项目结构
 
 ```
-app/src/main/java/com/taptap/fishingidle/
+app/src/main/java/com/dshx/game/SU/
 ├── MainActivity.kt          # 入口，Compose 接线与生命周期
 ├── game/
 │   ├── Model.kt             # 鱼种 / 购买项 / 浮动文字 / 粒子 / 存档结构
