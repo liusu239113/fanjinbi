@@ -130,13 +130,14 @@ class MainActivity : ComponentActivity() {
         audio.preload(this, AudioManager.SFX)
         audio.playBgm(this, "bgm_main")
 
-        // 首启：没同意过隐私政策就先弹隐私页，同意之后才初始化任何 SDK
+        // 首启：没同意过隐私政策就先弹隐私页，同意之后才初始化任何 SDK。
+        // 与参考项目一致：未同意时**不要**去动 loginGate —— 隐私页在最上层，
+        // 它下面的登录页本来就被盖住；等玩家点「同意」再由 setupTap() 决定
+        // 是进登录页还是直接续校验。
         privacyAccepted = com.dshx.game.SU.ads.AdPrivacy.isAccepted(this)
         if (privacyAccepted) {
             setupAds()
             setupTap()
-        } else {
-            loginGate = true
         }
 
         setContent {
@@ -477,6 +478,12 @@ class MainActivity : ComponentActivity() {
             gameViewRef?.paused = showShop || showMenu || showReset || showPrestige || !inGame
         }
 
+        // 整个界面（主菜单 or 游戏内）套在一个 Box 里，
+        // 三层门控作为它的兄弟节点盖在最上层 —— 关键：**不能**放在
+        // `if (!inGame) { ... return }` 之后，那样首启停在主菜单时
+        // 隐私页永远不会显示、SDK 也永远不会初始化。
+        Box(Modifier.fillMaxSize()) {
+
         // ---------------- 主菜单 ----------------
         // 用 key 把主菜单和游戏内两套 UI 隔离开：
         // 否则两者共享 showMenu/showReset 状态，从游戏内返回主菜单时
@@ -550,9 +557,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             }   // key("main_menu")
-            return@FishingGameScreen
-        }
-
+        } else {
         // ---------------- 游戏内 ----------------
         Box(Modifier.fillMaxSize().background(UITheme.DeepWater)) {
             // 游戏画面
@@ -839,6 +844,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        }   // 游戏内 Box / if-else 结束
 
         // ---------------- 三层门控（盖在最上层） ----------------
         // 顺序固定：隐私政策 -> TapTap 登录 -> 防沉迷认证。
@@ -867,7 +873,9 @@ class MainActivity : ComponentActivity() {
                     if (loginBusy) return@LoginGate
                     loginBusy = true
                     loginMsg = "正在拉起 TapTap…"
-                    com.dshx.game.SU.tap.TapHelper.login(this) { _, msg ->
+                    // 注意：这里在外层 Box 的 BoxScope 里，`this` 已被遮蔽成 BoxScope，
+                    // 必须显式写 this@MainActivity 才能拿到 Activity。
+                    com.dshx.game.SU.tap.TapHelper.login(this@MainActivity) { _, msg ->
                         runOnUiThread {
                             loginBusy = false
                             loginMsg = msg
@@ -877,7 +885,7 @@ class MainActivity : ComponentActivity() {
                 },
                 onRetryCompliance = {
                     val uid = com.dshx.game.SU.tap.TapHelper.currentOpenId()
-                        ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this)
+                        ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this@MainActivity)
                     if (uid.isNullOrEmpty()) {
                         loginMsg = "本地没有登录记录，请先登录"
                     } else {
@@ -893,7 +901,7 @@ class MainActivity : ComponentActivity() {
                 message = complianceMsg,
                 onRetry = {
                     val uid = com.dshx.game.SU.tap.TapHelper.currentOpenId()
-                        ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this)
+                        ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this@MainActivity)
                     if (uid.isNullOrEmpty()) {
                         complianceBlocked = false
                         loginGate = true
@@ -902,7 +910,7 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 onSwitchAccount = {
-                    com.dshx.game.SU.tap.TapHelper.logout(this)
+                    com.dshx.game.SU.tap.TapHelper.logout(this@MainActivity)
                     loginBusy = false
                     loginMsg = ""
                     complianceBlocked = false
@@ -911,6 +919,7 @@ class MainActivity : ComponentActivity() {
                 },
             )
         }
+        }   // 外层 Box：门控盖在最上层
     }
 
     /**
