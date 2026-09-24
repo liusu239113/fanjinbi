@@ -49,6 +49,7 @@ fun MenuPanel(
     showResume: Boolean = true,
     onVolumeChanged: () -> Unit,
     onReset: () -> Unit,
+    onOpenPrivacy: () -> Unit = {},
     onExitToMainMenu: () -> Unit = {},
     onClose: () -> Unit,
 ) {
@@ -116,6 +117,22 @@ fun MenuPanel(
                     HintLine("购买鱼苗增加鱼群，雇佣钓手自动钓鱼")
                     HintLine("升级「自动收线」「智能浮标」后可以彻底放手")
                 }
+
+                SectionTitle("关于与隐私")
+                GameButton(
+                    "查看《隐私政策》",
+                    onOpenPrivacy,
+                    modifier = Modifier.fillMaxWidth(),
+                    accent = UITheme.WaterTop,
+                    fontSize = 13,
+                )
+                Text(
+                    "版本 ${com.dshx.game.SU.BuildConfig.VERSION_NAME}",
+                    color = UITheme.TextDim,
+                    fontSize = 11.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
 
                 Spacer(Modifier.height(2.dp))
 

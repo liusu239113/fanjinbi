@@ -205,7 +205,56 @@ class GameState {
      */
     val globalValueMultiplier: Double
         get() = (1.0 + rarityMul) * (1.0 + mapBonus) * DexReward.multiplier(this) *
-            prestigeMultiplier
+            prestigeMultiplier * buffMultiplier
+
+    // ---- 广告合作 buff（限时收益加成）----
+
+    /**
+     * 合作 buff 剩余秒数 / 总时长。
+     *
+     * 不写进存档：它是限时加成，重启游戏不该把计时清零变成永久 buff。
+     * 由 MainActivity 的 20fps 心跳推进 [tickBuff]。
+     */
+    var buffRemain: Float = 0f
+        private set
+    var buffTotal: Float = 0f
+        private set
+
+    val buffActive: Boolean get() = buffRemain > 0f
+
+    /** 合作 buff 的收益倍率（+50%）。 */
+    val buffMultiplier: Double get() = if (buffActive) 1.5 else 1.0
+
+    /**
+     * 看广告拿到的「离线收益翻倍」是否已就绪。
+     * 不存档：它是单次消费型道具，重启后失效比留着一个看不见的状态更干净。
+     */
+    var offlineDoubleReady: Boolean = false
+
+    /** 消费掉翻倍权益，返回本次是否应该翻倍。 */
+    fun consumeOfflineDouble(): Boolean {
+        val v = offlineDoubleReady
+        offlineDoubleReady = false
+        return v
+    }
+
+    /** 激活/延长一段合作 buff（取较长的剩余时间，不叠加倍率）。 */
+    fun activateBuff(seconds: Float) {
+        buffRemain = maxOf(buffRemain, seconds)
+        buffTotal = maxOf(buffTotal, seconds)
+    }
+
+    /** 推进 buff 计时。返回本次是否刚好结束（UI 可据此提示）。 */
+    fun tickBuff(dt: Float): Boolean {
+        if (buffRemain <= 0f) return false
+        buffRemain -= dt
+        if (buffRemain <= 0f) {
+            buffRemain = 0f
+            buffTotal = 0f
+            return true
+        }
+        return false
+    }
 
     // ---- 转生 ----
 

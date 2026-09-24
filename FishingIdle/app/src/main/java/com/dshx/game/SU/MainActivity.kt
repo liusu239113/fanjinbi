@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -47,15 +49,26 @@ import com.dshx.game.SU.game.FishingMap
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.GameView
 import com.dshx.game.SU.game.OfflineEarnings
+import com.dshx.game.SU.game.RewardAds
 import com.dshx.game.SU.game.SaveManager
 import com.dshx.game.SU.game.Settings
 import com.dshx.game.SU.game.SkillTree
 import com.dshx.game.SU.game.World
+import com.dshx.game.SU.ads.AdDaily
+import com.dshx.game.SU.ui.AdGift
+import com.dshx.game.SU.ui.AdGiftButton
+import com.dshx.game.SU.ui.AdGiftDialog
+import com.dshx.game.SU.ui.AdLoadingOverlay
 import com.dshx.game.SU.ui.AchievementToast
 import com.dshx.game.SU.ui.UnlockPopupCard
 import com.dshx.game.SU.ui.AppFontFamily
 import com.dshx.game.SU.ui.BottomBar
+import com.dshx.game.SU.ui.BuffStrip
 import com.dshx.game.SU.ui.CatchStrip
+import com.dshx.game.SU.ui.ComplianceBlockedGate
+import com.dshx.game.SU.ui.ComplianceCheckingGate
+import com.dshx.game.SU.ui.LoginGate
+import com.dshx.game.SU.ui.PrivacyGate
 import com.dshx.game.SU.ui.MainMenu
 import com.dshx.game.SU.ui.MenuPanel
 import com.dshx.game.SU.ui.PrestigePanel
@@ -66,6 +79,7 @@ import com.dshx.game.SU.ui.ResetConfirmDialog
 import com.dshx.game.SU.ui.ShopPanel
 import com.dshx.game.SU.ui.UITheme
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 
 class MainActivity : ComponentActivity() {
 
@@ -75,6 +89,27 @@ class MainActivity : ComponentActivity() {
     private lateinit var gameState: GameState
     private lateinit var settings: Settings
     private lateinit var world: World
+
+    // ---- 广告 / 登录 / 防沉迷 门控状态 ----
+    // 三层门控顺序固定：隐私政策 -> TapTap 登录 -> 防沉迷认证。
+    // 只有防沉迷回调 LOGIN_SUCCESS(500) 才会把 complianceChecking 清掉。
+    //
+    // 全部用 Compose 的 mutableStateOf：这些值由 SDK 回调（可能在子线程）
+    // 改写，用普通 var 的话 UI 不会重组 —— 门控永远不消失。
+    private var privacyAccepted by mutableStateOf(false)
+    private var loginGate by mutableStateOf(false)
+    private var complianceChecking by mutableStateOf(false)
+    private var complianceBlocked by mutableStateOf(false)
+    private var complianceMsg by mutableStateOf("")
+    private var loginBusy by mutableStateOf(false)
+    private var loginMsg by mutableStateOf("")
+
+    // 广告加载浮层：点广告到真正播放之间给玩家反馈，避免"点了没反应"
+    private var adLoading by mutableStateOf(false)
+    private var adLoadingSince = 0L
+
+    /** 轻量提示（相当于 Toast），由 [showToast] 写入、游戏内顶部展示。 */
+    private var toastText by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +130,15 @@ class MainActivity : ComponentActivity() {
         audio.preload(this, AudioManager.SFX)
         audio.playBgm(this, "bgm_main")
 
+        // 首启：没同意过隐私政策就先弹隐私页，同意之后才初始化任何 SDK
+        privacyAccepted = com.dshx.game.SU.ads.AdPrivacy.isAccepted(this)
+        if (privacyAccepted) {
+            setupAds()
+            setupTap()
+        } else {
+            loginGate = true
+        }
+
         setContent {
             // 全局套用游戏字体：所有 Text 默认都用 AppFontFamily，
             // 各组件里就不必逐个指定 fontFamily 了。
@@ -103,6 +147,134 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // ---------------- 广告 / TapTap / 防沉迷 接线 ----------------
+
+    /** 同意隐私政策之后才能调用：初始化广告 SDK 并把播放实现注入 RewardAds。 */
+    private fun setupAds() {
+        com.dshx.game.SU.ads.AdBridge.setup(this)
+    }
+
+    /**
+     * 初始化 TapTap（登录 + 防沉迷）。必须在同意隐私政策之后调用。
+     */
+    private fun setupTap() {
+        com.dshx.game.SU.tap.TapHelper.init(this)
+        com.dshx.game.SU.tap.TapHelper.listener =
+            object : com.dshx.game.SU.tap.TapHelper.Listener {
+                override fun onLoginChanged(openId: String?) {
+                    runOnUiThread {
+                        if (openId.isNullOrEmpty()) {
+                            loginGate = true
+                            complianceChecking = false
+                            complianceBlocked = false
+                        } else {
+                            // 登录成功也不能直接放行，先进校验中状态
+                            loginGate = false
+                            complianceChecking = true
+                            complianceBlocked = false
+                            complianceMsg = ""
+                        }
+                    }
+                }
+            }
+        com.dshx.game.SU.tap.ComplianceManager.register(complianceListener)
+        val openId = com.dshx.game.SU.tap.TapHelper.currentOpenId()
+            ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this)
+        if (openId.isNullOrEmpty()) {
+            loginGate = true
+        } else {
+            startComplianceCheck(openId)
+        }
+    }
+
+    /** 发起一次防沉迷校验。校验期间保持阻断，只有 SDK 回调才解除。 */
+    private fun startComplianceCheck(openId: String) {
+        complianceChecking = true
+        complianceBlocked = false
+        complianceMsg = ""
+        com.dshx.game.SU.tap.ComplianceManager.register(complianceListener)
+        com.dshx.game.SU.tap.ComplianceManager.startup(this, openId)
+    }
+
+    private val complianceListener = object : com.dshx.game.SU.tap.ComplianceManager.Listener {
+        override fun onLoginSuccess() {
+            runOnUiThread {
+                complianceChecking = false
+                complianceBlocked = false
+                complianceMsg = ""
+                loginGate = false
+            }
+        }
+
+        override fun onExited() = block(null, backToLogin = true)
+        override fun onSwitchAccount() = block(null, backToLogin = true)
+
+        override fun onPeriodRestrict() = block(
+            "根据国家新闻出版署规定，未成年人仅可在周五、周六、周日及法定节假日的 20:00-21:00 游玩。当前时段无法进入游戏。"
+        )
+
+        override fun onDurationLimit() = block("今日可游戏时长已用完，请明天再来。")
+        override fun onAgeLimit() = block("根据相关规定，该账号当前无法进入游戏。")
+        override fun onRealNameStop() = block("需要完成实名认证才能进入游戏，请重新校验并完成认证。")
+
+        override fun onError(message: String) = block(message)
+
+        /** 统一处理"不放行"：要么回登录页，要么停在拦截页。 */
+        private fun block(message: String?, backToLogin: Boolean = false) {
+            runOnUiThread {
+                complianceChecking = false
+                if (backToLogin) {
+                    complianceBlocked = false
+                    complianceMsg = ""
+                    loginGate = true
+                } else {
+                    complianceMsg = message ?: "当前账号无法进入游戏"
+                    complianceBlocked = true
+                }
+            }
+        }
+    }
+
+    /**
+     * 统一的激励视频入口：未接入 / 未配置 / 中途关闭都会给出明确提示，
+     * 只有真正看完（onRewardVerify）才会执行 [onReward]。
+     */
+    private fun requestAd(placement: String, onReward: () -> Unit) {
+        if (!RewardAds.isReady()) {
+            audio.play("sfx_cant_buy", 0.7f)
+            // 没准备好：顺手再拉一次初始化（内部有冷却），并把真正的原因说清楚
+            setupAds()
+            val why = RewardAds.lastError
+            showToast(if (why.isEmpty()) "广告还没准备好，稍后再试" else why)
+            return
+        }
+        audio.play("sfx_click", 0.6f)
+        adLoading = true
+        adLoadingSince = System.currentTimeMillis()
+        RewardAds.request(placement) { ok ->
+            runOnUiThread {
+                adLoading = false
+                if (ok) {
+                    audio.play("sfx_success", 0.9f)
+                    onReward()
+                } else {
+                    audio.play("sfx_fail", 0.7f)
+                    showToast("广告未完成，未发放奖励")
+                }
+                // 播完立刻预热下一条，保持「点开即看」（转化率的关键）
+                com.dshx.game.SU.ads.AdBridge.preload(this)
+            }
+        }
+    }
+
+    private fun showToast(msg: String) {
+        toastText = msg
+    }
+
+    /** 门控是否正在阻断游戏（隐私未同意 / 未登录 / 防沉迷校验中或未通过）。 */
+    private val gateBlocking: Boolean
+        get() = !privacyAccepted || loginGate || complianceChecking || complianceBlocked
 
     /**
      * 开启全屏沉浸模式，并在用户从边缘划出系统栏后自动重新隐藏。
@@ -171,6 +343,9 @@ class MainActivity : ComponentActivity() {
         // 否则金币数字不会更新。
         var revision by remember { mutableIntStateOf(0) }
 
+        // 广告礼包弹窗
+        var showAdGift by remember { mutableStateOf(false) }
+
         val context = LocalContext.current
 
         // 以 ~20fps 刷新 HUD，足够顺滑又不必每帧重组
@@ -178,6 +353,22 @@ class MainActivity : ComponentActivity() {
             while (true) {
                 kotlinx.coroutines.delay(50)
                 revision++
+            }
+        }
+
+        // 合作 buff 倒计时：跟 HUD 同一节奏推进（50ms 一步）
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(50)
+                if (gameState.buffActive) gameState.tickBuff(0.05f)
+            }
+        }
+
+        // 轻量提示 2 秒后自动消失
+        LaunchedEffect(toastText) {
+            if (toastText != null) {
+                kotlinx.coroutines.delay(2000)
+                toastText = null
             }
         }
 
@@ -198,14 +389,14 @@ class MainActivity : ComponentActivity() {
                     unlockPopup = com.dshx.game.SU.ui.UnlockPopup(
                         world.pendingNewSpecies.removeAt(0), null,
                     )
-                    audio.play("legend", 1.0f)
+                    audio.play("sfx_legend", 1.0f)
                     kotlinx.coroutines.delay(3400)
                     unlockPopup = null
                     kotlinx.coroutines.delay(200)
                 } else if (unlockPopup == null && world.pendingNewRecords.isNotEmpty()) {
                     val (sp, tier) = world.pendingNewRecords.removeAt(0)
                     unlockPopup = com.dshx.game.SU.ui.UnlockPopup(sp, tier)
-                    audio.play("achievement", 1.0f)
+                    audio.play("sfx_achievement", 1.0f)
                     kotlinx.coroutines.delay(3400)
                     unlockPopup = null
                     kotlinx.coroutines.delay(200)
@@ -269,8 +460,11 @@ class MainActivity : ComponentActivity() {
                 val perSec = OfflineEarnings.perHelperPerSecond(gameState)
                 val result = OfflineEarnings.settle(elapsed, perSec, gameState.helpers)
                 if (result.isMeaningful) {
-                    // 直接入账，弹窗只是告知
-                    gameState.money += result.money
+                    // 直接入账，弹窗只是告知。
+                    // 看过广告的「离线收益翻倍」在这里兑现（单次消费）。
+                    val doubled = gameState.consumeOfflineDouble()
+                    val gain = if (doubled) result.money * 2 else result.money
+                    gameState.money += gain
                     gameState.recordOfflineEarnings(result.catches)
                     offlineResult = result
                     revision++
@@ -322,6 +516,11 @@ class MainActivity : ComponentActivity() {
                         saveManager.save(gameState, settings)
                     },
                     onReset = { showReset = true },
+                    onOpenPrivacy = {
+                        if (!com.dshx.game.SU.ads.AdPrivacy.openPolicy(context)) {
+                            showToast("隐私政策链接尚未配置")
+                        }
+                    },
                     onExitToMainMenu = {
                         audio.play("sfx_click", 0.6f)
                         saveManager.save(gameState, settings)
@@ -399,13 +598,49 @@ class MainActivity : ComponentActivity() {
                     CatchStrip(gameState, revision)
                 }
 
+                // 金币旁的「广告礼包」入口 + 合作 buff 倒计时。
+                // 紧贴金币条下方，是转化率最高的一类广告位。
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AdGiftButton(
+                        leftToday = (DAILY_GIFT_LIMIT - AdDaily.used(context, GIFT_DAILY_KEY))
+                            .coerceAtLeast(0),
+                        ready = RewardAds.isReady(),
+                        onClick = { showAdGift = true },
+                    )
+                    if (gameState.buffActive) {
+                        BuffStrip(
+                            label = "合作加成 +50% 收益",
+                            remainSeconds = gameState.buffRemain,
+                            totalSeconds = gameState.buffTotal,
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(8.dp))
                 AchievementToast(toast)
-                UnlockPopupCard(
-                    popup = unlockPopup,
-                    assets = assets,
-                    onDismiss = { unlockPopup = null },
-                )
+
+                // 轻量提示（广告未完成 / 领取成功等），2 秒后自动消失
+                val tt = toastText
+                if (tt != null) {
+                    Text(
+                        tt,
+                        color = UITheme.GoldLight,
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            .background(UITheme.Ink.copy(alpha = 0.85f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
 
                 Spacer(Modifier.weight(1f))
 
@@ -534,6 +769,11 @@ class MainActivity : ComponentActivity() {
                         saveManager.save(gameState, settings)
                     },
                     onReset = { showReset = true },
+                    onOpenPrivacy = {
+                        if (!com.dshx.game.SU.ads.AdPrivacy.openPolicy(context)) {
+                            showToast("隐私政策链接尚未配置")
+                        }
+                    },
                     // 之前这里没传回调，MenuPanel 内部默认是空实现，
                     // 「返回主菜单」点了完全没反应。现在真的回得去了。
                     onExitToMainMenu = {
@@ -570,7 +810,186 @@ class MainActivity : ComponentActivity() {
                     onDismiss = { showReset = false },
                 )
             }
+
+            // 图鉴解锁 / 体型新纪录的中央弹窗。
+            // 必须挂在游戏根 Box 下（而不是 HUD 的 Column 里）：
+            // 放 Column 里时 fillMaxSize 会吃掉剩余全部高度，遮罩铺满屏幕下半部分，
+            // 底部的划船/商店按钮会被挤出屏幕 —— 那正是「黑色遮罩特别大」的原因。
+            // 放在最后 = 盖在所有面板之上。
+            UnlockPopupCard(
+                popup = unlockPopup,
+                assets = assets,
+                onDismiss = { unlockPopup = null },
+            )
+
+            // 广告礼包：金币旁那个图标点开的面板
+            if (showAdGift) {
+                AdGiftDialog(
+                    gifts = buildAdGifts(context),
+                    statusText = if (RewardAds.isReady()) "看完广告立即到账"
+                    else RewardAds.statusText(),
+                    onDismiss = { showAdGift = false },
+                )
+            }
+
+            // 广告加载浮层：从点击到真正播放之间给反馈
+            if (adLoading) {
+                AdLoadingOverlay(
+                    slowHint = System.currentTimeMillis() - adLoadingSince > 8000,
+                )
+            }
         }
+
+        // ---------------- 三层门控（盖在最上层） ----------------
+        // 顺序固定：隐私政策 -> TapTap 登录 -> 防沉迷认证。
+        if (!privacyAccepted) {
+            PrivacyGate(
+                onOpenPolicy = {
+                    if (!com.dshx.game.SU.ads.AdPrivacy.openPolicy(context)) {
+                        showToast("隐私政策链接尚未配置")
+                    }
+                },
+                onDecline = { finishAffinity() },
+                onAccept = {
+                    com.dshx.game.SU.ads.AdPrivacy.accept(context, true)
+                    privacyAccepted = true
+                    // 同意之后才初始化 SDK：先广告，再 TapTap 登录 + 防沉迷
+                    setupAds()
+                    setupTap()
+                    audio.play("sfx_success", 0.9f)
+                },
+            )
+        } else if (loginGate) {
+            LoginGate(
+                busy = loginBusy,
+                message = loginMsg,
+                onLogin = {
+                    if (loginBusy) return@LoginGate
+                    loginBusy = true
+                    loginMsg = "正在拉起 TapTap…"
+                    com.dshx.game.SU.tap.TapHelper.login(this) { _, msg ->
+                        runOnUiThread {
+                            loginBusy = false
+                            loginMsg = msg
+                            // 登录成功也不能在这里放行：放行必须等防沉迷回调
+                        }
+                    }
+                },
+                onRetryCompliance = {
+                    val uid = com.dshx.game.SU.tap.TapHelper.currentOpenId()
+                        ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this)
+                    if (uid.isNullOrEmpty()) {
+                        loginMsg = "本地没有登录记录，请先登录"
+                    } else {
+                        loginMsg = "正在重新校验…"
+                        startComplianceCheck(uid)
+                    }
+                },
+            )
+        } else if (complianceChecking) {
+            ComplianceCheckingGate()
+        } else if (complianceBlocked) {
+            ComplianceBlockedGate(
+                message = complianceMsg,
+                onRetry = {
+                    val uid = com.dshx.game.SU.tap.TapHelper.currentOpenId()
+                        ?: com.dshx.game.SU.tap.TapHelper.savedOpenId(this)
+                    if (uid.isNullOrEmpty()) {
+                        complianceBlocked = false
+                        loginGate = true
+                    } else {
+                        startComplianceCheck(uid)
+                    }
+                },
+                onSwitchAccount = {
+                    com.dshx.game.SU.tap.TapHelper.logout(this)
+                    loginBusy = false
+                    loginMsg = ""
+                    complianceBlocked = false
+                    complianceMsg = ""
+                    loginGate = true
+                },
+            )
+        }
+    }
+
+    /**
+     * 广告礼包内容。
+     *
+     * 一次给多个选择比单个按钮的触发率高得多 —— 玩家总会挑一个看起来最划算的。
+     * 含**合作 buff**（限时 +50% 收益），是复访率最高的一类激励。
+     */
+    private fun buildAdGifts(context: android.content.Context): List<AdGift> {
+        val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
+        val used = AdDaily.used(context, GIFT_DAILY_KEY)
+        val left = (DAILY_GIFT_LIMIT - used).coerceAtLeast(0)
+        val list = mutableListOf<AdGift>()
+
+        if (left > 0) {
+            list += AdGift(
+                id = "gift_gold",
+                icon = "🪙",
+                title = "金币礼包",
+                desc = "立得 ${com.dshx.game.SU.game.formatNumber(gold)} 金币 · 今日还剩 $left 次",
+                action = {
+                    requestAd(RewardAds.PLACEMENT_GOLD_GIFT) {
+                        gameState.money += gold
+                        AdDaily.markUsed(context, GIFT_DAILY_KEY)
+                        saveManager.save(gameState, settings)
+                        showToast("金币礼包 +${com.dshx.game.SU.game.formatNumber(gold)}")
+                    }
+                },
+            )
+        } else {
+            list += AdGift(
+                id = "gift_gold_done",
+                icon = "🪙",
+                title = "金币礼包",
+                desc = "今日已领完，明天再来",
+                action = { showToast("今日礼包已领完") },
+            )
+        }
+
+        // 合作 buff：限时 +50% 收益。已激活时显示为"续时长"，动机更明确。
+        val buffLabel = if (gameState.buffActive) {
+            "合作加成 +50% 收益（剩余 ${gameState.buffRemain.toInt()}s）"
+        } else {
+            "合作加成 +50% 收益，持续 5 分钟"
+        }
+        list += AdGift(
+            id = "gift_buff",
+            icon = "⚡",
+            title = "合作 Buff",
+            desc = buffLabel,
+            action = {
+                requestAd(RewardAds.PLACEMENT_COOP_BUFF) {
+                    gameState.activateBuff(300f)
+                    showToast("合作加成已激活：+50% 收益 5 分钟")
+                }
+            },
+        )
+
+        // 离线收益翻倍：只在有离线收益待领时才出现
+        list += AdGift(
+            id = "gift_offline",
+            icon = "🌙",
+            title = "离线收益翻倍",
+            desc = "下次离线结算的金币翻一倍",
+            action = {
+                requestAd(RewardAds.PLACEMENT_OFFLINE_DOUBLE) {
+                    gameState.offlineDoubleReady = true
+                    showToast("离线收益翻倍已就绪，下次结算生效")
+                }
+            },
+        )
+
+        return list
+    }
+
+    private companion object {
+        /** 每日广告礼包次数上限。 */
+        const val DAILY_GIFT_LIMIT = 5
+        const val GIFT_DAILY_KEY = "gift_daily"
     }
 
     override fun onDestroy() {

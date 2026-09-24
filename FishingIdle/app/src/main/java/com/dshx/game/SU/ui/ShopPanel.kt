@@ -40,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.Content
 import com.dshx.game.SU.game.Bestiary
@@ -719,6 +721,11 @@ private fun FishDex(state: GameState, assets: Assets, revision: Int) {
  *
  * 没钓到的鱼也允许点开 —— 显示剪影、只露稀有度和出没水域，
  * 留个"还差什么"的钩子，比整条灰掉更有收集欲。
+ *
+ * ⚠️ 用 Dialog 承载，不能直接当 [FishDex] 的兄弟节点平铺：
+ * 面板底部抽屉的高度是 78% 屏高，把 fillMaxSize 的详情页排在 LazyColumn
+ * 后面时会被排到抽屉可视区之外，表现为"点了没反应"。
+ * Dialog 自带独立窗口层，一定盖在面板之上。
  */
 @Composable
 private fun SpeciesDetail(
@@ -738,66 +745,71 @@ private fun SpeciesDetail(
     }
     val maps = Bestiary.maps.filter { m -> m.species.any { it.id == sp.id } }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xCC000000))
-            .clickable { onClose() },
-        contentAlignment = Alignment.Center,
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Column(
+        Box(
             Modifier
-                .width(320.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(UITheme.PanelBg)
-                .border(2.dp, rarity.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .background(Color(0xCC000000))
+                .clickableNoRipple { onClose() },
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                "#${sp.dexNo} · ${if (isCaught) sp.name else "？？？"}",
-                color = if (isCaught) rarity else UITheme.TextDim,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(10.dp))
-            Box(
+            Column(
                 Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(UITheme.DeepWater),
-                contentAlignment = Alignment.Center,
+                    .width(320.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(UITheme.PanelBg)
+                    .border(2.dp, rarity.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (fish != null) {
-                    Image(
-                        fish, contentDescription = sp.name,
-                        modifier = Modifier.height(84.dp).alpha(if (isCaught) 1f else 0.22f),
-                        contentScale = ContentScale.Fit,
-                    )
+                Text(
+                    "#${sp.dexNo} · ${if (isCaught) sp.name else "？？？"}",
+                    color = if (isCaught) rarity else UITheme.TextDim,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(110.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(UITheme.DeepWater),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (fish != null) {
+                        Image(
+                            fish, contentDescription = sp.name,
+                            modifier = Modifier.height(96.dp).alpha(if (isCaught) 1f else 0.22f),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
                 }
+                Spacer(Modifier.height(10.dp))
+                DetailRow("稀有度", "${sp.rarity.displayName} · ${sp.tint.display}")
+                DetailRow("最大体型", if (isCaught) bestSize.label else "未记录")
+                DetailRow("体价值", "×${String.format("%.2f", sp.valueMul)}")
+                DetailRow("出没水域", maps.joinToString("、") { it.name })
+                DetailRow("当前水域", if (inWater) "这片水里就有" else "这片水里没有")
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    if (isCaught) SpeciesLore.of(sp) else "还没钓到过它。去${maps.firstOrNull()?.name ?: "水域"}碰碰运气。",
+                    color = UITheme.TextNormal,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                GameButton(
+                    text = "关闭", onClick = onClose,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    accent = UITheme.Gold, fontSize = 15,
+                )
             }
-            Spacer(Modifier.height(10.dp))
-            DetailRow("稀有度", "${sp.rarity.displayName} · ${sp.tint.display}")
-            DetailRow("最大体型", if (isCaught) bestSize.label else "未记录")
-            DetailRow("体价值", "×${String.format("%.2f", sp.valueMul)}")
-            DetailRow("出没水域", maps.joinToString("、") { it.name })
-            DetailRow("当前水域", if (inWater) "这片水里就有" else "这片水里没有")
-            Spacer(Modifier.height(10.dp))
-            Text(
-                if (isCaught) SpeciesLore.of(sp) else "还没钓到过它。去${maps.firstOrNull()?.name ?: "水域"}碰碰运气。",
-                color = UITheme.TextNormal,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(12.dp))
-            GameButton(
-                text = "关闭", onClick = onClose,
-                modifier = Modifier.fillMaxWidth().height(42.dp),
-                accent = UITheme.Gold, fontSize = 15,
-            )
         }
     }
 }
