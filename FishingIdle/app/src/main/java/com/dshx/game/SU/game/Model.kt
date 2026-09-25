@@ -178,6 +178,9 @@ class SaveData {
     var unlockedAchievements: MutableSet<String> = mutableSetOf()
     var caughtSpecies: MutableSet<String> = mutableSetOf()
 
+    /** 已领取的图鉴收集里程碑。 */
+    var dexClaimed: MutableSet<Int> = mutableSetOf()
+
     /** 每个鱼种钓到过的最大体型（存 FishSize.ordinal）。 */
     var bestSize: MutableMap<String, Int> = mutableMapOf()
 

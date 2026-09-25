@@ -45,6 +45,7 @@ import com.dshx.game.SU.game.Attribute
 import com.dshx.game.SU.game.AudioManager
 import com.dshx.game.SU.game.DailyQuests
 import com.dshx.game.SU.game.DailyTracker
+import com.dshx.game.SU.game.DexReward
 import com.dshx.game.SU.game.FishingMap
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.GameView
@@ -80,8 +81,11 @@ import com.dshx.game.SU.ui.OfflinePanel
 import com.dshx.game.SU.ui.ResetConfirmDialog
 import com.dshx.game.SU.ui.ShopPanel
 import com.dshx.game.SU.ui.UITheme
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import com.dshx.game.SU.ui.pressable
 
 class MainActivity : ComponentActivity() {
 
@@ -393,6 +397,19 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 仓库满的引导条：由 World 打标记、这里弹一次（点击直达仓库页签）
+        var showWarehouseFull by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(300)
+                if (world.consumeWarehouseFullNotice()) {
+                    showWarehouseFull = true
+                    kotlinx.coroutines.delay(6000)
+                    showWarehouseFull = false
+                }
+            }
+        }
+
         // 成就提示：轮流展示本帧新解锁的成就，每条停留 2.6 秒
         var toast by remember { mutableStateOf<com.dshx.game.SU.game.AchievementDef?>(null) }
         // 图鉴解锁 / 体型新纪录的中央弹窗（一次只弹一个）
@@ -653,6 +670,38 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(8.dp))
                 AchievementToast(toast)
 
+                // 仓库满的引导条：明确给出"去仓库处理"的出路
+                if (showWarehouseFull) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                            .background(UITheme.TextBad.copy(alpha = 0.9f))
+                            .pressable {
+                                audio.play("sfx_click", 0.6f)
+                                showWarehouseFull = false
+                                showShop = true
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("📦", fontSize = 18.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "仓库已满",
+                                color = Color.White, fontSize = 13.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            )
+                            Text(
+                                "新钓到的收藏鱼已折现。去仓库卖鱼或扩容 ›",
+                                color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp,
+                            )
+                        }
+                    }
+                }
+
                 // 轻量提示（广告未完成 / 领取成功等），2 秒后自动消失
                 val tt = toastText
                 if (tt != null) {
@@ -681,6 +730,8 @@ class MainActivity : ComponentActivity() {
                     world = world,
                     revision = revision,
                     canPrestige = gameState.canPrestige(),
+                    // 有未领的任务 / 图鉴收集奖励时挂红点
+                    badgeCount = gameState.pendingQuestCount + DexReward.claimable(gameState).size,
                     onOpenShop = {
                         audio.play("sfx_click", 0.6f)
                         showShop = true
@@ -770,6 +821,15 @@ class MainActivity : ComponentActivity() {
                     onUpgradeWarehouse = {
                         audio.play("sfx_buy", 0.9f)
                         saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onClaimDex = {
+                        val got = DexReward.claimAll(gameState)
+                        if (got > 0) {
+                            audio.play("sfx_achievement", 1.0f)
+                            saveManager.save(gameState, settings)
+                            showToast("收集奖励 +🪙${formatNumber(got)}")
+                        }
                         revision++
                     },
                 )

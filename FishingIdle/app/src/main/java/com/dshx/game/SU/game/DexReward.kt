@@ -67,4 +67,56 @@ object DexReward {
         }
         return "图鉴已全收集！" to 1f
     }
+
+    // ---------------- 收集里程碑（可主动领取的奖励）----------------
+    //
+    // 之前图鉴只有**被动加成**：集齐多少种就默默提升倍率，玩家没有任何
+    // "我达成了"的反馈。这里给出可领取的里程碑，每到一个节点给一笔金币 +
+    // 珍珠 —— 收集类游戏的爽点一半就在"点那个领取按钮"。
+
+    /** 一个收集里程碑。 */
+    class Milestone(
+        /** 需要收集的鱼种数。 */
+        val species: Int,
+        /** 金币奖励（按当时物价折算的固定值）。 */
+        val money: Double,
+        /** 珍珠奖励。 */
+        val pearls: Long,
+    )
+
+    /** 全部里程碑：每 5 种一个小奖，10 的倍数给珍珠。 */
+    val milestones: List<Milestone> = (1..Bestiary.totalSpecies / 5).map { i ->
+        val n = i * 5
+        Milestone(
+            species = n,
+            money = 10_000.0 * i * i,
+            pearls = if (n % 10 == 0) 1L else 0L,
+        )
+    }
+
+    /** 已达成但还没领取的里程碑。 */
+    fun claimable(state: GameState): List<Milestone> =
+        milestones.filter { state.caughtSpecies.size >= it.species && !state.dexClaimed.contains(it.species) }
+
+    /** 领取一个里程碑。返回是否成功（成功时把奖励直接入账）。 */
+    fun claim(state: GameState, m: Milestone): Boolean {
+        if (state.caughtSpecies.size < m.species) return false
+        if (!state.dexClaimed.add(m.species)) return false
+        state.money += m.money
+        state.pearls += m.pearls
+        return true
+    }
+
+    /** 全部领取。返回总共到手的金币。 */
+    fun claimAll(state: GameState): Double {
+        var total = 0.0
+        for (m in claimable(state)) {
+            if (claim(state, m)) total += m.money
+        }
+        return total
+    }
+
+    /** 下一个还没达成的里程碑（UI 显示进度用）。 */
+    fun nextLocked(state: GameState): Milestone? =
+        milestones.firstOrNull { state.caughtSpecies.size < it.species }
 }

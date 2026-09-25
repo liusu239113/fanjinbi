@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -97,12 +98,16 @@ fun MoneyBar(state: GameState, revision: Int, modifier: Modifier = Modifier) {
 /**
  * 底部操作栏：商店按钮 + 状态提示。
  * [revision] 作用同 [MoneyBar] —— 提示依赖 world.bobber.state 这个普通属性。
+ *
+ * [badgeCount] > 0 时在「商店」按钮上挂一个红点角标：
+ * 有未领的每日任务 / 图鉴收集奖励时提示玩家进去领。
  */
 @Composable
 fun BottomBar(
     world: World,
     revision: Int,
     canPrestige: Boolean,
+    badgeCount: Int,
     onOpenShop: () -> Unit,
     onOpenPrestige: () -> Unit,
     onOpenMenu: () -> Unit,
@@ -140,7 +145,26 @@ fun BottomBar(
             accent = if (canPrestige) UITheme.TextGood else UITheme.WaterTop,
             fontSize = 14,
         )
-        GameButton("商店", onOpenShop, accent = UITheme.Gold, fontSize = 14)
+        // 商店按钮 + 红点：有东西可领时挂一个数字角标
+        Box(contentAlignment = Alignment.TopEnd) {
+            GameButton("商店", onOpenShop, accent = UITheme.Gold, fontSize = 14)
+            if (badgeCount > 0) {
+                Box(
+                    Modifier
+                        .size(18.dp)
+                        .background(UITheme.TextBad, RoundedCornerShape(9.dp))
+                        .border(1.5.dp, UITheme.Ink, RoundedCornerShape(9.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (badgeCount > 9) "9+" else "$badgeCount",
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
     }
 }
 

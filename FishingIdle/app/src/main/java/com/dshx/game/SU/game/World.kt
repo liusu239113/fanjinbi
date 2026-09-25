@@ -590,18 +590,20 @@ enum class KingKind(
     val tapMult: Float,
     /** 提示色（ARGB）。 */
     val color: Int,
+    /** 动画素材前缀（art/<sprite>_anim.png）。 */
+    val sprite: String,
 ) {
     /** 标准鱼王：平衡。 */
-    NORMAL("鱼王", 1.0f, 1.0, 1.0f, 0xFFE8B446.toInt()),
+    NORMAL("鱼王", 1.0f, 1.0, 1.0f, 0xFFE8B446.toInt(), "fish_king"),
 
     /** 金鳞鱼王：奖励翻倍，但跑得也快（时间短）。 */
-    GOLDEN("金鳞鱼王", 0.72f, 2.4, 1.0f, 0xFFFFD65C.toInt()),
+    GOLDEN("金鳞鱼王", 0.72f, 2.4, 1.0f, 0xFFFFD65C.toInt(), "king_golden"),
 
     /** 深渊巨口：时间充裕但极难拉（每点拉力小）。 */
-    ABYSS("深渊巨口", 1.45f, 1.8, 0.55f, 0xFFC69CF6.toInt()),
+    ABYSS("深渊巨口", 1.45f, 1.8, 0.55f, 0xFFC69CF6.toInt(), "king_abyss"),
 
     /** 疾影鱼王：一闪而过，必须手快。 */
-    SWIFT("疾影鱼王", 0.5f, 1.6, 1.5f, 0xFF96D696.toInt()),
+    SWIFT("疾影鱼王", 0.5f, 1.6, 1.5f, 0xFF96D696.toInt(), "king_swift"),
 }
 
 class FishKing(var x: Float, var y: Float, val kind: KingKind = KingKind.NORMAL) {
@@ -711,6 +713,15 @@ class World(val gameState: GameState) {
 
     /** 拖网倒计时（秒）。 */
     private var netTimer = NET_INTERVAL
+
+    /**
+     * 鱼贩停靠的位置（世界坐标）。
+     * 到访时在船附近随机选一处，停留期间不动 —— 玩家能记住他在哪。
+     */
+    var merchantX: Float = 0f
+        private set
+    var merchantY: Float = 0f
+        private set
 
     /** 撒网特效剩余时间（秒），< 0 表示没有特效。 */
     var netEffect = -1f
@@ -1127,6 +1138,43 @@ class World(val gameState: GameState) {
         return true
     }
 
+    /**
+     * 直接点鱼贩：把仓库里的鱼**全部按当前报价**卖给他。
+     *
+     * 这是最省事的卖法，也是鱼贩存在的意义 —— 玩家不用进商店切页签。
+     * 报价用完后鱼贩就收摊（下次到访重新掷价）。
+     */
+    fun sellAllToMerchant() {
+        val offer = gameState.merchantOffer ?: return
+        if (gameState.warehouse.isEmpty()) return
+        val n = gameState.warehouse.size
+        val gain = Warehouse.sellAll(gameState, offer.factor, System.currentTimeMillis())
+        gameState.warehouseEarned += gain
+        DailyTracker.onSold(gameState, n)
+        spawnText(merchantX, merchantY - 130f, "全部卖出 +${formatNumber(gain)}", Palette.TEXT_GOLD, 1.3f)
+        spawnCoinBurst(merchantX, merchantY)
+        pendingSounds.add("coin")
+        // 收完就走：一次到访只做一笔生意
+        gameState.merchantOffer = null
+        gameState.merchantStay = 0f
+        gameState.merchantTimer = Warehouse.MERCHANT_INTERVAL
+    }
+
+    /**
+     * 仓库满的提示是否还没被 UI 消费。
+     *
+     * 仓库满是个**可操作**的状态（卖鱼 / 扩容都能解决），
+     * 光在河面上飘一行字玩家会错过 —— UI 读这个标记后弹一次引导条。
+     */
+    var warehouseFullNotice: Boolean = false
+
+    /** 消费掉"仓库满"的提示标记。 */
+    fun consumeWarehouseFullNotice(): Boolean {
+        val v = warehouseFullNotice
+        warehouseFullNotice = false
+        return v
+    }
+
     /** 多线齐发的副线：一条线绑一条鱼，收线时一起结算。 */
     class ExtraLine(var x: Float, var y: Float, var fish: Fish?)
 
@@ -1173,6 +1221,13 @@ class World(val gameState: GameState) {
         if (c != null && hypot(wx - c.x, wy - c.y) <= Chest.TAP_RADIUS) {
             openChest(c)
             chest = null
+            return true
+        }
+        // 鱼贩：点他 = 按当前报价全部卖出（仓库为空时点不动）
+        if (gameState.merchantOffer != null && gameState.warehouse.isNotEmpty() &&
+            hypot(wx - merchantX, wy - merchantY) <= MERCHANT_TAP_RADIUS
+        ) {
+            sellAllToMerchant()
             return true
         }
         if (!bobber.isActive) return false
@@ -1302,7 +1357,11 @@ class World(val gameState: GameState) {
             gameState.merchantOffer = Warehouse.rollOffer()
             gameState.merchantStay = Warehouse.MERCHANT_STAY
             gameState.merchantVisits++
-            spawnText(boatX, Space.POND_T + 90f, "鱼贩子来了！", Palette.TEXT_GOLD, 1.2f)
+            // 停在船附近，玩家一眼能看到
+            merchantX = (boatX + (Random.nextFloat() * 2f - 1f) * 420f)
+                .coerceIn(Space.POND_L + 120f, Space.POND_R - 120f)
+            merchantY = Space.BOAT_WATERLINE + 40f
+            spawnText(merchantX, merchantY - 120f, "鱼贩子来了！", Palette.TEXT_GOLD, 1.2f)
             pendingSounds.add("chest")
         }
     }
@@ -1752,6 +1811,9 @@ class World(val gameState: GameState) {
         /** 鱼探仪把落点吸到鱼身上的最大距离（世界单位）。 */
         const val FINDER_SNAP_RADIUS = 220f
 
+        /** 点鱼贩的判定半径（世界单位）。给宽一点，别让玩家点不中。 */
+        const val MERCHANT_TAP_RADIUS = 200f
+
         // ---- 角色鱼竿技能参数 ----
 
         /** 「范围诱鱼」：咬钩判定半径倍率。 */
@@ -1854,7 +1916,11 @@ class World(val gameState: GameState) {
                 DailyTracker.onStored(gameState)
                 spawnText(x, y - 106f, "已存入仓库", Palette.TEXT_GOOD, 0.95f)
             } else {
-                spawnText(x, y - 106f, "仓库已满，已折现", Palette.TEXT_BAD, 0.95f)
+                // 仓库满：不能只丢一句"已折现"就完事，得告诉玩家怎么处理。
+                // 满仓是可操作的状态，提示要给出明确出路。
+                banked = finalValue
+                warehouseFullNotice = true
+                spawnText(x, y - 106f, "仓库已满！去「仓库」卖鱼或扩容", Palette.TEXT_BAD, 1.0f)
             }
         }
 

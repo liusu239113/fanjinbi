@@ -154,6 +154,9 @@ class GameState {
     /** 已钓到过的鱼种 id（图鉴收集进度）。 */
     val caughtSpecies: MutableSet<String> = mutableSetOf()
 
+    /** 已领取的图鉴收集里程碑（存 milestone.species 值）。 */
+    val dexClaimed: MutableSet<Int> = mutableSetOf()
+
     /** 每个鱼种钓到过的最大体型（存 ordinal）。 */
     val bestSize: MutableMap<String, Int> = mutableMapOf()
 
@@ -788,6 +791,8 @@ class GameState {
         unlockedAchievements.addAll(data.unlockedAchievements)
         caughtSpecies.clear()
         caughtSpecies.addAll(data.caughtSpecies)
+        dexClaimed.clear()
+        dexClaimed.addAll(data.dexClaimed)
         bestSize.clear()
         bestSize.putAll(data.bestSize)
         chestsOpened = data.chestsOpened

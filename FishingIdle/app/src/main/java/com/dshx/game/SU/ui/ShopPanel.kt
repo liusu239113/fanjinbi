@@ -83,6 +83,7 @@ fun ShopPanel(
     onSellFish: (Int) -> Unit,
     onSellAll: () -> Unit,
     onUpgradeWarehouse: () -> Unit,
+    onClaimDex: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -164,7 +165,7 @@ fun ShopPanel(
                         1 -> ItemList(Content.upgrades, state, assets, purchase, "升级", revision, justBought)
                         2 -> MapList(state, assets, unlock, revision)
                         3 -> DailyQuestList(state, revision)
-                        4 -> FishDex(state, assets, revision)
+                        4 -> FishDex(state, assets, revision, onClaimDex)
                         5 -> CharacterPanel(
                             state = state, assets = assets, revision = revision,
                             onUnlock = { def ->
@@ -711,7 +712,12 @@ private fun DailyQuestList(state: GameState, revision: Int) {
 
 /** 鱼类图鉴：54 种鱼的收集册，按地图分组。 */
 @Composable
-private fun FishDex(state: GameState, assets: Assets, revision: Int) {
+private fun FishDex(
+    state: GameState,
+    assets: Assets,
+    revision: Int,
+    onClaimDex: () -> Unit,
+) {
     @Suppress("UNUSED_EXPRESSION") revision
     val caught = state.caughtSpecies
     // 点某一条鱼 → 展开资料页
@@ -731,6 +737,69 @@ private fun FishDex(state: GameState, assets: Assets, revision: Int) {
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(8.dp))
+
+                // 可领取的收集里程碑：这是"点领取"的爽点所在
+                val claimable = DexReward.claimable(state)
+                if (claimable.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(UITheme.Gold.copy(alpha = 0.22f))
+                            .border(2.dp, UITheme.Gold, RoundedCornerShape(10.dp))
+                            .pressable { onClaimDex() }
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("🎁", fontSize = 18.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "有 ${claimable.size} 个收集奖励可领",
+                                color = UITheme.GoldLight,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                "合计 🪙${formatNumber(claimable.sumOf { it.money })}" +
+                                    if (claimable.any { it.pearls > 0 }) " + 珍珠" else "",
+                                color = UITheme.TextNormal,
+                                fontSize = 10.sp,
+                            )
+                        }
+                        Text("领取 ›", color = UITheme.GoldLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                } else {
+                    // 没有可领的：显示下一个里程碑的进度，给个盼头
+                    DexReward.nextLocked(state)?.let { next ->
+                        val have = caught.size
+                        val frac = (have.toFloat() / next.species).coerceIn(0f, 1f)
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                "下一档奖励：集齐 ${next.species} 种",
+                                color = UITheme.TextDim, fontSize = 10.sp,
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(UITheme.DeepWater),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth(frac)
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(UITheme.Gold),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
             }
         }
 

@@ -52,6 +52,9 @@ class SaveManager(context: Context) {
         root.put("caughtSpecies", JSONArray().apply {
             state.caughtSpecies.forEach { put(it) }
         })
+        root.put("dexClaimed", JSONArray().apply {
+            state.dexClaimed.forEach { put(it) }
+        })
         root.put("unlockedMaps", JSONArray().apply {
             state.unlockedMaps.forEach { put(it) }
         })
@@ -164,6 +167,9 @@ class SaveManager(context: Context) {
             }
             root.optJSONArray("caughtSpecies")?.let { arr ->
                 for (i in 0 until arr.length()) data.caughtSpecies.add(arr.optString(i))
+            }
+            root.optJSONArray("dexClaimed")?.let { arr ->
+                for (i in 0 until arr.length()) data.dexClaimed.add(arr.optInt(i, 0))
             }
             root.optJSONArray("unlockedMaps")?.let { arr ->
                 for (i in 0 until arr.length()) data.unlockedMaps.add(arr.optString(i))

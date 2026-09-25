@@ -69,6 +69,12 @@ class GameRenderer(
         /** 宝箱的绘制宽度（世界单位）。 */
         const val CHEST_WORLD_W = 120f
 
+        /** 鱼王的目标高度（世界单位）。四种鱼王共用同一目标高度，只换素材。 */
+        const val KING_WORLD_H = 150f
+
+        /** 鱼贩 NPC 立绘高度（世界单位）。 */
+        const val MERCHANT_WORLD_H = 190f
+
         /** 无人机悬停在船上方多高（世界单位）。 */
         const val DRONE_HOVER_H = 300f
     }
@@ -153,6 +159,12 @@ class GameRenderer(
     private var playerCastTips: List<FloatArray> = emptyList()
     private var helperCastTips: List<FloatArray> = emptyList()
 
+    /** 鱼王动画：按类型各一套（4 种鱼王长得完全不一样）。 */
+    private val kingFrames: MutableMap<KingKind, List<Bitmap>> = mutableMapOf()
+
+    /** 鱼贩 NPC 立绘。 */
+    private var bmpMerchant: Bitmap? = null
+
     private var waterShader: Shader? = null
     private var riverbedShader: Shader? = null
     private var lastScreenW = 0f
@@ -188,6 +200,18 @@ class GameRenderer(
             "diver", 0, (DIVER_WORLD_H * t.scale).toInt().coerceAtLeast(20),
         )
         bmpChest = assets.scaled("chest", (CHEST_WORLD_W * t.scale).toInt().coerceAtLeast(24))
+        // 鱼王：4 种类型各一套 8 帧摆尾动画
+        kingFrames.clear()
+        for (kind in KingKind.entries) {
+            val frames = loadAnimation(
+                kind.sprite, 0, (KING_WORLD_H * t.scale).toInt().coerceAtLeast(28),
+            )
+            if (frames.isNotEmpty()) kingFrames[kind] = frames
+        }
+        // 鱼贩 NPC 立绘
+        bmpMerchant = assets.scaledToHeight(
+            "merchant_boat", (MERCHANT_WORLD_H * t.scale).toInt().coerceAtLeast(40),
+        )
         // 船底比例与竿尖的逐帧测量在 reloadCharacterSprites() 里做（按当前角色）
         fishFrames.clear()
         fishFrameDuration.clear()
@@ -452,6 +476,8 @@ class GameRenderer(
         drawPelicans(canvas, t, camX)
         drawDrone(canvas, t, camX)
         drawPlayerBoat(canvas, t, camX)
+        drawKing(canvas, t, camX)
+        drawMerchant(canvas, t, camX)
         drawFinderLabels(canvas, t, camX)
         drawParticles(canvas, t, camX)
         drawFloatingTexts(canvas, t, camX)
@@ -933,6 +959,114 @@ class GameRenderer(
         // 快消失了就闪烁提醒
         val blink = c.life < 4f && ((c.bob * 6f).toInt() % 2 == 0)
         SpriteDraw.draw(canvas, bmp, cx, cy, scale = t.scale, alpha = if (blink) 110 else 255)
+    }
+
+    /**
+     * 鱼王：按类型播各自的 8 帧摆尾动画，带金色光晕与拉力进度环。
+     *
+     * 之前鱼王**完全没有渲染** —— 逻辑上它会现身、能点，但屏幕上看不见，
+     * 玩家只能盲点。这里补上：形象 + 光晕 + 剩余时间条 + 拉力进度。
+     */
+    private fun drawKing(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val k = world.king ?: return
+        if (!k.alive) return
+        val halfView = t.screenW / t.scale / 2f
+        if (abs(k.x - camX) > halfView + 300f) return
+
+        val cx = t.toScreenX(k.x - camX)
+        val cy = t.toScreenY(k.y) + sin(k.bob * 1.5f) * 7f * t.scale
+        val kind = k.kind
+
+        // 类型专属光晕：一圈脉动的颜色环，越难缠的越醒目
+        val pulse = sin(k.bob * 3.0f) * 0.5f + 0.5f
+        strokePaint.color = Color.argb((60 + 110 * pulse).toInt(),
+            Color.red(kind.color), Color.green(kind.color), Color.blue(kind.color))
+        strokePaint.strokeWidth = 4f * t.scale
+        canvas.drawCircle(cx, cy, (FishKing.TAP_RADIUS * 0.5f) * t.scale, strokePaint)
+
+        // 8 帧摆尾
+        val frames = kingFrames[kind]
+        if (frames != null && frames.isNotEmpty()) {
+            val idx = ((k.bob * 7f).toInt()) % frames.size
+            SpriteDraw.draw(
+                canvas, frames[idx], cx, cy,
+                scale = t.scale, flipX = k.dir < 0f,
+            )
+        }
+
+        // 剩余时间条：快没了变红并闪烁
+        val frac = k.lifeFrac
+        val barW = 110f * t.scale
+        val barH = 7f * t.scale
+        val barY = cy - (KING_WORLD_H * 0.62f) * t.scale
+        val urgent = frac < 0.3f && ((k.bob * 8f).toInt() % 2 == 0)
+        strokePaint.color = Color.argb(180, 0, 0, 0)
+        canvas.drawRect(cx - barW / 2f, barY, cx + barW / 2f, barY + barH, strokePaint)
+        strokePaint.color = if (urgent) Palette.TEXT_BAD else kind.color
+        canvas.drawRect(cx - barW / 2f, barY, cx - barW / 2f + barW * frac, barY + barH, strokePaint)
+
+        // 拉力进度环
+        if (k.progress > 0f) {
+            val r = (FishKing.TAP_RADIUS * 0.62f) * t.scale
+            strokePaint.color = Color.argb(120, 0, 0, 0)
+            strokePaint.strokeWidth = 8f * t.scale
+            canvas.drawCircle(cx, cy, r, strokePaint)
+            strokePaint.color = Palette.TEXT_GOLD
+            strokePaint.strokeWidth = 8f * t.scale
+            canvas.drawArc(
+                RectF(cx - r, cy - r, cx + r, cy + r),
+                -90f, 360f * k.progress, false, strokePaint,
+            )
+        }
+
+        // 类型名（首次出现时提示玩家这是哪种鱼王）
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.textSize = 26f * t.scale
+        textPaint.color = kind.color
+        canvas.drawText(kind.displayName, cx, barY - 8f * t.scale, textPaint)
+    }
+
+    /**
+     * 鱼贩 NPC：停在河面上，头顶一个报价气泡。
+     * 点他（或点气泡）等于"全部按当前报价卖出"。
+     */
+    private fun drawMerchant(canvas: Canvas, t: ViewTransform, camX: Float) {
+        val offer = world.gameState.merchantOffer ?: return
+        val bmp = bmpMerchant ?: return
+        val mx = world.merchantX
+        val my = world.merchantY
+        val halfView = t.screenW / t.scale / 2f
+        if (abs(mx - camX) > halfView + 260f) return
+
+        val cx = t.toScreenX(mx - camX)
+        val cy = t.toScreenY(my) + sin(world.time * 1.4f) * 5f * t.scale
+
+        SpriteDraw.draw(canvas, bmp, cx, cy, scale = t.scale)
+
+        // 报价气泡
+        val good = offer.isGood
+        val color = if (good) Palette.TEXT_GOOD else Palette.TEXT_BAD
+        val pct = ((offer.factor - 1.0) * 100).toInt()
+        val label = (if (pct >= 0) "+$pct%" else "$pct%") + " 收货"
+
+        val bw = 150f * t.scale
+        val bh = 52f * t.scale
+        val bx = cx - bw / 2f
+        val by = cy - (MERCHANT_WORLD_H * 0.78f) * t.scale
+
+        paint.color = Color.argb(225, 28, 22, 18)
+        canvas.drawRoundRect(RectF(bx, by, bx + bw, by + bh), 10f * t.scale, 10f * t.scale, paint)
+        strokePaint.color = color
+        strokePaint.strokeWidth = 2.5f * t.scale
+        canvas.drawRoundRect(RectF(bx, by, bx + bw, by + bh), 10f * t.scale, 10f * t.scale, strokePaint)
+
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.textSize = 22f * t.scale
+        textPaint.color = color
+        canvas.drawText(label, cx, by + 24f * t.scale, textPaint)
+        textPaint.textSize = 15f * t.scale
+        textPaint.color = Color.argb(200, 200, 200, 200)
+        canvas.drawText("点我全卖", cx, by + 43f * t.scale, textPaint)
     }
 
     /** 声呐标记：给稀有及以上的鱼加一个稀有度颜色的光点。 */
