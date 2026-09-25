@@ -83,13 +83,18 @@ fun ShopPanel(
     onSellFish: (Int) -> Unit,
     onSellAll: () -> Unit,
     onUpgradeWarehouse: () -> Unit,
+    /** 仓库页「看广告免费扩容」——由宿主走激励视频，看完再免费扩一次。 */
+    onAdUpgradeWarehouse: () -> Unit,
     onClaimDex: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "角色", "仓库", "统计")
+    // 「后期」单独一页：鹈鹕 / 拖网 / 声呐 / 鱼探仪 / 无人机 / 潜水员 / 宝藏
+    // 这些升级以前只定义在 Content.lateGame 里，从没被任何界面渲染过 ——
+    // 玩家永远买不到，World 里为它们写的一整套玩法全是死的。
+    val tabs = listOf("鱼苗", "升级", "后期", "水域", "任务", "图鉴", "角色", "仓库", "统计")
 
     // 购买反馈条：成功/失败都在面板顶部闪一下，1.4 秒后自动收起
     var flash by remember { mutableStateOf<String?>(null) }
@@ -163,10 +168,15 @@ fun ShopPanel(
                     when (tab) {
                         0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought)
                         1 -> ItemList(Content.upgrades, state, assets, purchase, "升级", revision, justBought)
-                        2 -> MapList(state, assets, unlock, revision)
-                        3 -> DailyQuestList(state, revision)
-                        4 -> FishDex(state, assets, revision, onClaimDex)
-                        5 -> CharacterPanel(
+                        // 后期两批合成一页展示（顺序仍按 Content 里的依赖链：拖网→声呐→鱼探仪→…）
+                        2 -> ItemList(
+                            Content.lateGame + Content.lateGame2,
+                            state, assets, purchase, "后期装备", revision, justBought,
+                        )
+                        3 -> MapList(state, assets, unlock, revision)
+                        4 -> DailyQuestList(state, revision)
+                        5 -> FishDex(state, assets, revision, onClaimDex)
+                        6 -> CharacterPanel(
                             state = state, assets = assets, revision = revision,
                             onUnlock = { def ->
                                 val ok = onUnlockCharacter(def)
@@ -182,7 +192,7 @@ fun ShopPanel(
                                 flashId++
                             },
                         )
-                        6 -> WarehousePanel(
+                        7 -> WarehousePanel(
                             state = state, assets = assets, revision = revision,
                             onSell = { idx ->
                                 val now = System.currentTimeMillis()
@@ -213,6 +223,7 @@ fun ShopPanel(
                                 flashOk = ok
                                 flashId++
                             },
+                            onAdUpgrade = onAdUpgradeWarehouse,
                             onClose = onClose,
                         )
                         else -> StatsView(state, revision)

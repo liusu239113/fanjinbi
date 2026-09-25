@@ -359,15 +359,19 @@ object Content {
      */
     val unlockHints: Map<String, String> = mapOf(
         "helper" to "先自己钓上 8 条鱼",
-        "epic_fish" to "先放入 1 条鲤鱼",
-        "legend_fish" to "先放入 1 条锦鲤",
+        // 「锦鲤」需要先有鲤鱼、「传说鱼苗」需要先有锦鲤：各差一档，
+        // 原来的提示把两档写反了。
+        "epic_fish" to "先放入 1 条鲤鱼（稀有档）",
+        "legend_fish" to "先放入 1 条锦鲤（史诗档）",
         "auto_reel_chance" to "钓到过鲤鱼",
-        "auto_cast_unlock" to "累计钓上 12 条鱼",
+        "auto_cast_unlock" to "先买自动收线 · 累计钓上 150 条",
         "auto_reel_speed" to "买下「自动重抛」",
         "helper_can_rare" to "先雇到 1 名钓手",
-        "helper_can_epic" to "买下「钓手进阶」",
-        "helper_can_legend" to "买下「钓手大师」",
-        "chain_reaction" to "买下「并行作业」",
+        // 这几条以前写的是"买下 X"，但真实条件是"放入某档鱼 + 已有钓手"，
+        // 玩家照着提示去买 X 是没用的，白花一笔钱。
+        "helper_can_epic" to "放入 1 条锦鲤 · 并雇到 1 名钓手",
+        "helper_can_legend" to "放入 1 条传说鱼苗 · 并雇到 1 名钓手",
+        "chain_reaction" to "先放入 1 条锦鲤",
         "pelican" to "雇到 4 名钓手 · 累计钓上 120 条",
         "net_sweep" to "雇到 6 名钓手 · 累计钓上 220 条",
         "sonar" to "买下「拖网捕捞」",

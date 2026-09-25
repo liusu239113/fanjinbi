@@ -438,6 +438,12 @@ class GameState {
         val gain = pendingPearls()
         if (gain <= 0) return 0
 
+        // ⚠️ 这里必须把「转生加速」的权益消费掉。
+        // pendingPearls() 只是**读** prestigeBoostReady，之前没有任何地方
+        // 把它清掉（consumePrestigeBoost 零调用）—— 结果看一次广告之后，
+        // 之后每一次转生都白拿 +50% 珍珠，礼包还一直显示"已就绪"。
+        consumePrestigeBoost()
+
         pearls += gain
         prestigeCount++
 

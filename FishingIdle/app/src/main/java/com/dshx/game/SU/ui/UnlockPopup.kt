@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -71,7 +72,8 @@ fun UnlockPopupCard(
         val p = popup ?: return@AnimatedVisibility
         val isRecord = p.record != null
         // 鱼图标：用该鱼种精灵图的第一帧，和游戏里看到的是同一套素材。
-        // 240px 是预缩放宽度，屏幕上按 104dp 显示，足够清晰。
+        // 320px 是**单帧**的预缩放宽度（firstFrame 内部先裁帧再缩放），
+        // 足够清晰。
         val fish = remember(p.species.id) { assets.firstFrame(p.species.sprite, 320)?.asImageBitmap() }
         val banner = remember { assets.scaled("unlock_banner", 760)?.asImageBitmap() }
 
@@ -146,12 +148,17 @@ fun UnlockPopupCard(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (fish != null) {
+                            // ⚠️ 必须给**确定宽度**（fillMaxWidth）+ ContentScale.Fit。
+                            // 只给 height 时，Image 会按位图固有尺寸渲染 ——
+                            // 而每帧只有几十像素宽，鱼就缩成一个点，
+                            // 跟「图鉴 / 商店详情」里的写法也不一致。
                             Image(
                                 bitmap = fish,
                                 contentDescription = p.species.name,
                                 modifier = Modifier
-                                    .height((100f * pulse).dp)
-                                    .padding(horizontal = 8.dp),
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp)
+                                    .scale(pulse),
                                 contentScale = ContentScale.Fit,
                             )
                         } else {

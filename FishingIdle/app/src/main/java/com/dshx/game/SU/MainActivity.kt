@@ -54,6 +54,7 @@ import com.dshx.game.SU.game.RewardAds
 import com.dshx.game.SU.game.SaveManager
 import com.dshx.game.SU.game.Settings
 import com.dshx.game.SU.game.SkillTree
+import com.dshx.game.SU.game.Warehouse
 import com.dshx.game.SU.game.World
 import com.dshx.game.SU.game.formatNumber
 import com.dshx.game.SU.ads.AdDaily
@@ -339,6 +340,12 @@ class MainActivity : ComponentActivity() {
         world.helpers.clear()
         world.floatingTexts.clear()
         world.particles.clear()
+        // ⚠️ 必须把世界也切回初始水域。
+        // gameState.resetAll() 只改了 gameState.currentMapId，
+        // 而 World.currentMap 是**另一个字段**，只在 switchMap 里赋值。
+        // 不切的话：画面还是重置前那张图，钓鱼结算走的是旧地图的收益倍率 ——
+        // 从深渊重置回村口小河后，能按深渊的价卖村口的鱼。
+        world.switchMap(gameState.currentMap)
         world.syncFishCount()
         world.syncHelperCount()
         world.syncSpecialUnits()
@@ -616,6 +623,15 @@ class MainActivity : ComponentActivity() {
                                 "success" -> audio.play("sfx_success", 0.85f)
                                 "fail" -> audio.play("sfx_fail", 0.7f)
                                 "coin" -> audio.play("sfx_coin", 0.55f, minIntervalMs = 90)
+                                // 后期单位/事件。Audio 里早就预加载了这些音效，
+                                // 但这里没有映射 —— 后期玩法全程是静音的。
+                                "pelican" -> audio.play("sfx_pelican", 0.8f)
+                                "net" -> audio.play("sfx_net", 0.85f)
+                                "chest" -> audio.play("sfx_chest", 0.85f)
+                                "pearl" -> audio.play("sfx_pearl", 0.9f)
+                                "sonar" -> audio.play("sfx_sonar", 0.6f)
+                                "diver" -> audio.play("sfx_diver", 0.6f)
+                                "legend" -> audio.play("sfx_legend", 1.0f)
                             }
                         },
                     ).also { view ->
@@ -822,6 +838,18 @@ class MainActivity : ComponentActivity() {
                         audio.play("sfx_buy", 0.9f)
                         saveManager.save(gameState, settings)
                         revision++
+                    },
+                    // 看广告免费扩容：只有看完广告才真的扩容，中途关掉不发奖。
+                    onAdUpgradeWarehouse = {
+                        requestAd(RewardAds.PLACEMENT_WAREHOUSE_FREE_UPGRADE) {
+                            if (Warehouse.applyUpgrade(gameState)) {
+                                saveManager.save(gameState, settings)
+                                showToast("仓库已扩容 · ${Warehouse.capacity(gameState)} 格")
+                            } else {
+                                showToast("仓库已满级，无需扩容")
+                            }
+                            revision++
+                        }
                     },
                     onClaimDex = {
                         val got = DexReward.claimAll(gameState)

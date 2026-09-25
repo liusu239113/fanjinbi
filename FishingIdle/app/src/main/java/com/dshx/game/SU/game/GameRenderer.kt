@@ -159,6 +159,20 @@ class GameRenderer(
     private var playerCastTips: List<FloatArray> = emptyList()
     private var helperCastTips: List<FloatArray> = emptyList()
 
+    /**
+     * 静止立绘（= 抛竿图集第 0 帧）的船底比例与竿尖位置。
+     *
+     * 静止立绘不再单独加载一张 `<sprite>.png`，而是复用抛竿图集的第 0 帧，
+     * 所以船底/竿尖要取该帧实测值，不能再用 [BoatArt] 里写死的常量 ——
+     * 那些常量是按旧的单帧立绘量的，对动画帧不成立。
+     */
+    private var playerStaticHull: Float = BoatArt.PLAYER_HULL_FRAC
+    private var playerStaticTip: FloatArray =
+        floatArrayOf(BoatArt.PLAYER_ROD_TIP_X, BoatArt.PLAYER_ROD_TIP_Y)
+    private var helperStaticHull: Float = BoatArt.HELPER_HULL_FRAC
+    private var helperStaticTip: FloatArray =
+        floatArrayOf(BoatArt.HELPER_ROD_TIP_X, BoatArt.HELPER_ROD_TIP_Y)
+
     /** 鱼王动画：按类型各一套（4 种鱼王长得完全不一样）。 */
     private val kingFrames: MutableMap<KingKind, List<Bitmap>> = mutableMapOf()
 
@@ -254,6 +268,12 @@ class GameRenderer(
      * 换装后必须重新调用：素材名跟着 [GameState.currentCharacter] /
      * [GameState.currentHelper] 变，竿尖与船底的比例也得按新素材重新量。
      *
+     * ⚠️ 静止立绘用的是抛竿图集的**第 0 帧**，而不是另加载一张
+     * `<sprite>.png`。仓库里每个角色只有 `_anim` 图集、没有单帧图，
+     * 之前按 `<sprite>.png` 加载一律返回 null，整条船（含划水花）
+     * 在画面上直接消失。复用第 0 帧还有个好处：静止↔抛竿切换时
+     * 用的是同一张图，船体尺寸与位置不会跳。
+     *
      * 竿尖是逐帧自动检测的（[tipFracOf]），所以任何新角色的鱼线都会
      * 自动接在它自己的竿尖上 —— 不会出现线从船身里穿过去。
      */
@@ -268,15 +288,20 @@ class GameRenderer(
             playerCastFrames = loadAnimation(
                 p.sprite, 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
             )
-            bmpPlayerBoat = assets.scaledToHeight(
-                p.sprite, (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
-            )
+            // 静止立绘 = 第 0 帧；图集缺失时才退回旧的单帧图（老素材仍有）
+            bmpPlayerBoat = playerCastFrames.firstOrNull()
+                ?: assets.scaledToHeight(
+                    p.sprite, (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+                )
             playerCastHull = if (playerCastFrames.isEmpty()) {
                 floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
             } else {
                 FloatArray(playerCastFrames.size) { hullFracOf(playerCastFrames[it]) }
             }
             playerCastTips = playerCastFrames.map { tipFracOf(it) }
+            playerStaticHull = playerCastHull.firstOrNull() ?: BoatArt.PLAYER_HULL_FRAC
+            playerStaticTip = playerCastTips.firstOrNull()
+                ?: floatArrayOf(BoatArt.PLAYER_ROD_TIP_X, BoatArt.PLAYER_ROD_TIP_Y)
             loadedPlayerSprite = p.sprite
         }
 
@@ -284,15 +309,19 @@ class GameRenderer(
             helperCastFrames = loadAnimation(
                 h.sprite, 0, (HELPER_CAST_H * t.scale).toInt().coerceAtLeast(20),
             )
-            bmpHelper = assets.scaledToHeight(
-                h.sprite, (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
-            )
+            bmpHelper = helperCastFrames.firstOrNull()
+                ?: assets.scaledToHeight(
+                    h.sprite, (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
+                )
             helperCastHull = if (helperCastFrames.isEmpty()) {
                 floatArrayOf(BoatArt.HELPER_HULL_FRAC)
             } else {
                 FloatArray(helperCastFrames.size) { hullFracOf(helperCastFrames[it]) }
             }
             helperCastTips = helperCastFrames.map { tipFracOf(it) }
+            helperStaticHull = helperCastHull.firstOrNull() ?: BoatArt.HELPER_HULL_FRAC
+            helperStaticTip = helperCastTips.firstOrNull()
+                ?: floatArrayOf(BoatArt.HELPER_ROD_TIP_X, BoatArt.HELPER_ROD_TIP_Y)
             loadedHelperSprite = h.sprite
         }
     }
@@ -849,12 +878,12 @@ class GameRenderer(
             val playing = castFrames.isNotEmpty() && h.castAnim >= 0f
             val idx = if (playing) castFrameIndex(h.castAnim, castFrames.size) else -1
             val frame = if (idx >= 0) castFrames[idx] else bmp
-            val hullFrac = if (idx >= 0) helperCastHull[idx] else BoatArt.HELPER_HULL_FRAC
+            val hullFrac = if (idx >= 0) helperCastHull[idx] else helperStaticHull
 
             layoutBoat(frame, h.x, h.y, hullFrac, t, camX)
             val tip = if (idx >= 0) helperCastTips.getOrNull(idx) else null
-            val tipX = anchorX(tip?.get(0) ?: BoatArt.HELPER_ROD_TIP_X, h.facing)
-            val tipY = anchorY(tip?.get(1) ?: BoatArt.HELPER_ROD_TIP_Y)
+            val tipX = anchorX((tip ?: helperStaticTip).get(0), h.facing)
+            val tipY = anchorY((tip ?: helperStaticTip).get(1))
 
             // 钓线：从**竿尖**垂到每条目标鱼（并行作业时会有好几条）
             for (f in h.targets) {
@@ -1142,11 +1171,11 @@ class GameRenderer(
         if (frame != null) {
             layoutBoat(
                 frame, world.boatX, playerWaterY(),
-                if (idx >= 0) playerCastHull[idx] else BoatArt.PLAYER_HULL_FRAC, t, camX,
+                if (idx >= 0) playerCastHull[idx] else playerStaticHull, t, camX,
             )
             val tip = if (idx >= 0) playerCastTips.getOrNull(idx) else null
-            rodX = anchorX(tip?.get(0) ?: BoatArt.PLAYER_ROD_TIP_X, world.boatFacing)
-            rodY = anchorY(tip?.get(1) ?: BoatArt.PLAYER_ROD_TIP_Y)
+            rodX = anchorX((tip ?: playerStaticTip).get(0), world.boatFacing)
+            rodY = anchorY((tip ?: playerStaticTip).get(1))
         } else {
             rodX = t.toScreenX(world.boatX - camX)
             rodY = t.toScreenY(Space.BOAT_WATERLINE - 100f)
@@ -1237,10 +1266,10 @@ class GameRenderer(
         // 水花先画（在船底下），船再压上去 —— 和帮手立绘下面那圈同一个效果
         drawPlayerSplash(canvas, t, camX, waterY)
 
-        // 抛竿时播逐帧动画，其余时间用静止立绘
+        // 抛竿时播逐帧动画，其余时间用静止立绘（即第 0 帧）
         val idx = playerCastIndex()
         val frame = if (idx >= 0) playerCastFrames[idx] else bmp
-        val hullFrac = if (idx >= 0) playerCastHull[idx] else BoatArt.PLAYER_HULL_FRAC
+        val hullFrac = if (idx >= 0) playerCastHull[idx] else playerStaticHull
 
         layoutBoat(frame, world.boatX, waterY, hullFrac, t, camX)
         SpriteDraw.draw(

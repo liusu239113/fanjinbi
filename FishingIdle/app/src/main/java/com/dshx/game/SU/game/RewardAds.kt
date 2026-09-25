@@ -89,4 +89,10 @@ object RewardAds {
 
     /** 免费刷新商店（每次进店一次）。 */
     const val PLACEMENT_SHOP_REFRESH = "shop_refresh"
+
+    /**
+     * 仓库免费扩容：白送一次扩容，省掉金币。
+     * 入口在仓库面板底部 —— 玩家正盯着"仓库已满"发愁时，转化率最高。
+     */
+    const val PLACEMENT_WAREHOUSE_FREE_UPGRADE = "warehouse_free_upgrade"
 }

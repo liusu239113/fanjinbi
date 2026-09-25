@@ -93,17 +93,27 @@ class Assets(context: Context) {
      * 若该动画不存在则退回同名的单帧图，最后才给兜底色块。
      */
     fun firstFrame(name: String, targetW: Int): Bitmap? {
+        if (targetW <= 0) return raw(name)
         val key = "$name#frame0@$targetW"
         cache[key]?.let { return it }
 
         val cfg = frameConfig("${name}_anim")
-        val sheet = scaled("${name}_anim", targetW)
+        val sheet = raw("${name}_anim")
         if (cfg != null && sheet != null) {
             val (cols, rows) = cfg
             val fw = sheet.width / cols
             val fh = sheet.height / rows
             if (fw > 0 && fh > 0) {
-                val frame = Bitmap.createBitmap(sheet, 0, 0, fw, fh)
+                // ⚠️ 必须先**裁出第一帧**、再把这帧缩到 targetW。
+                // 之前是先 `scaled("${name}_anim", targetW)` 把**整张图集**
+                // 缩到 targetW 宽、再裁帧 —— 图集有 cols 列，每帧就只剩
+                // targetW/cols 宽（4 列 = 只有 1/4）。图鉴 / 解锁弹窗 /
+                // 体型新纪录里的鱼小得看不清，根因就在这里。
+                // 先裁后缩还顺带省掉一张 cols 倍大的中间位图。
+                val crop = Bitmap.createBitmap(sheet, 0, 0, fw, fh)
+                val ratio = targetW.toFloat() / fw
+                val h = (fh * ratio).toInt().coerceAtLeast(1)
+                val frame = Bitmap.createScaledBitmap(crop, targetW, h, true)
                 cache[key] = frame
                 return frame
             }

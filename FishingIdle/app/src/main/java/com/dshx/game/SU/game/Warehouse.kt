@@ -156,12 +156,21 @@ object Warehouse {
     fun canUpgrade(state: GameState): Boolean =
         capacity(state) < MAX_CAPACITY
 
-    /** 尝试扩容。返回是否成功。 */
+    /** 尝试花金币扩容。返回是否成功。 */
     fun upgrade(state: GameState): Boolean {
         if (!canUpgrade(state)) return false
         val price = upgradePrice(state)
         if (state.money < price) return false
         state.money -= price
+        return applyUpgrade(state)
+    }
+
+    /**
+     * 扩容一次但**不收钱** —— 给「看广告免费扩容」这类奖励用。
+     * 返回是否真的扩上了；已满级时返回 false（不能白送超出上限的格子）。
+     */
+    fun applyUpgrade(state: GameState): Boolean {
+        if (!canUpgrade(state)) return false
         state.warehouseUpgrades++
         return true
     }
