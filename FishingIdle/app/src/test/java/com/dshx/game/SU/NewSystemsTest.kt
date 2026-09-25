@@ -21,6 +21,71 @@ import org.junit.Test
  */
 class NewSystemsTest {
 
+    @Test
+    fun `倍速须看广告逐级解锁且按真实时间过期`() {
+        val state = GameState()
+        val now = 1_000_000L
+        assertEquals(1, state.currentSpeed(now))
+        assertFalse(state.selectSpeed(2, now))
+
+        state.unlockSpeed(now)
+        assertEquals(3, state.availableSpeed(now))
+        assertEquals(GameState.SPEED_REWARD_MILLIS, state.speedRemainingMillis(now))
+        assertTrue(state.selectSpeed(2, now))
+        assertEquals(2, state.currentSpeed(now))
+        assertTrue(state.selectSpeed(1, now))
+        assertEquals(1, state.currentSpeed(now))
+        assertEquals(3, state.availableSpeed(now))
+
+        state.unlockSpeed(now + 1_000L)
+        assertEquals(3, state.currentSpeed(now + 1_000L))
+        assertEquals(1, state.currentSpeed(now + GameState.SPEED_REWARD_MILLIS + 1_001L))
+        assertEquals(0L, state.speedRemainingMillis(now + GameState.SPEED_REWARD_MILLIS + 1_001L))
+        state.expireSpeed(now + GameState.SPEED_REWARD_MILLIS + 1_001L)
+        assertEquals(1, state.availableSpeed(now + GameState.SPEED_REWARD_MILLIS + 1_001L))
+    }
+
+    @Test
+    fun `倍速存档恢复和转生保留_清档取消`() {
+        val state = GameState()
+        val now = System.currentTimeMillis()
+        state.unlockSpeed(now)
+        val restored = GameState().apply { loadFrom(state.toSave()) }
+        assertEquals(3, restored.currentSpeed(now))
+        assertEquals(3, restored.availableSpeed(now))
+        restored.resetAll()
+        assertEquals(1, restored.currentSpeed(now))
+    }
+
+    @Test
+    fun `免费钓手遵循解锁与上限且不花钱`() {
+        val state = GameState()
+        assertFalse(state.claimFreeHelper())
+        repeat(8) { state.onCatchSuccess() }
+        val before = state.money
+        assertTrue(state.claimFreeHelper())
+        assertEquals(1, state.helpers)
+        assertEquals(1, state.owned("helper"))
+        assertEquals(before, state.money, 0.001)
+        repeat(19) { assertTrue(state.claimFreeHelper()) }
+        assertFalse(state.claimFreeHelper())
+    }
+
+    @Test
+    fun `升级免单不扣钱且不绕过升级的前置条件`() {
+        val state = GameState()
+        val upgrade = com.dshx.game.SU.game.Content.upgrades.first()
+        val before = state.money
+        assertTrue(state.claimFreeUpgrade(upgrade))
+        assertEquals(1, state.owned(upgrade.id))
+        assertEquals(before, state.money, 0.001)
+        val lockedUpgrade = com.dshx.game.SU.game.Content.upgrades
+            .first { !it.visibleWhen(state) }
+        assertFalse(state.claimFreeUpgrade(lockedUpgrade))
+        val helper = com.dshx.game.SU.game.Content.byId("helper")!!
+        assertFalse(state.claimFreeUpgrade(helper))
+    }
+
     // ---------------- 换装 ----------------
 
     @Test

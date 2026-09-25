@@ -79,6 +79,7 @@ import com.dshx.game.SU.ui.MainMenu
 import com.dshx.game.SU.ui.MenuPanel
 import com.dshx.game.SU.ui.PrestigePanel
 import com.dshx.game.SU.ui.MoneyBar
+import com.dshx.game.SU.ui.SpeedControl
 import com.dshx.game.SU.ui.MoveButtons
 import com.dshx.game.SU.ui.OfflinePanel
 import com.dshx.game.SU.ui.ResetConfirmDialog
@@ -126,8 +127,15 @@ class MainActivity : ComponentActivity() {
     /** 轻量提示（相当于 Toast），由 [showToast] 写入、游戏内顶部展示。 */
     private var toastText by mutableStateOf<String?>(null)
 
-    /** 广告礼包角标数量（当前可领的条目数）。 */
-    private val adGiftCount: Int get() = if (RewardAds.isReady()) AD_GIFT_COUNT else 0
+    /** 广告礼包角标数量：只统计当前可领取的权益，不把已领完项算进去。 */
+    private val adGiftCount: Int get() {
+        if (!RewardAds.isReady()) return 0
+        val helper = com.dshx.game.SU.game.Content.byId("helper")
+        val freeHelperReady = helper != null && helper.visibleWhen(gameState) &&
+            !helper.isMaxed(gameState.owned(helper.id), gameState) &&
+            AdDaily.used(this, FREE_HELPER_KEY) == 0
+        return 6 + (if (gameState.treasureOwned) 1 else 0) + (if (freeHelperReady) 1 else 0)
+    }
 
     /** buff 类型 → 图标资源名（HUD 的 buff 条用）。 */
     private fun buffIconName(kind: String): String = when (kind) {
@@ -153,6 +161,7 @@ class MainActivity : ComponentActivity() {
 
         // 读取存档：恢复金币 + 重放购买重建所有属性
         saveManager.load(gameState, settings)
+        gameState.expireSpeed()
         world = World(gameState)
 
         audio.preload(this, AudioManager.SFX)
@@ -391,6 +400,7 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(Unit) {
             while (true) {
                 kotlinx.coroutines.delay(50)
+                gameState.expireSpeed()
                 revision++
             }
         }
@@ -693,6 +703,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // 1×/2×/3× 游戏速度直接放在主画面，不用先钻进广告礼包。
+                Spacer(Modifier.height(5.dp))
+                SpeedControl(
+                    state = gameState,
+                    revision = revision,
+                    adReady = RewardAds.isReady(),
+                    onSelect = { tier ->
+                        if (gameState.selectSpeed(tier)) {
+                            audio.play("sfx_click", 0.6f)
+                            saveManager.save(gameState, settings)
+                            revision++
+                        }
+                    },
+                    onWatchAd = {
+                        requestAd(RewardAds.PLACEMENT_SPEED) {
+                            gameState.unlockSpeed()
+                            saveManager.save(gameState, settings)
+                            revision++
+                            showToast("2×/3× 速度已解锁 20 分钟，可随时切换；离线照常计时")
+                        }
+                    },
+                )
+
                 Spacer(Modifier.height(8.dp))
                 AchievementToast(toast)
 
@@ -863,6 +896,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onKingSonar = { doKingSonar() },
                     onTrialCharacter = { def -> doTrialCharacter(def) },
+                    onFreeHelper = { doFreeHelper() },
+                    freeHelperClaimedToday = AdDaily.used(this@MainActivity, FREE_HELPER_KEY) > 0,
+                    onFreeUpgrade = { doFreeUpgrade() },
+                    freeUpgradeClaimedToday = AdDaily.used(this@MainActivity, FREE_UPGRADE_KEY) > 0,
                     onLottery = { doLottery() },
                     onDailyBonus = { doDailyBonus() },
                     onRareLure = { doRareLure() },
@@ -1119,7 +1156,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun buildAdGifts(context: android.content.Context): List<AdGift> {
         val list = mutableListOf<AdGift>()
-        val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
+        val gold = upgradeGapReward()
         val fmt = { v: Double -> com.dshx.game.SU.game.formatNumber(v) }
 
         // 福利社只收「通用型」广告：任何时间、任何进度都用得上，
@@ -1199,8 +1236,8 @@ class MainActivity : ComponentActivity() {
         list += AdGift(
             id = "g_gold",
             icon = "ad_gold",
-            title = "渔市分红",
-            desc = "今日渔市分红到账 ${fmt(gold)} 金币 · 不限次数",
+            title = "升级补差金币",
+            desc = "立得 ${fmt(gold)} 金币，够买下一项可解锁升级 · 不限次数",
             action = {
                 requestAd(RewardAds.PLACEMENT_GOLD_DROP) {
                     gameState.money += gold
@@ -1226,7 +1263,24 @@ class MainActivity : ComponentActivity() {
             },
         )
 
-        // ---- 7. 沉船打捞：立刻在河面浮出一个必出珍珠的宝箱 ----
+        // ---- 7. 钓手体验：开局钓满 8 条后可每天免费招一名永久钓手 ----
+        val helperDef = com.dshx.game.SU.game.Content.byId("helper")
+        val helperAvailable = helperDef != null && helperDef.visibleWhen(gameState) &&
+            !helperDef.isMaxed(gameState.owned(helperDef.id), gameState)
+        if (helperAvailable) {
+            val helperUsed = AdDaily.used(this, FREE_HELPER_KEY) > 0
+            list += AdGift(
+                id = "g_helper_permanent",
+                icon = "icon_helper",
+                title = "永久自动钓手 · 每日 1 名",
+                desc = if (helperUsed) "今日已招募，明天还能免费再领 1 名"
+                    else "看广告免费雇 1 名，永久帮你钓鱼，无需金币",
+                locked = helperUsed,
+                action = { doFreeHelper() },
+            )
+        }
+
+        // ---- 8. 沉船打捞：立刻在河面浮出一个必出珍珠的宝箱 ----
         // 宝箱本来只在河面随机刷，这里买的是"现在就有"。
         // 买了宝藏才出现（没宝藏系统时召唤出来也捡不到）。
         if (gameState.treasureOwned) {
@@ -1251,13 +1305,76 @@ class MainActivity : ComponentActivity() {
     // 每个页面最多一个广告入口，逻辑集中在这里，面板只管展示与回调。
     // 奖励数值一律不写死在 UI 里（便于后期调参，也不把广告耦合进玩法代码）。
 
-    /** 升级页「渔市分红」：一笔意外之财（链路 C：资金）。 */
+    /** 看完广告送一名永久钓手，和鱼苗商店购买走同一套属性/存档链路。 */
+    private fun doFreeHelper() {
+        val helper = com.dshx.game.SU.game.Content.byId("helper") ?: return
+        if (AdDaily.used(this, FREE_HELPER_KEY) > 0) {
+            showToast("今日免费钓手已领取，明天再来")
+            return
+        }
+        if (!helper.visibleWhen(gameState) ||
+            helper.isMaxed(gameState.owned(helper.id), gameState)) {
+            showToast("需先钓到 8 条鱼，且钓手未满员")
+            return
+        }
+        requestAd(RewardAds.PLACEMENT_FREE_HELPER) {
+            if (gameState.claimFreeHelper()) {
+                AdDaily.markUsed(this, FREE_HELPER_KEY)
+                DailyTracker.onHelperBought(gameState)
+                world.syncHelperCount()
+                saveManager.save(gameState, settings)
+                showToast("已永久增加 1 名自动钓手！")
+            }
+        }
+    }
+
+    /** 升级页的免单广告在点击时锁定目标，避免播放期间金币变化导致发错商品。 */
+    private fun doFreeUpgrade() {
+        if (AdDaily.used(this, FREE_UPGRADE_KEY) > 0) {
+            showToast("今日升级免单已领取，明天再来")
+            return
+        }
+        val def = (com.dshx.game.SU.game.Content.upgrades +
+            com.dshx.game.SU.game.Content.lateGame + com.dshx.game.SU.game.Content.lateGame2)
+            .asSequence()
+            .filter { it.visibleWhen(gameState) && it.buyableWhen(gameState) &&
+                !it.isMaxed(gameState.owned(it.id), gameState) }
+            .minByOrNull { it.price(gameState.owned(it.id)) }
+        if (def == null) {
+            showToast("目前没有可升级的项目")
+            return
+        }
+        requestAd(RewardAds.PLACEMENT_FREE_UPGRADE) {
+            if (gameState.claimFreeUpgrade(def)) {
+                AdDaily.markUsed(this, FREE_UPGRADE_KEY)
+                DailyTracker.onAnyPurchase(gameState)
+                world.syncSpecialUnits()
+                saveManager.save(gameState, settings)
+                showToast("${def.name} 免费升级成功！")
+            }
+        }
+    }
+
+    /** 升级页：补足当前最便宜的、可见且未满级升级的金币差额。 */
+    private fun upgradeGapReward(): Double {
+        val next = (com.dshx.game.SU.game.Content.upgrades +
+            com.dshx.game.SU.game.Content.lateGame + com.dshx.game.SU.game.Content.lateGame2)
+            .asSequence()
+            .filter { it.visibleWhen(gameState) && it.buyableWhen(gameState) &&
+                !it.isMaxed(gameState.owned(it.id), gameState) &&
+                it.price(gameState.owned(it.id)) > gameState.money }
+            .minByOrNull { it.price(gameState.owned(it.id)) }
+        return next?.let { (it.price(gameState.owned(it.id)) - gameState.money).coerceAtLeast(200.0) }
+            ?: (gameState.money * 0.12).coerceAtLeast(200.0)
+    }
+
+    /** 升级页「渔市分红」：补到刚好买得起下一项升级。 */
     private fun doLottery() {
-        val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
+        val gold = upgradeGapReward()
         requestAd(RewardAds.PLACEMENT_GOLD_DROP) {
             gameState.money += gold
             saveManager.save(gameState, settings)
-            showToast("渔市分红到账 +🪙${formatNumber(gold)}")
+            showToast("升级补差到账 +🪙${formatNumber(gold)}")
         }
     }
 
@@ -1334,9 +1451,8 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /** 每日赠礼的键（唯一保留每日限制的条目 —— 它本身就是"每日"福利）。 */
         const val DAILY_BONUS_KEY = "daily_bonus"
-
-        /** 广告礼包的条目数（角标显示用）。 */
-        const val AD_GIFT_COUNT = 7
+        const val FREE_HELPER_KEY = "free_helper"
+        const val FREE_UPGRADE_KEY = "free_upgrade"
 
         /** 「钓协借调」的试用时长（秒）。3 分钟足够体验一条鱼竿技能。 */
         const val TRIAL_SECONDS = 180f

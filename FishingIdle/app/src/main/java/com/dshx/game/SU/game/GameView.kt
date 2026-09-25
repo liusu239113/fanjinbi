@@ -93,7 +93,9 @@ class GameView(
             accumulator += delta
             var steps = 0
             while (accumulator >= FIXED_STEP && steps < 5) {
-                world.update(FIXED_STEP)
+                // 1× 是较慢的基础节奏；广告解锁的 2×/3× 同时加快整局模拟。
+                // 使用真实时间检查到期，切后台/关闭游戏也不会暂停权益倒计时。
+                world.update(FIXED_STEP * GameState.BASE_GAME_SPEED * world.gameState.currentSpeed())
                 accumulator -= FIXED_STEP
                 steps++
             }

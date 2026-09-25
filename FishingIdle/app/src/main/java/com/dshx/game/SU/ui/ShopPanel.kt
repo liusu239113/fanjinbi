@@ -90,6 +90,12 @@ fun ShopPanel(
     onKingSonar: () -> Unit,
     /** 角色页「钓协借调」——看完广告换取某角色的限时试用权。 */
     onTrialCharacter: (CharacterDef) -> Unit,
+    /** 鱼苗页「免费钓手」——广告后永久获得一名自动钓手，每日一次。 */
+    onFreeHelper: () -> Unit,
+    freeHelperClaimedToday: Boolean,
+    /** 升级页每日一次的免费升一级。 */
+    onFreeUpgrade: () -> Unit,
+    freeUpgradeClaimedToday: Boolean,
     /** 升级页「渔市分红」——一笔意外之财（资金链路）。 */
     onLottery: () -> Unit,
     /** 任务页「每日加领」——每日一次的额外签到奖励。 */
@@ -179,23 +185,73 @@ fun ShopPanel(
                     }
 
                     when (tab) {
-                        0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought)
+                        0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought,
+                            headerAd = {
+                                val helper = Content.byId("helper")
+                                val unlocked = helper?.visibleWhen(state) == true
+                                val full = helper?.isMaxed(state.owned("helper"), state) == true
+                                val usedToday = freeHelperClaimedToday
+                                AdActionRow(
+                                    assets = assets,
+                                    iconName = "icon_helper",
+                                    title = "免费雇佣 1 名永久钓手",
+                                    desc = when {
+                                        !unlocked -> "钓到 8 条鱼解锁自动钓手"
+                                        full -> "钓手已经满员"
+                                        usedToday -> "今天已招募，明天再来"
+                                        !RewardAds.isReady() -> "广告暂不可用"
+                                        else -> "看完广告直接入队，替你自动钓鱼 · 每日一次"
+                                    },
+                                    enabled = unlocked && !full && !usedToday && RewardAds.isReady(),
+                                    onClick = onFreeHelper,
+                                )
+                            },
+                        )
                         // 升级页是**纯金币消耗页**，所以这里的广告点选"资金"链路：
                         // 渔市分红 = 一笔意外之财，直接解决"想买但钱不够"。
                         //
                         // 后期装备（鹈鹕/拖网/声呐/鱼探仪/无人机/潜水员/宝藏）也在这里：
                         // 它们本质就是升级，只是解锁得晚。排在普通升级后面，
                         // 顺序仍按 Content 里的依赖链（拖网→声呐→鱼探仪→…）。
+                        // 下一项可解锁升级的差额直接写在按钮上，比抽象的「渔市分红」更容易理解。
                         1 -> ItemList(
                             Content.upgrades + Content.lateGame + Content.lateGame2,
                             state, assets, purchase, "升级", revision, justBought,
                             headerAd = {
+                                val nextUpgrade = (Content.upgrades + Content.lateGame + Content.lateGame2)
+                                    .asSequence()
+                                    .filter { it.visibleWhen(state) && it.buyableWhen(state) &&
+                                        !it.isMaxed(state.owned(it.id), state) && it.price(state.owned(it.id)) > state.money }
+                                    .minByOrNull { it.price(state.owned(it.id)) }
+                                val gap = nextUpgrade?.let { (it.price(state.owned(it.id)) - state.money).coerceAtLeast(200.0) }
+                                val freeUpgrade = (Content.upgrades + Content.lateGame + Content.lateGame2)
+                                    .asSequence()
+                                    .filter { it.visibleWhen(state) && it.buyableWhen(state) &&
+                                        !it.isMaxed(state.owned(it.id), state) }
+                                    .minByOrNull { it.price(state.owned(it.id)) }
+                                if (freeUpgrade != null) {
+                                    AdActionRow(
+                                        assets = assets,
+                                        iconName = "ad_boost",
+                                        title = "升级免单 · 免费升「${freeUpgrade.name}」一级",
+                                        desc = when {
+                                            freeUpgradeClaimedToday -> "今日已领取，明天继续"
+                                            !RewardAds.isReady() -> "广告暂不可用"
+                                            else -> "原价 🪙${formatNumber(freeUpgrade.price(state.owned(freeUpgrade.id)))} · 今日限领 1 次"
+                                        },
+                                        enabled = !freeUpgradeClaimedToday && RewardAds.isReady(),
+                                        onClick = onFreeUpgrade,
+                                    )
+                                    Spacer(Modifier.height(7.dp))
+                                }
                                 AdActionRow(
                                     assets = assets,
                                     iconName = "ad_gold",
-                                    title = "渔市分红 · 领一笔奖金",
-                                    desc = if (RewardAds.isReady()) "看今日渔市行情，分红立刻到账"
-                                    else "广告接入中",
+                                    title = if (nextUpgrade == null) "渔市分红 · 领一笔奖金"
+                                        else "看广告 · 补齐「${nextUpgrade.name}」的金币",
+                                    desc = if (!RewardAds.isReady()) "广告暂不可用"
+                                    else if (gap == null) "看完立得金币，继续升级钓场"
+                                    else "看完立得 🪙${formatNumber(gap)}，可购买「${nextUpgrade?.name ?: "升级"}」",
                                     enabled = RewardAds.isReady(),
                                     onClick = { onLottery() },
                                 )

@@ -183,6 +183,72 @@ private fun hintText(world: World): String {
     }
 }
 
+@Composable
+fun SpeedControl(
+    state: GameState,
+    revision: Int,
+    adReady: Boolean,
+    onSelect: (Int) -> Unit,
+    onWatchAd: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    @Suppress("UNUSED_EXPRESSION") revision
+    val available = state.availableSpeed()
+    val selected = state.currentSpeed()
+    val remaining = state.speedRemainingMillis()
+    val minutes = (remaining / 60_000).toInt()
+    val seconds = ((remaining / 1_000) % 60).toInt()
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(UITheme.DeepWater.copy(alpha = 0.88f))
+            .border(1.5.dp, UITheme.GoldDark, RoundedCornerShape(10.dp))
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("游戏速度", color = UITheme.GoldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            (1..3).forEach { tier ->
+                val unlocked = tier <= available
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (tier == selected) UITheme.Gold else UITheme.WoodDark)
+                        .pressable(unlocked) { onSelect(tier) }
+                        .padding(horizontal = 9.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (unlocked) "${tier}×" else "🔒${tier}×",
+                        color = if (tier == selected) UITheme.Ink else UITheme.Cream,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            if (remaining > 0) {
+                Text(
+                    "%02d:%02d".format(minutes, seconds),
+                    color = UITheme.TextGood,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        GameButton(
+            text = if (available == 3) "看广告 · 续时 20 分钟（解锁 2×/3×）"
+                else "看广告 · 解锁 2×/3×，持续 20 分钟",
+            onClick = onWatchAd,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = adReady,
+            accent = UITheme.Gold,
+            fontSize = 11,
+        )
+    }
+}
+
 /** 渔获图鉴条：显示已解锁的鱼种。[revision] 作用同 [MoneyBar]。 */
 @Composable
 fun CatchStrip(state: GameState, revision: Int, modifier: Modifier = Modifier) {

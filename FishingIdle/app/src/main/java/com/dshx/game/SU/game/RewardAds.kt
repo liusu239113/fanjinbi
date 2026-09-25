@@ -51,6 +51,15 @@ object RewardAds {
         }
     }
 
+    /** 游戏倍速：一条广告同时解锁 2× 和 3×，20 分钟真实时间。 */
+    const val PLACEMENT_SPEED = "game_speed"
+
+    /** 免费雇佣一名永久钓手（每日一次，需要先解锁钓手）。 */
+    const val PLACEMENT_FREE_HELPER = "free_helper"
+
+    /** 升级免单：当前最接近的可见未解锁升级免费购入一档（每日一次）。 */
+    const val PLACEMENT_FREE_UPGRADE = "free_upgrade"
+
     // ---------------- 广告位用途 ----------------
     // 同一个激励视频位可复用，这里按用途分开统计，方便后台看哪类转化最好。
 

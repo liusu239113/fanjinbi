@@ -42,7 +42,8 @@ object OfflineEarnings {
             return Result(elapsedSeconds, 0.0, 0)
         }
         val capped = elapsedSeconds.coerceAtMost((MAX_HOURS * 3600).toLong())
-        val effective = capped * EFFICIENCY
+        // 免费 1× 与在线模拟使用同一基础节奏，离线不额外继承广告倍速。
+        val effective = capped * EFFICIENCY * GameState.BASE_GAME_SPEED
         val money = perHelperPerSecond * helperCount * effective
         // 每个钓手平均 2.5 秒一条鱼，用来估算"钓到多少条"
         val catches = (effective / 2.5 * helperCount).toInt()

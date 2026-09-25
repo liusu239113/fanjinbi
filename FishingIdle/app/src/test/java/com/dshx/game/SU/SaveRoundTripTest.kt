@@ -23,6 +23,7 @@ class SaveRoundTripTest {
         "pearls", "prestigeCount", "skillLevels", "bestCombo", "totalCatches",
         "unlockedAchievements", "caughtSpecies", "bestSize",
         "chestsOpened", "kingsCaught", "unlockedMaps", "currentMapId",
+        "speedTier", "selectedSpeed", "speedUntilMillis",
     )
 
     /** 攒一份"什么都动过"的状态，往返一圈必须一模一样。 */
@@ -43,6 +44,7 @@ class SaveRoundTripTest {
         kingsCaught = 3
         unlockedMaps.add("marsh")
         currentMapId = "marsh"
+        unlockSpeed(System.currentTimeMillis())
     }
 
     @Test
@@ -61,6 +63,9 @@ class SaveRoundTripTest {
         assertEquals(original.kingsCaught, restored.kingsCaught)
         assertEquals(original.unlockedMaps.toSet(), restored.unlockedMaps.toSet())
         assertEquals(original.currentMapId, restored.currentMapId)
+        assertEquals(original.speedTier, restored.speedTier)
+        assertEquals(original.selectedSpeed, restored.selectedSpeed)
+        assertEquals(original.speedUntilMillis, restored.speedUntilMillis)
         assertEquals(original.money, restored.money, 0.001)
     }
 

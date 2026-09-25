@@ -197,6 +197,11 @@ class SaveData {
     /** 上次离开时的时间戳（毫秒），用于结算离线收益。 */
     var lastSeenMillis: Long = 0L
 
+    /** 广告倍速状态；存绝对截止时间，离线也自然流逝。 */
+    var speedTier: Int = 1
+    var selectedSpeed: Int = 1
+    var speedUntilMillis: Long = 0L
+
     // ---- 换装 ----
     var ownedCharacters: MutableSet<String> = mutableSetOf()
     var currentCharacterId: String = ""

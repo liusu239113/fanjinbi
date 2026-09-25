@@ -170,6 +170,42 @@ class GameState {
     /** 上次离开的时间戳（毫秒）。启动时据此结算离线收益。 */
     var lastSeenMillis: Long = 0L
 
+    /** 激励广告解锁的最高倍速；到期按真实时间恢复为 1×。 */
+    var speedTier: Int = 1
+    var selectedSpeed: Int = 1
+    var speedUntilMillis: Long = 0L
+
+    fun availableSpeed(nowMillis: Long = System.currentTimeMillis()): Int =
+        if (speedTier in 2..3 && speedUntilMillis > nowMillis) speedTier else 1
+
+    fun currentSpeed(nowMillis: Long = System.currentTimeMillis()): Int =
+        selectedSpeed.coerceIn(1, availableSpeed(nowMillis))
+
+    fun selectSpeed(tier: Int, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        if (tier !in 1..availableSpeed(nowMillis)) return false
+        selectedSpeed = tier
+        return true
+    }
+
+    fun speedRemainingMillis(nowMillis: Long = System.currentTimeMillis()): Long =
+        if (availableSpeed(nowMillis) > 1) speedUntilMillis - nowMillis else 0L
+
+    /** 看完一条激励视频同时开放 2×/3×；再次观看刷新 20 分钟。 */
+    fun unlockSpeed(nowMillis: Long = System.currentTimeMillis()) {
+        speedTier = 3
+        selectedSpeed = 3
+        speedUntilMillis = nowMillis + SPEED_REWARD_MILLIS
+    }
+
+    /** 恢复界面用的到期状态，避免过期后保留旧档位造成误导。 */
+    fun expireSpeed(nowMillis: Long = System.currentTimeMillis()) {
+        if (speedTier > 1 && speedUntilMillis <= nowMillis) {
+            speedTier = 1
+            selectedSpeed = 1
+            speedUntilMillis = 0L
+        }
+    }
+
     // ---- 换装（角色）----
 
     /** 已拥有的角色 id。 */
@@ -749,6 +785,24 @@ class GameState {
         return true
     }
 
+    /** 广告奖励：按正常购买效果发放钓手，但不扣金币，不绕过解锁/人数上限。 */
+    fun claimFreeHelper(): Boolean {
+        val helper = Content.byId("helper") ?: return false
+        if (!helper.visibleWhen(this) || !helper.buyableWhen(this) ||
+            helper.isMaxed(owned(helper.id), this)) return false
+        applyPurchase(helper)
+        return true
+    }
+
+    /** 广告免单只放宽金币不足，升级本身的解锁条件及满级上限不变。 */
+    fun claimFreeUpgrade(def: PurchasableDef): Boolean {
+        if (def !in Content.upgrades && def !in Content.lateGame && def !in Content.lateGame2) return false
+        if (!def.visibleWhen(this) || !def.buyableWhen(this) ||
+            def.isMaxed(owned(def.id), this)) return false
+        applyPurchase(def)
+        return true
+    }
+
     // ---- 存档 ----
 
     /** 把当日进度同步到存档对象。 */
@@ -808,6 +862,9 @@ class GameState {
         it.kingsCaught = kingsCaught
         it.unlockedMaps = unlockedMaps.toMutableSet()
         it.currentMapId = currentMapId
+        it.speedTier = availableSpeed()
+        it.selectedSpeed = currentSpeed()
+        it.speedUntilMillis = speedUntilMillis
         it.syncDaily(this)
     }
 
@@ -816,6 +873,9 @@ class GameState {
      * 只保留玩家设置（音量等由 Settings 单独管理）。
      */
     fun resetAll() {
+        speedTier = 1
+        selectedSpeed = 1
+        speedUntilMillis = 0L
         money = 0.0
         totalMoney = 0.0
         highestMoney = 0.0
@@ -845,6 +905,9 @@ class GameState {
      */
     fun loadFrom(data: SaveData) {
         lastSeenMillis = data.lastSeenMillis
+        speedTier = data.speedTier.coerceIn(1, 3)
+        selectedSpeed = data.selectedSpeed.coerceIn(1, 3)
+        speedUntilMillis = data.speedUntilMillis.coerceAtLeast(0L)
         restoreDaily(data)
         // 跨天则清空当日进度
         DailyQuests.rolloverIfNeeded(this)
@@ -942,6 +1005,11 @@ class GameState {
     }
 
     companion object {
+        /** 每条激励视频解锁的真实时长。 */
+        const val SPEED_REWARD_MILLIS = 20 * 60 * 1000L
+        /** 旧版本速度的 65%，作为新的免费 1× 基础节奏。 */
+        const val BASE_GAME_SPEED = 0.65f
+
         /** 开局送的小鱼数量，让钓场一开始就有生气。 */
         const val INITIAL_COMMON_FISH = 6
 

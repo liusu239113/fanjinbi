@@ -111,8 +111,8 @@ class DepthSystemsTest {
     @Test
     fun `离线收益按折扣效率结算`() {
         val r = OfflineEarnings.settle(3600, 10.0, 2)
-        // 3600 秒 × 0.55 效率 × 10/秒 × 2 钓手 = 39600
-        assertEquals(3600 * OfflineEarnings.EFFICIENCY * 10.0 * 2, r.money, 1.0)
+        // 3600 秒 × 0.55 离线效率 × 0.65 基础速度 × 10/秒 × 2 钓手
+        assertEquals(3600 * OfflineEarnings.EFFICIENCY * GameState.BASE_GAME_SPEED * 10.0 * 2, r.money, 1.0)
         assertTrue(r.isMeaningful)
     }
 
