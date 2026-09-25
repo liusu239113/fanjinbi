@@ -65,7 +65,7 @@ import com.dshx.game.SU.game.Warehouse
 import com.dshx.game.SU.game.formatNumber
 
 /**
- * 商店面板：鱼苗 / 升级 / 水域 / 图鉴 / 统计 四个页签。
+ * 商店面板：鱼苗 / 升级 / 水域 / 任务 / 图鉴 / 角色 / 仓库 / 统计 八个页签。
  * 以底部抽屉形式呈现 —— 竖屏手机上单手可及，且不遮挡上方的钓场。
  *
  * [revision] 是 HUD 那套刷新计数：GameState 用的是普通 var，不接这个计数
@@ -102,10 +102,12 @@ fun ShopPanel(
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     var tab by remember { mutableIntStateOf(0) }
-    // 「后期」单独一页：鹈鹕 / 拖网 / 声呐 / 鱼探仪 / 无人机 / 潜水员 / 宝藏
-    // 这些升级以前只定义在 Content.lateGame 里，从没被任何界面渲染过 ——
-    // 玩家永远买不到，World 里为它们写的一整套玩法全是死的。
-    val tabs = listOf("鱼苗", "升级", "后期", "水域", "任务", "图鉴", "角色", "仓库", "统计")
+    // 「后期」不再单独占一页：鹈鹕 / 拖网 / 声呐 / 鱼探仪 / 无人机 / 潜水员 / 宝藏
+    // 这些内容本身就是"继续买升级"，拆出去只会让玩家在「升级」页找不到
+    // 下一步该买什么。现在它们按依赖链接在普通升级后面，同页展示。
+    //
+    // 页签从 9 个减到 8 个：竖屏一行排 8 个按钮，"升级"两个字才不会被挤到换行。
+    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "角色", "仓库", "统计")
 
     // 购买反馈条：成功/失败都在面板顶部闪一下，1.4 秒后自动收起
     var flash by remember { mutableStateOf<String?>(null) }
@@ -180,8 +182,13 @@ fun ShopPanel(
                         0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought)
                         // 升级页是**纯金币消耗页**，所以这里的广告点选"资金"链路：
                         // 渔市分红 = 一笔意外之财，直接解决"想买但钱不够"。
+                        //
+                        // 后期装备（鹈鹕/拖网/声呐/鱼探仪/无人机/潜水员/宝藏）也在这里：
+                        // 它们本质就是升级，只是解锁得晚。排在普通升级后面，
+                        // 顺序仍按 Content 里的依赖链（拖网→声呐→鱼探仪→…）。
                         1 -> ItemList(
-                            Content.upgrades, state, assets, purchase, "升级", revision, justBought,
+                            Content.upgrades + Content.lateGame + Content.lateGame2,
+                            state, assets, purchase, "升级", revision, justBought,
                             headerAd = {
                                 AdActionRow(
                                     assets = assets,
@@ -194,15 +201,10 @@ fun ShopPanel(
                                 )
                             },
                         )
-                        // 后期两批合成一页展示（顺序仍按 Content 里的依赖链：拖网→声呐→鱼探仪→…）
-                        2 -> ItemList(
-                            Content.lateGame + Content.lateGame2,
-                            state, assets, purchase, "后期装备", revision, justBought,
-                        )
-                        3 -> MapList(state, assets, unlock, revision, onKingSonar)
-                        4 -> DailyQuestList(state, assets, revision, onDailyBonus)
-                        5 -> FishDex(state, assets, revision, onClaimDex, onRareLure)
-                        6 -> CharacterPanel(
+                        2 -> MapList(state, assets, unlock, revision, onKingSonar)
+                        3 -> DailyQuestList(state, assets, revision, onDailyBonus)
+                        4 -> FishDex(state, assets, revision, onClaimDex, onRareLure)
+                        5 -> CharacterPanel(
                             state = state, assets = assets, revision = revision,
                             onUnlock = { def ->
                                 val ok = onUnlockCharacter(def)
@@ -224,7 +226,7 @@ fun ShopPanel(
                                 flashId++
                             },
                         )
-                        7 -> WarehousePanel(
+                        6 -> WarehousePanel(
                             state = state, assets = assets, revision = revision,
                             onSell = { idx ->
                                 val now = System.currentTimeMillis()
@@ -318,7 +320,7 @@ private fun ItemList(
             .take(2)
     }
 
-    // 空列表时也要能露出广告入口（比如后期页前期全锁着），
+    // 空列表时也要能露出广告入口（比如升级页前期全锁着），
     // 否则玩家在一个"什么都没有"的页面上找不到任何出路。
     if (visible.isEmpty() && headerAd == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -571,7 +573,7 @@ private fun MapList(
                 iconName = "ad_sonar",
                 title = "声呐探测 · 锁定鱼王",
                 desc = when {
-                    !state.sonarOwned -> "装上声呐才能探鱼王（先去「后期」页买）"
+                    !state.sonarOwned -> "装上声呐才能探鱼王（先去「升级」页买）"
                     RewardAds.isReady() -> "立刻探到一条鱼王并让它现身"
                     else -> "广告接入中"
                 },

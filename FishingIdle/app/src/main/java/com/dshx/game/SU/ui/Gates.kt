@@ -1,6 +1,13 @@
 package com.dshx.game.SU.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 /**
  * 首启隐私政策同意页。
@@ -329,39 +340,90 @@ fun ComplianceBlockedGate(
  * 激励视频加载浮层。
  * 广告 SDK 从 load 到真正播放有一段时间（弱网下更久），
  * 没有反馈玩家会以为「点了没反应」而反复点。
+ *
+ * ⚠️ 用 `Dialog` 承载，而不是普通 Composable —— 这一点是必须的：
+ * 广告入口大多在商店 / 礼包 / 转生 / 仓库这些 Compose `Dialog` 里，
+ * 每个 `Dialog` 都是独立的 window 层，永远盖在 Activity 视图之上。
+ * 浮层若只是 Activity 视图里的一个 Box，就会被弹窗整个压住，
+ * 表现就是「点了广告什么反应都没有」。Dialog 之间按弹出顺序叠，
+ * 浮层最后弹，所以在最上面。
  */
 @Composable
 fun AdLoadingOverlay(
     slowHint: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(Color(0x99000000))
-            .clickableNoRipple { },
-        contentAlignment = Alignment.Center,
+    Dialog(
+        // 不能点掉：广告已经请求出去了，关掉浮层只会让玩家以为取消成功
+        onDismissRequest = { },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+        ),
     ) {
-        Column(
-            Modifier
-                .width(220.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(UITheme.PanelBg)
-                .padding(vertical = 22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Box(
+            modifier
+                .fillMaxSize()
+                .background(Color(0x99000000))
+                .clickableNoRipple { },
+            contentAlignment = Alignment.Center,
         ) {
-            Text("广 告 加 载 中", color = UITheme.WaterTop, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(10.dp))
-            Text("● ● ●", color = UITheme.Gold, fontSize = 14.sp)
-            if (slowHint) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "暂时没有广告填充，稍后再试",
-                    color = UITheme.TextDim,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                )
+            Column(
+                Modifier
+                    .width(220.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(UITheme.PanelBg)
+                    .border(2.dp, UITheme.Gold.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                    .padding(vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("广 告 加 载 中", color = UITheme.WaterTop, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                DotsPulse()
+                if (slowHint) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "暂时没有广告填充，稍后再试",
+                        color = UITheme.TextDim,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
+        }
+    }
+}
+
+/**
+ * 三个呼吸跳动的圆点。
+ * 之前是静态文本 "● ● ●"，看起来像卡死了；这里让它动起来，
+ * 玩家一眼就知道「还在加载」而不是「已经死了」。
+ */
+@Composable
+private fun DotsPulse() {
+    val transition = rememberInfiniteTransition(label = "ad_dots")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "phase",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { i ->
+            // 每个点比前一个慢 1/3 个周期，形成依次亮起的流水感
+            val t = (phase - i * 0.34f + 3f) % 3f
+            val lit = (1f - (t / 1.2f)).coerceIn(0f, 1f)
+            Box(
+                Modifier
+                    .padding(horizontal = 3.dp)
+                    .size(9.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(UITheme.Gold.copy(alpha = 0.28f + 0.72f * lit)),
+            )
         }
     }
 }

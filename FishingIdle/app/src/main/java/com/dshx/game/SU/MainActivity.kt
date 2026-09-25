@@ -1012,14 +1012,22 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // 广告加载浮层：从点击到真正播放之间给反馈
-            if (adLoading) {
-                AdLoadingOverlay(
-                    slowHint = System.currentTimeMillis() - adLoadingSince > 8000,
-                )
-            }
         }
         }   // 游戏内 Box / if-else 结束
+
+        // 广告加载浮层：从点击到真正播放之间给反馈。
+        //
+        // 必须挂在**最外层 Box** 上，不能留在游戏内那个 Box 里：
+        // 广告入口遍布各个子页（商店 / 角色 / 转生 / 仓库 / 图鉴…），
+        // 其中商店、礼包、出售确认等都是 Compose `Dialog` —— 各自一个独立
+        // window 层，永远盖在 Activity 视图之上。浮层若留在游戏内 Box 里，
+        // 就会被这些弹窗整个压住：点了广告屏幕上什么都没发生，
+        // 玩家以为没反应，于是反复点。
+        if (adLoading) {
+            AdLoadingOverlay(
+                slowHint = System.currentTimeMillis() - adLoadingSince > 8000,
+            )
+        }
 
         // ---------------- 三层门控（盖在最上层） ----------------
         // 顺序固定：隐私政策 -> TapTap 登录 -> 防沉迷认证。
@@ -1279,7 +1287,7 @@ class MainActivity : ComponentActivity() {
     /** 水域页「声呐探测」：立刻让一条鱼王现身。 */
     private fun doKingSonar() {
         if (!gameState.sonarOwned) {
-            showToast("要先在「后期」页装上声呐")
+            showToast("要先在「升级」页装上声呐")
             return
         }
         // 场上已经有鱼王时不浪费玩家的广告
