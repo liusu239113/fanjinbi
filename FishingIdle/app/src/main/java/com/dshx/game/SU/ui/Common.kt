@@ -1,8 +1,10 @@
 package com.dshx.game.SU.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,8 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -146,6 +150,81 @@ fun GameButton(
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/**
+ * 页面内的激励视频入口（各子页共用的**唯一**一种广告按钮样式）。
+ *
+ * 硬约束：每个子页面最多放 1 个这个组件。把它抽成公共组件，
+ * 就是为了让"这一页有没有广告"在代码里一眼可见、也便于统一改版式。
+ *
+ * 文案一律做叙事包装（声呐探测 / 钓协借调 / 仓库赞助 …），
+ * 不写"看广告换奖励"这种直白说法。
+ */
+@Composable
+fun AdActionRow(
+    assets: Assets,
+    iconName: String,
+    title: String,
+    desc: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val icon = remember(iconName) { assets.raw(iconName)?.asImageBitmap() }
+    val accent = if (enabled) UITheme.Gold else UITheme.TextDim.copy(alpha = 0.45f)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(UITheme.DeepWater.copy(alpha = 0.85f))
+            .border(2.dp, accent, RoundedCornerShape(10.dp))
+            .pressable(enabled) { onClick() }
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(UITheme.DeepWater),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (icon != null) {
+                Image(
+                    icon, contentDescription = title,
+                    modifier = Modifier.size(28.dp).alpha(if (enabled) 1f else 0.4f),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Box(Modifier.size(28.dp).background(UITheme.Gold, RoundedCornerShape(6.dp)))
+            }
+        }
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                color = if (enabled) UITheme.GoldLight else UITheme.TextDim,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(desc, color = UITheme.TextDim, fontSize = 10.sp, lineHeight = 13.sp)
+        }
+        Spacer(Modifier.width(6.dp))
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (enabled) UITheme.Gold else UITheme.TextDim.copy(alpha = 0.3f))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(
+                if (enabled) "使用" else "未就绪",
+                color = if (enabled) UITheme.Ink else UITheme.TextDim,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 

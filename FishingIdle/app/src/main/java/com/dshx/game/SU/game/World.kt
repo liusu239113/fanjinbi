@@ -1387,24 +1387,45 @@ class World(val gameState: GameState) {
         kingTimer -= dt
         if (king == null && kingTimer <= 0f) {
             kingTimer = KING_INTERVAL
-            val x = (boatX + (Random.nextFloat() * 2f - 1f) * 500f)
-                .coerceIn(Space.POND_L + 150f, Space.POND_R - 150f)
-            val y = Space.POND_T + 200f + Random.nextFloat() * 320f
-            // 随机一种鱼王：越难的类型越少见
-            val kind = when {
-                Random.nextFloat() < 0.08f -> KingKind.SWIFT
-                Random.nextFloat() < 0.16f -> KingKind.GOLDEN
-                Random.nextFloat() < 0.26f -> KingKind.ABYSS
-                else -> KingKind.NORMAL
-            }
-            king = FishKing(x, y, kind).apply {
-                vx = (Random.nextFloat() * 2f - 1f) * 90f
-                dir = if (vx >= 0f) 1f else -1f
-            }
-            spawnText(x, y - 90f, "${kind.displayName}现身！连点它", kind.color, 1.6f)
-            spawnSplash(x, y, Rarity.LEGEND)
-            pendingSounds.add("legend")
+            spawnKing(rollKingKind())
         }
+    }
+
+    /**
+     * 让一条鱼王立刻现身（不等待 [KING_INTERVAL]）。
+     *
+     * 这是「声呐探测」广告的落点：原生玩法里鱼王出现完全随机、还要等，
+     * 广告买的就是这份**确定性** —— 立刻探到并锁定一条。
+     *
+     * [kind] 传 null 时按原生概率掷；广告点会传一个更好的档位。
+     * 已有鱼王在场上时直接返回 false（不叠加，避免白看一次广告）。
+     */
+    fun summonKing(kind: KingKind? = null): Boolean {
+        if (king != null && king!!.alive) return false
+        spawnKing(kind ?: rollKingKind())
+        return true
+    }
+
+    /** 按原生概率掷一种鱼王：越难的类型越少见。 */
+    private fun rollKingKind(): KingKind = when {
+        Random.nextFloat() < 0.08f -> KingKind.SWIFT
+        Random.nextFloat() < 0.16f -> KingKind.GOLDEN
+        Random.nextFloat() < 0.26f -> KingKind.ABYSS
+        else -> KingKind.NORMAL
+    }
+
+    /** 在船附近放一条鱼王出场（位置、朝向、提示语、音效都在这里）。 */
+    private fun spawnKing(kind: KingKind) {
+        val x = (boatX + (Random.nextFloat() * 2f - 1f) * 500f)
+            .coerceIn(Space.POND_L + 150f, Space.POND_R - 150f)
+        val y = Space.POND_T + 200f + Random.nextFloat() * 320f
+        king = FishKing(x, y, kind).apply {
+            vx = (Random.nextFloat() * 2f - 1f) * 90f
+            dir = if (vx >= 0f) 1f else -1f
+        }
+        spawnText(x, y - 90f, "${kind.displayName}现身！连点它", kind.color, 1.6f)
+        spawnSplash(x, y, Rarity.LEGEND)
+        pendingSounds.add("legend")
     }
 
     /** 点鱼王：加拉力，满了就拽上岸。返回是否点中了。 */

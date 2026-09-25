@@ -195,6 +195,62 @@ class GameState {
     /** 是否已拥有某角色。 */
     fun ownsCharacter(id: String): Boolean = ownedCharacters.contains(id)
 
+    // ---- 角色限时试用（钓协借调）----
+    // 看广告换一段试用权：期间该角色可自由切换且技能真实生效，
+    // 到期自动换回原来用的角色。试用的角色**不进** ownedCharacters ——
+    // 它只是一张临时通行证，不能变成永久拥有。
+
+    /** 试用中的角色 id；null = 没有在试用。 */
+    var trialCharacterId: String? = null
+
+    /** 试用剩余秒数。 */
+    var trialRemain: Float = 0f
+
+    /** 试用期是否有效。 */
+    val trialActive: Boolean get() = trialCharacterId != null && trialRemain > 0f
+
+    /** 当前试用的是不是这个角色。 */
+    fun isTrial(def: CharacterDef): Boolean = trialActive && trialCharacterId == def.id
+
+    /** 是否可用（拥有或正在试用）。UI 用它决定能不能点"切换"。 */
+    fun canUseCharacter(id: String): Boolean =
+        ownsCharacter(id) || (trialActive && trialCharacterId == id)
+
+    /**
+     * 开始试用某角色。[seconds] 秒后到期。
+     * 试用**不叠加**：换一个新角色试用会直接替换掉旧的（避免刷成永久）。
+     */
+    fun startCharacterTrial(def: CharacterDef, seconds: Float) {
+        trialCharacterId = def.id
+        trialRemain = seconds
+        // 立刻切过去，让玩家马上看到/用到
+        if (def.isHelper) currentHelperId = def.id else currentCharacterId = def.id
+    }
+
+    /**
+     * 推进试用倒计时。到期时把角色换回一个**已拥有**的默认角色，
+     * 否则玩家会一直挂着试用角色但技能已失效，看起来像 bug。
+     */
+    fun tickCharacterTrial(dt: Float) {
+        if (!trialActive) return
+        trialRemain -= dt
+        if (trialRemain > 0f) return
+        trialRemain = 0f
+        trialCharacterId = null
+        val helper = Characters.byId(currentHelperId)
+        if (helper != null && !ownsCharacter(helper.id)) {
+            currentHelperId = ownedCharacters
+                .firstOrNull { Characters.byId(it)?.isHelper == true }
+                ?: Characters.defaultHelper.id
+        }
+        val player = Characters.byId(currentCharacterId)
+        if (player != null && !ownsCharacter(player.id)) {
+            currentCharacterId = ownedCharacters
+                .firstOrNull { Characters.byId(it)?.isHelper == false }
+                ?: Characters.defaultPlayer.id
+        }
+    }
+
     /**
      * 解锁一个角色。金币不够返回 false。
      * 珍珠角色走 [unlockCharacterWithPearls]。
@@ -209,12 +265,17 @@ class GameState {
             money -= def.price
         }
         ownedCharacters.add(def.id)
+        // 买了就把试用权收掉：已经是永久拥有了，留着会让人以为还在试用
+        if (trialCharacterId == def.id) {
+            trialCharacterId = null
+            trialRemain = 0f
+        }
         return true
     }
 
-    /** 切换使用的角色（必须已拥有）。 */
+    /** 切换使用的角色（必须已拥有，或在试用中）。 */
     fun equipCharacter(def: CharacterDef): Boolean {
-        if (!ownsCharacter(def.id)) return false
+        if (!canUseCharacter(def.id)) return false
         if (def.isHelper) currentHelperId = def.id else currentCharacterId = def.id
         return true
     }

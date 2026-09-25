@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.Prestige
+import com.dshx.game.SU.game.RewardAds
 import com.dshx.game.SU.game.SkillDef
 import com.dshx.game.SU.game.SkillTree
 import com.dshx.game.SU.game.formatNumber
@@ -53,6 +54,8 @@ fun PrestigePanel(
     revision: Int,
     onPrestige: () -> Unit,
     onLevelUp: (SkillDef) -> Unit,
+    /** 「转生加持」：看完广告让下一次转生的珍珠 +50%。 */
+    onPrestigeBoost: () -> Unit,
     onClose: () -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
@@ -88,7 +91,11 @@ fun PrestigePanel(
 
                     Spacer(Modifier.height(10.dp))
 
-                    if (tab == 0) PrestigeTab(state, onPrestige) else SkillTab(state, onLevelUp)
+                    if (tab == 0) {
+                        PrestigeTab(state, assets, onPrestige, onPrestigeBoost)
+                    } else {
+                        SkillTab(state, onLevelUp)
+                    }
                 }
             }
         }
@@ -116,7 +123,12 @@ private fun TabChip(text: String, selected: Boolean, modifier: Modifier, onClick
 }
 
 @Composable
-private fun PrestigeTab(state: GameState, onPrestige: () -> Unit) {
+private fun PrestigeTab(
+    state: GameState,
+    assets: Assets,
+    onPrestige: () -> Unit,
+    onPrestigeBoost: () -> Unit,
+) {
     val pending = state.pendingPearls()
     val canPrestige = pending > 0
     val progress = Prestige.progress(state.totalMoney)
@@ -206,6 +218,24 @@ private fun PrestigeTab(state: GameState, onPrestige: () -> Unit) {
             color = UITheme.TextDim,
             fontSize = 12.sp,
             lineHeight = 17.sp,
+        )
+
+        // 「转生加持」：转生是本作最重的抉择（清空一切），
+        // 在这里卖"这一转多拿 50% 珍珠"是典型的刚需广告 ——
+        // 玩家自己会算这笔账，不需要劝。
+        Spacer(Modifier.height(10.dp))
+        AdActionRow(
+            assets = assets,
+            iconName = "ad_boost",
+            title = "转生加持 · 本次珍珠 +50%",
+            desc = when {
+                state.prestigeBoostReady -> "加持已就绪，本次转生立即生效"
+                RewardAds.isReady() -> "只对下一次转生生效，用完即止"
+                else -> "广告接入中"
+            },
+            // 已就绪时不用再点（避免重复看广告），但保持可读
+            enabled = RewardAds.isReady() && !state.prestigeBoostReady,
+            onClick = onPrestigeBoost,
         )
 
         Spacer(Modifier.height(14.dp))

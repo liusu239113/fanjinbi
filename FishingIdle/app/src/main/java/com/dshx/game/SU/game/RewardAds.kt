@@ -75,7 +75,7 @@ object RewardAds {
     /** 珍珠礼包：直接给珍珠（转生货币，永久保留）。 */
     const val PLACEMENT_PEARL = "pearl_gift"
 
-    /** 宝箱钥匙：立刻在河面刷一个必定出珍珠的宝箱。 */
+    /** 沉船打捞：立刻在河面浮出一个必定出珍珠的宝箱。 */
     const val PLACEMENT_CHEST_KEY = "chest_key"
 
     /** 图鉴加成翻倍：2 分钟内图鉴收集加成翻倍。 */
@@ -84,15 +84,26 @@ object RewardAds {
     /** 每日签到加领：每日一次的额外签到奖励。 */
     const val PLACEMENT_DAILY_BONUS = "daily_bonus"
 
-    /** 转生加速：本次转生获得的珍珠 +50%（转生前看）。 */
+    /** 转生加持：本次转生获得的珍珠 +50%（转生前看）。 */
     const val PLACEMENT_PRESTIGE_BOOST = "prestige_boost"
-
-    /** 免费刷新商店（每次进店一次）。 */
-    const val PLACEMENT_SHOP_REFRESH = "shop_refresh"
 
     /**
      * 仓库免费扩容：白送一次扩容，省掉金币。
      * 入口在仓库面板底部 —— 玩家正盯着"仓库已满"发愁时，转化率最高。
      */
     const val PLACEMENT_WAREHOUSE_FREE_UPGRADE = "warehouse_free_upgrade"
+
+    /**
+     * 声呐探鱼王：鱼王本来是「声呐解锁后随机撞见」，
+     * 广告买的是**确定性** —— 立刻探到一条并让它现身。
+     * 入口在水域页（和「买水域」同一页，但全页只有这一个广告按钮）。
+     */
+    const val PLACEMENT_KING_SONAR = "king_sonar"
+
+    /**
+     * 钓协借调：角色都很贵，先试后买。
+     * 广告换一段限时试用权（期间可自由切换、真实生效），到期自动换回原角色。
+     * 入口在角色页。
+     */
+    const val PLACEMENT_CHARACTER_TRIAL = "character_trial"
 }

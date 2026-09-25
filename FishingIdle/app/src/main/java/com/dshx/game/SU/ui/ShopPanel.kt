@@ -54,6 +54,7 @@ import com.dshx.game.SU.game.FishSize
 import com.dshx.game.SU.game.FishingMap
 import com.dshx.game.SU.game.KingKind
 import com.dshx.game.SU.game.Rarity
+import com.dshx.game.SU.game.RewardAds
 import com.dshx.game.SU.game.Species
 import com.dshx.game.SU.game.SpeciesLore
 import com.dshx.game.SU.game.World
@@ -85,6 +86,16 @@ fun ShopPanel(
     onUpgradeWarehouse: () -> Unit,
     /** 仓库页「看广告免费扩容」——由宿主走激励视频，看完再免费扩一次。 */
     onAdUpgradeWarehouse: () -> Unit,
+    /** 水域页「声呐探测」——看完广告立刻让一条鱼王现身。 */
+    onKingSonar: () -> Unit,
+    /** 角色页「钓协借调」——看完广告换取某角色的限时试用权。 */
+    onTrialCharacter: (CharacterDef) -> Unit,
+    /** 升级页「渔市分红」——一笔意外之财（资金链路）。 */
+    onLottery: () -> Unit,
+    /** 任务页「每日加领」——每日一次的额外签到奖励。 */
+    onDailyBonus: () -> Unit,
+    /** 图鉴页「稀有鱼诱饵」——确定性提升稀有度，加速集齐图鉴。 */
+    onRareLure: () -> Unit,
     onClaimDex: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -167,15 +178,30 @@ fun ShopPanel(
 
                     when (tab) {
                         0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought)
-                        1 -> ItemList(Content.upgrades, state, assets, purchase, "升级", revision, justBought)
+                        // 升级页是**纯金币消耗页**，所以这里的广告点选"资金"链路：
+                        // 渔市分红 = 一笔意外之财，直接解决"想买但钱不够"。
+                        1 -> ItemList(
+                            Content.upgrades, state, assets, purchase, "升级", revision, justBought,
+                            headerAd = {
+                                AdActionRow(
+                                    assets = assets,
+                                    iconName = "ad_gold",
+                                    title = "渔市分红 · 领一笔奖金",
+                                    desc = if (RewardAds.isReady()) "看今日渔市行情，分红立刻到账"
+                                    else "广告接入中",
+                                    enabled = RewardAds.isReady(),
+                                    onClick = { onLottery() },
+                                )
+                            },
+                        )
                         // 后期两批合成一页展示（顺序仍按 Content 里的依赖链：拖网→声呐→鱼探仪→…）
                         2 -> ItemList(
                             Content.lateGame + Content.lateGame2,
                             state, assets, purchase, "后期装备", revision, justBought,
                         )
-                        3 -> MapList(state, assets, unlock, revision)
-                        4 -> DailyQuestList(state, revision)
-                        5 -> FishDex(state, assets, revision, onClaimDex)
+                        3 -> MapList(state, assets, unlock, revision, onKingSonar)
+                        4 -> DailyQuestList(state, assets, revision, onDailyBonus)
+                        5 -> FishDex(state, assets, revision, onClaimDex, onRareLure)
                         6 -> CharacterPanel(
                             state = state, assets = assets, revision = revision,
                             onUnlock = { def ->
@@ -188,6 +214,12 @@ fun ShopPanel(
                             onEquip = { def ->
                                 onEquipCharacter(def)
                                 flash = "已切换为 · ${def.name}"
+                                flashOk = true
+                                flashId++
+                            },
+                            onTrial = { def ->
+                                onTrialCharacter(def)
+                                flash = "钓协借调中 · ${def.name}"
                                 flashOk = true
                                 flashId++
                             },
@@ -264,6 +296,8 @@ private fun ItemList(
     emptyHint: String,
     revision: Int,
     justBought: String?,
+    /** 可选的页内广告入口（整页最多 1 个，放在列表最上面）。 */
+    headerAd: (@Composable () -> Unit)? = null,
 ) {
     // 排序只看"是否满级 + 价格"，**不看当前金币** ——
     // 钓手一直在赚钱，用金币参与排序会让列表一边看一边乱跳。
@@ -278,7 +312,15 @@ private fun ItemList(
             )
     }
 
-    if (visible.isEmpty()) {
+    // 还没解锁的下一步：灰条列在最后，最多两条，让玩家知道该往哪走
+    val locked = remember(revision, state.purchases.size, defs) {
+        defs.filter { !it.visibleWhen(state) && Content.unlockHints.containsKey(it.id) }
+            .take(2)
+    }
+
+    // 空列表时也要能露出广告入口（比如后期页前期全锁着），
+    // 否则玩家在一个"什么都没有"的页面上找不到任何出路。
+    if (visible.isEmpty() && headerAd == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
                 "还没有可用的$emptyHint\n继续钓鱼攒金币吧",
@@ -290,16 +332,25 @@ private fun ItemList(
         return
     }
 
-    // 还没解锁的下一步：灰条列在最后，最多两条，让玩家知道该往哪走
-    val locked = remember(revision, state.purchases.size, defs) {
-        defs.filter { !it.visibleWhen(state) && Content.unlockHints.containsKey(it.id) }
-            .take(2)
-    }
-
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
+        if (headerAd != null) {
+            item { headerAd() }
+        }
+        if (visible.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "还没有可用的$emptyHint\n继续钓鱼攒金币吧",
+                        color = UITheme.TextDim,
+                        fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+        }
         items(visible, key = { it.id }) { def ->
             ShopItemRow(def, state, assets, onBuy, def.id == justBought)
         }
@@ -505,12 +556,29 @@ private fun MapList(
     assets: Assets,
     onUnlock: (FishingMap) -> Unit,
     revision: Int,
+    onKingSonar: () -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // 「声呐探测」是水域页**唯一**的广告入口（硬约束：单页最多 1 个）。
+        // 鱼王本来是随机 + 要等，这里卖的是确定性。
+        item {
+            AdActionRow(
+                assets = assets,
+                iconName = "ad_sonar",
+                title = "声呐探测 · 锁定鱼王",
+                desc = when {
+                    !state.sonarOwned -> "装上声呐才能探鱼王（先去「后期」页买）"
+                    RewardAds.isReady() -> "立刻探到一条鱼王并让它现身"
+                    else -> "广告接入中"
+                },
+                enabled = RewardAds.isReady() && state.sonarOwned,
+                onClick = onKingSonar,
+            )
+        }
         items(Bestiary.maps, key = { it.id }) { map ->
             val unlocked = state.unlockedMaps.contains(map.id)
             val current = state.currentMapId == map.id
@@ -603,7 +671,12 @@ private fun MapList(
 
 /** 每日任务列表。每天 3 条，完成后自动入账。 */
 @Composable
-private fun DailyQuestList(state: GameState, revision: Int) {
+private fun DailyQuestList(
+    state: GameState,
+    assets: Assets,
+    revision: Int,
+    onDailyBonus: () -> Unit,
+) {
     @Suppress("UNUSED_EXPRESSION") revision
     val quests = state.todayQuests
 
@@ -611,6 +684,19 @@ private fun DailyQuestList(state: GameState, revision: Int) {
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // 任务页的广告点是「每日加领」：和任务一样是"每天来一趟"的节奏，
+        // 是留存钩子而不是爆发式收益。
+        item {
+            AdActionRow(
+                assets = assets,
+                iconName = "ad_daily",
+                title = "每日加领 · 额外一份",
+                desc = if (RewardAds.isReady()) "今日签到奖励再领一份（每天一次）"
+                else "广告接入中",
+                enabled = RewardAds.isReady(),
+                onClick = onDailyBonus,
+            )
+        }
         item {
             Column {
                 SectionTitle("今日任务")
@@ -728,15 +814,31 @@ private fun FishDex(
     assets: Assets,
     revision: Int,
     onClaimDex: () -> Unit,
+    onRareLure: () -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     val caught = state.caughtSpecies
     // 点某一条鱼 → 展开资料页
     var detail by remember { mutableStateOf<Species?>(null) }
+    val lureLeft = state.buffRemain(GameState.Buff.RARE_LURE)
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // 图鉴页的核心痛点是"差几种就集齐"，而稀有度完全随机 ——
+        // 这里卖的正是确定性：稀有鱼诱饵。
+        item {
+            AdActionRow(
+                assets = assets,
+                iconName = "ad_bait",
+                title = "稀有鱼诱饵 · 提升稀有度",
+                desc = if (lureLeft > 0f) "诱饵生效中，剩余 ${formatBuffTime(lureLeft)}"
+                else if (RewardAds.isReady()) "撒下诱饵，稀有鱼出现率大增"
+                else "广告接入中",
+                enabled = RewardAds.isReady(),
+                onClick = onRareLure,
+            )
+        }
         item {
             Column {
                 SectionTitle("收集进度")

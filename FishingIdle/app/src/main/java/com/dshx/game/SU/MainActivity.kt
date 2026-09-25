@@ -43,9 +43,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.Attribute
 import com.dshx.game.SU.game.AudioManager
+import com.dshx.game.SU.game.CharacterDef
 import com.dshx.game.SU.game.DailyQuests
 import com.dshx.game.SU.game.DailyTracker
 import com.dshx.game.SU.game.DexReward
+import com.dshx.game.SU.game.KingKind
 import com.dshx.game.SU.game.FishingMap
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.GameView
@@ -97,6 +99,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var settings: Settings
     private lateinit var world: World
 
+    /**
+     * 当前游戏视图。提升为类字段（原来是 composable 里的局部 remember），
+     * 因为换装相关的广告奖励是在普通方法里发的，拿不到 composable 作用域。
+     */
+    private var gameViewRef: GameView? = null
+
     // ---- 广告 / 登录 / 防沉迷 门控状态 ----
     // 三层门控顺序固定：隐私政策 -> TapTap 登录 -> 防沉迷认证。
     // 只有防沉迷回调 LOGIN_SUCCESS(500) 才会把 complianceChecking 清掉。
@@ -117,9 +125,6 @@ class MainActivity : ComponentActivity() {
 
     /** 轻量提示（相当于 Toast），由 [showToast] 写入、游戏内顶部展示。 */
     private var toastText by mutableStateOf<String?>(null)
-
-    /** 商店刷新计数：广告刷新后 +1，商店面板据此重掷商品。 */
-    private var shopRefreshTick by mutableStateOf(0)
 
     /** 广告礼包角标数量（当前可领的条目数）。 */
     private val adGiftCount: Int get() = if (RewardAds.isReady()) AD_GIFT_COUNT else 0
@@ -359,7 +364,9 @@ class MainActivity : ComponentActivity() {
         var showMenu by remember { mutableStateOf(false) }
         var showReset by remember { mutableStateOf(false) }
         var showPrestige by remember { mutableStateOf(false) }
-        var gameViewRef by remember { mutableStateOf<GameView?>(null) }
+        // gameViewRef 是类字段（见上方声明），composable 里直接读写它。
+        // 原来这里是 `by remember { mutableStateOf(...) }`，导致
+        // 非 composable 的广告发奖方法拿不到视图句柄。
         // 每次重置存档后 +1，强制 hasSave 重新求值。
         // 用 remember{} 缓存布尔值会导致「清档后主菜单仍显示旧存档」。
         var saveEpoch by remember { mutableIntStateOf(0) }
@@ -393,6 +400,9 @@ class MainActivity : ComponentActivity() {
             while (true) {
                 kotlinx.coroutines.delay(50)
                 if (gameState.anyBuffActive) gameState.tickBuffs(0.05f)
+                // 角色试用倒计时（钓协借调）。到期会把角色换回已拥有的，
+                // 所以即使玩家一直开着角色页也看得到"试用已结束"。
+                gameState.tickCharacterTrial(0.05f)
             }
         }
 
@@ -851,6 +861,11 @@ class MainActivity : ComponentActivity() {
                             revision++
                         }
                     },
+                    onKingSonar = { doKingSonar() },
+                    onTrialCharacter = { def -> doTrialCharacter(def) },
+                    onLottery = { doLottery() },
+                    onDailyBonus = { doDailyBonus() },
+                    onRareLure = { doRareLure() },
                     onClaimDex = {
                         val got = DexReward.claimAll(gameState)
                         if (got > 0) {
@@ -914,6 +929,7 @@ class MainActivity : ComponentActivity() {
                         }
                         revision++
                     },
+                    onPrestigeBoost = { doPrestigeBoost() },
                     onClose = {
                         audio.play("sfx_click", 0.6f)
                         showPrestige = false
@@ -1098,6 +1114,11 @@ class MainActivity : ComponentActivity() {
         val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
         val fmt = { v: Double -> com.dshx.game.SU.game.formatNumber(v) }
 
+        // 福利社只收「通用型」广告：任何时间、任何进度都用得上，
+        // 玩家每次路过金币条都能顺手领一个。
+        // 页面专属的点位（稀有诱饵→图鉴页、扩容→仓库页、转生加持→转生页…）
+        // 全部已经归位到各自子页，不再堆在这里 —— 见 buildAdGifts 下方注释。
+
         // ---- 1. 双倍收益：10 分钟所有渔获 ×2（转化最高的一类）----
         val doubleLeft = gameState.buffRemain(GameState.Buff.DOUBLE_INCOME)
         list += AdGift(
@@ -1115,24 +1136,7 @@ class MainActivity : ComponentActivity() {
             },
         )
 
-        // ---- 2. 稀有鱼诱饵：3 分钟稀有鱼大爆发 ----
-        val lureLeft = gameState.buffRemain(GameState.Buff.RARE_LURE)
-        list += AdGift(
-            id = "g_lure",
-            icon = "ad_bait",
-            title = "稀有鱼诱饵 · 3 分钟",
-            desc = if (lureLeft > 0f)
-                "稀有鱼抢食（剩余 ${formatBuffTime(lureLeft)}）"
-            else "3 分钟内稀有鱼出现率大幅提升",
-            action = {
-                requestAd(RewardAds.PLACEMENT_RARE_LURE) {
-                    gameState.activateBuff(GameState.Buff.RARE_LURE, 180f)
-                    showToast("稀有鱼诱饵已投入水中：3 分钟")
-                }
-            },
-        )
-
-        // ---- 3. 钓手加速：5 分钟挂机产出翻倍 ----
+        // ---- 2. 钓手加速：5 分钟挂机产出翻倍（挂机流的核心）----
         val rushLeft = gameState.buffRemain(GameState.Buff.HELPER_RUSH)
         list += AdGift(
             id = "g_helper",
@@ -1149,7 +1153,7 @@ class MainActivity : ComponentActivity() {
             },
         )
 
-        // ---- 4. 收线加速：5 分钟收线快一倍 ----
+        // ---- 3. 极速收线：5 分钟收线快一倍（手动流的爽点）----
         val reelLeft = gameState.buffRemain(GameState.Buff.REEL_RUSH)
         list += AdGift(
             id = "g_reel",
@@ -1166,38 +1170,7 @@ class MainActivity : ComponentActivity() {
             },
         )
 
-        // ---- 5. 金币掉落：立得一笔（按当前收益水平给）----
-        list += AdGift(
-            id = "g_gold",
-            icon = "ad_gold",
-            title = "金币掉落",
-            desc = "立得 ${fmt(gold)} 金币 · 不限次数",
-            action = {
-                requestAd(RewardAds.PLACEMENT_GOLD_DROP) {
-                    gameState.money += gold
-                    saveManager.save(gameState, settings)
-                    showToast("金币 +${fmt(gold)}")
-                }
-            },
-        )
-
-        // ---- 6. 珍珠礼包：给转生货币，永久保留（后期玩家最缺）----
-        val pearlGain = 1L + (gameState.prestigeCount / 2L)
-        list += AdGift(
-            id = "g_pearl",
-            icon = "ad_pearl",
-            title = "珍珠礼包",
-            desc = "立得 $pearlGain 颗珍珠（转生货币，永久保留）",
-            action = {
-                requestAd(RewardAds.PLACEMENT_PEARL) {
-                    gameState.pearls += pearlGain
-                    saveManager.save(gameState, settings)
-                    showToast("珍珠 +$pearlGain")
-                }
-            },
-        )
-
-        // ---- 7. 图鉴加成翻倍：2 分钟收集加成 ×2 ----
+        // ---- 4. 图鉴加成翻倍：2 分钟收集加成 ×2 ----
         val dexLeft = gameState.buffRemain(GameState.Buff.DEX_BOOST)
         list += AdGift(
             id = "g_dex",
@@ -1214,12 +1187,45 @@ class MainActivity : ComponentActivity() {
             },
         )
 
-        // ---- 8. 宝箱钥匙：立刻刷一个必出珍珠的宝箱（买了宝藏才有意义）----
+        // ---- 5. 渔市分红：一笔意外之财（叙事包装：不是"看广告给钱"）----
+        list += AdGift(
+            id = "g_gold",
+            icon = "ad_gold",
+            title = "渔市分红",
+            desc = "今日渔市分红到账 ${fmt(gold)} 金币 · 不限次数",
+            action = {
+                requestAd(RewardAds.PLACEMENT_GOLD_DROP) {
+                    gameState.money += gold
+                    saveManager.save(gameState, settings)
+                    showToast("渔市分红 +🪙${fmt(gold)}")
+                }
+            },
+        )
+
+        // ---- 6. 珍珠礼包：转生货币，永久保留（后期玩家最缺）----
+        val pearlGain = 1L + (gameState.prestigeCount / 2L)
+        list += AdGift(
+            id = "g_pearl",
+            icon = "ad_pearl",
+            title = "珍珠礼包",
+            desc = "立得 $pearlGain 颗珍珠（转生货币，永久保留）",
+            action = {
+                requestAd(RewardAds.PLACEMENT_PEARL) {
+                    gameState.pearls += pearlGain
+                    saveManager.save(gameState, settings)
+                    showToast("珍珠 +$pearlGain")
+                }
+            },
+        )
+
+        // ---- 7. 沉船打捞：立刻在河面浮出一个必出珍珠的宝箱 ----
+        // 宝箱本来只在河面随机刷，这里买的是"现在就有"。
+        // 买了宝藏才出现（没宝藏系统时召唤出来也捡不到）。
         if (gameState.treasureOwned) {
             list += AdGift(
                 id = "g_chest",
                 icon = "ad_chest",
-                title = "宝箱钥匙",
+                title = "沉船打捞",
                 desc = "立刻在河面浮出一个必出珍珠的宝箱",
                 action = {
                     requestAd(RewardAds.PLACEMENT_CHEST_KEY) {
@@ -1230,75 +1236,102 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        // ---- 9. 转生加速：本次转生珍珠 +50% ----
-        if (gameState.canPrestige()) {
-            val boostOn = gameState.prestigeBoostReady
-            list += AdGift(
-                id = "g_prestige",
-                icon = "ad_boost",
-                title = "转生加速",
-                desc = if (boostOn) "已就绪：本次转生珍珠 +50%"
-                else "本次转生获得的珍珠 +50%",
-                action = {
-                    if (boostOn) {
-                        showToast("转生加速已就绪")
-                        return@AdGift
-                    }
-                    requestAd(RewardAds.PLACEMENT_PRESTIGE_BOOST) {
-                        gameState.prestigeBoostReady = true
-                        showToast("转生加速已就绪：本次转生珍珠 +50%")
-                    }
-                },
-            )
-        }
-
-        // ---- 10. 每日赠礼：每天一次的额外签到奖励 ----
-        val dailyDone = AdDaily.used(context, DAILY_BONUS_KEY) > 0
-        val dailyGain = (gameState.money * 0.25).coerceAtLeast(1_000.0)
-        list += AdGift(
-            id = "g_daily",
-            icon = "ad_daily",
-            title = "每日赠礼",
-            desc = if (dailyDone) "今日已领取，明天再来"
-            else "每日一次：立得 ${fmt(dailyGain)} 金币",
-            locked = dailyDone,
-            action = {
-                if (dailyDone) {
-                    showToast("今日赠礼已领取")
-                    return@AdGift
-                }
-                requestAd(RewardAds.PLACEMENT_DAILY_BONUS) {
-                    gameState.money += dailyGain
-                    AdDaily.markUsed(context, DAILY_BONUS_KEY)
-                    saveManager.save(gameState, settings)
-                    showToast("每日赠礼 +${fmt(dailyGain)}")
-                }
-            },
-        )
-
-        // ---- 11. 免费刷新商店 ----
-        list += AdGift(
-            id = "g_refresh",
-            icon = "ad_fish",
-            title = "免费刷新商店",
-            desc = "重掷商店里的商品与价格",
-            action = {
-                requestAd(RewardAds.PLACEMENT_SHOP_REFRESH) {
-                    shopRefreshTick++
-                    showToast("商店已刷新")
-                }
-            },
-        )
-
         return list
     }
+
+    // ---------------- 各子页的广告点 ----------------
+    // 每个页面最多一个广告入口，逻辑集中在这里，面板只管展示与回调。
+    // 奖励数值一律不写死在 UI 里（便于后期调参，也不把广告耦合进玩法代码）。
+
+    /** 升级页「渔市分红」：一笔意外之财（链路 C：资金）。 */
+    private fun doLottery() {
+        val gold = (gameState.money * 0.12).coerceAtLeast(200.0)
+        requestAd(RewardAds.PLACEMENT_GOLD_DROP) {
+            gameState.money += gold
+            saveManager.save(gameState, settings)
+            showToast("渔市分红到账 +🪙${formatNumber(gold)}")
+        }
+    }
+
+    /** 任务页「每日加领」：每天一次的额外签到奖励。 */
+    private fun doDailyBonus() {
+        if (AdDaily.used(this, DAILY_BONUS_KEY) > 0) {
+            showToast("今日加领已用过，明天再来")
+            return
+        }
+        val gain = (gameState.money * 0.25).coerceAtLeast(1_000.0)
+        requestAd(RewardAds.PLACEMENT_DAILY_BONUS) {
+            gameState.money += gain
+            AdDaily.markUsed(this, DAILY_BONUS_KEY)
+            saveManager.save(gameState, settings)
+            showToast("每日加领 +🪙${formatNumber(gain)}")
+        }
+    }
+
+    /** 图鉴页「稀有鱼诱饵」：确定性提升稀有度。 */
+    private fun doRareLure() {
+        requestAd(RewardAds.PLACEMENT_RARE_LURE) {
+            gameState.activateBuff(GameState.Buff.RARE_LURE, 180f)
+            showToast("诱饵已撒下：3 分钟稀有鱼大增")
+        }
+    }
+
+    /** 水域页「声呐探测」：立刻让一条鱼王现身。 */
+    private fun doKingSonar() {
+        if (!gameState.sonarOwned) {
+            showToast("要先在「后期」页装上声呐")
+            return
+        }
+        // 场上已经有鱼王时不浪费玩家的广告
+        if (world.king?.alive == true) {
+            showToast("已经有鱼王在河面上了，先去拉它")
+            return
+        }
+        requestAd(RewardAds.PLACEMENT_KING_SONAR) {
+            // 广告买的是"好货"：只掷金鳞/深渊这种高价值档，
+            // 不然看了广告探出一条普通鱼王，玩家会觉得被骗。
+            val kind = if (kotlin.random.Random.nextFloat() < 0.5f) KingKind.GOLDEN else KingKind.ABYSS
+            if (world.summonKing(kind)) {
+                showToast("声呐锁定 · ${kind.displayName}已现身！")
+            } else {
+                showToast("鱼王刚跑掉，再试一次")
+            }
+        }
+    }
+
+    /** 角色页「钓协借调」：某角色的限时试用权。 */
+    private fun doTrialCharacter(def: CharacterDef) {
+        requestAd(RewardAds.PLACEMENT_CHARACTER_TRIAL) {
+            gameState.startCharacterTrial(def, TRIAL_SECONDS)
+            // 立刻重载立绘，下一帧就能看到新角色
+            gameViewRef?.onCharacterChanged()
+            saveManager.save(gameState, settings)
+            showToast("钓协借调 · ${def.name} 可用 ${TRIAL_SECONDS.toInt() / 60} 分钟")
+        }
+    }
+
+    /** 转生面板「转生加持」：下一次转生珍珠 +50%。 */
+    private fun doPrestigeBoost() {
+        if (gameState.prestigeBoostReady) {
+            showToast("转生加持已就绪")
+            return
+        }
+        requestAd(RewardAds.PLACEMENT_PRESTIGE_BOOST) {
+            gameState.prestigeBoostReady = true
+            showToast("转生加持已就绪：本次转生珍珠 +50%")
+        }
+    }
+
 
     private companion object {
         /** 每日赠礼的键（唯一保留每日限制的条目 —— 它本身就是"每日"福利）。 */
         const val DAILY_BONUS_KEY = "daily_bonus"
 
         /** 广告礼包的条目数（角标显示用）。 */
-        const val AD_GIFT_COUNT = 11
+        const val AD_GIFT_COUNT = 7
+
+        /** 「钓协借调」的试用时长（秒）。3 分钟足够体验一条鱼竿技能。 */
+        const val TRIAL_SECONDS = 180f
     }
 
     override fun onDestroy() {

@@ -180,94 +180,23 @@ fun WarehousePanel(
         // ---- 看广告免费扩容 ----
         // 单独占一行、走金色描边：仓库满时玩家正盯着这一屏发愁，
         // 是转化率最高的一类广告位。已满级 / 广告未就绪时置灰。
+        // 仓库页**唯一**的广告入口（硬约束：单页最多 1 个）。
+        // 仓库满时玩家正盯着这一屏发愁，是转化率最高的一类广告位。
         Spacer(Modifier.height(7.dp))
         val adReady = RewardAds.isReady()
-        val adUsable = adReady && Warehouse.canUpgrade(state)
-        AdFreeUpgradeRow(
+        val full = !Warehouse.canUpgrade(state)
+        AdActionRow(
             assets = assets,
-            enabled = adUsable,
-            ready = adReady,
-            full = !Warehouse.canUpgrade(state),
+            iconName = "ad_gift",
+            title = "仓库赞助 · 免费扩容",
+            desc = when {
+                full -> "仓库已满级"
+                !adReady -> "广告接入中"
+                else -> "白得 ${Warehouse.CAPACITY_STEP} 格，不花金币"
+            },
+            enabled = adReady && !full,
             onClick = onAdUpgrade,
         )
-    }
-}
-
-/**
- * 仓库面板底部的「看广告免费扩容」入口。
- *
- * 用资源图标（ad_gift）而不是 emoji —— 跟金币旁那个广告入口保持同一套视觉，
- * 玩家一眼就知道"这里也是看广告"（emoji 在不同 ROM 上渲染也不一致）。
- */
-@Composable
-private fun AdFreeUpgradeRow(
-    assets: Assets,
-    enabled: Boolean,
-    ready: Boolean,
-    full: Boolean,
-    onClick: () -> Unit,
-) {
-    val accent = if (enabled) UITheme.Gold else UITheme.TextDim.copy(alpha = 0.45f)
-    val icon = remember { assets.raw("ad_gift")?.asImageBitmap() }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(UITheme.DeepWater.copy(alpha = 0.85f))
-            .border(2.dp, accent, RoundedCornerShape(10.dp))
-            .pressable(enabled) { onClick() }
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(UITheme.DeepWater),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (icon != null) {
-                Image(
-                    icon, contentDescription = "免费扩容",
-                    modifier = Modifier.size(26.dp).alpha(if (enabled) 1f else 0.4f),
-                    contentScale = ContentScale.Fit,
-                )
-            } else {
-                Box(Modifier.size(26.dp).background(UITheme.Gold, RoundedCornerShape(6.dp)))
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                "看广告 · 免费扩容一次",
-                color = if (enabled) UITheme.GoldLight else UITheme.TextDim,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                when {
-                    full -> "仓库已满级"
-                    !ready -> "广告接入中"
-                    else -> "白得 ${Warehouse.CAPACITY_STEP} 格，不花金币"
-                },
-                color = UITheme.TextDim,
-                fontSize = 10.sp,
-            )
-        }
-        Spacer(Modifier.width(6.dp))
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (enabled) UITheme.Gold else UITheme.TextDim.copy(alpha = 0.3f))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        ) {
-            Text(
-                if (full) "已满" else "领取",
-                color = if (enabled) UITheme.Ink else UITheme.TextDim,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
     }
 }
 

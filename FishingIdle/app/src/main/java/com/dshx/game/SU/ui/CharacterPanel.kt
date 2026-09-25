@@ -40,6 +40,7 @@ import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.CharacterDef
 import com.dshx.game.SU.game.Characters
 import com.dshx.game.SU.game.GameState
+import com.dshx.game.SU.game.RewardAds
 import com.dshx.game.SU.game.RodSkill
 import com.dshx.game.SU.game.formatNumber
 
@@ -56,6 +57,8 @@ fun CharacterPanel(
     revision: Int,
     onUnlock: (CharacterDef) -> Boolean,
     onEquip: (CharacterDef) -> Unit,
+    /** 「钓协借调」：看完广告给这个角色一段限时试用权。 */
+    onTrial: (CharacterDef) -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     var detail by remember { mutableStateOf<CharacterDef?>(null) }
@@ -64,6 +67,35 @@ fun CharacterPanel(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // 试用状态条：正在试用时显示剩余时间，让玩家知道"还有多久"
+        if (state.trialActive) {
+            item {
+                val trialDef = Characters.byId(state.trialCharacterId.orEmpty())
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(UITheme.TextGood.copy(alpha = 0.18f))
+                        .border(2.dp, UITheme.TextGood.copy(alpha = 0.85f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🎣", fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "钓协借调中 · ${trialDef?.name ?: ""}",
+                            color = UITheme.TextGood, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "剩余 ${formatBuffTime(state.trialRemain)}，到期自动换回原角色",
+                            color = UITheme.TextDim, fontSize = 10.sp,
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Column {
                 SectionTitle("主角")
@@ -115,6 +147,7 @@ fun CharacterPanel(
             assets = assets,
             onUnlock = { if (onUnlock(def)) detail = null },
             onEquip = { onEquip(def); detail = null },
+            onTrial = { onTrial(def); detail = null },
             onClose = { detail = null },
         )
     }
@@ -206,9 +239,13 @@ private fun CharacterDetail(
     assets: Assets,
     onUnlock: () -> Unit,
     onEquip: () -> Unit,
+    onTrial: () -> Unit,
     onClose: () -> Unit,
 ) {
     val owned = state.ownsCharacter(def.id)
+    val trialing = state.isTrial(def)
+    // "可用"= 已拥有或在试用中，决定能不能点「切换使用」
+    val usable = state.canUseCharacter(def.id)
     val equipped = if (def.isHelper) {
         state.currentHelperId == def.id
     } else {
@@ -299,7 +336,7 @@ private fun CharacterDetail(
                         modifier = Modifier.fillMaxWidth().height(44.dp),
                         accent = UITheme.TextGood, fontSize = 15,
                     )
-                    owned -> GameButton(
+                    usable -> GameButton(
                         "切换使用", onEquip,
                         modifier = Modifier.fillMaxWidth().height(44.dp),
                         accent = UITheme.Gold, fontSize = 15,
@@ -313,6 +350,22 @@ private fun CharacterDetail(
                         fontSize = 14,
                     )
                 }
+
+                // 「钓协借调」：买不起时的替代路径 —— 先试后买。
+                // 已经拥有 / 正在试用 / 已装备时不显示，避免重复。
+                if (!owned && !trialing && !equipped) {
+                    Spacer(Modifier.height(8.dp))
+                    AdActionRow(
+                        assets = assets,
+                        iconName = "ad_borrow",
+                        title = "钓协借调 · 限时体验",
+                        desc = if (RewardAds.isReady()) "先白用 3 分钟，技能真实生效"
+                        else "广告接入中",
+                        enabled = RewardAds.isReady(),
+                        onClick = onTrial,
+                    )
+                }
+
                 Spacer(Modifier.height(8.dp))
                 GameButton(
                     "关闭", onClose,
