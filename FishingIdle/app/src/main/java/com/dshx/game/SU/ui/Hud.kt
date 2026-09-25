@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.dshx.game.SU.game.AchievementDef
 import com.dshx.game.SU.game.BobberState
 import com.dshx.game.SU.game.Rarity
@@ -187,65 +189,93 @@ private fun hintText(world: World): String {
 fun SpeedControl(
     state: GameState,
     revision: Int,
-    adReady: Boolean,
     onSelect: (Int) -> Unit,
-    onWatchAd: () -> Unit,
+    onLocked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     val available = state.availableSpeed()
     val selected = state.currentSpeed()
     val remaining = state.speedRemainingMillis()
-    val minutes = (remaining / 60_000).toInt()
-    val seconds = ((remaining / 1_000) % 60).toInt()
 
-    Column(
+    Row(
         modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(UITheme.DeepWater.copy(alpha = 0.88f))
-            .border(1.5.dp, UITheme.GoldDark, RoundedCornerShape(10.dp))
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .border(1.dp, UITheme.GoldDark, RoundedCornerShape(8.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("游戏速度", color = UITheme.GoldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            (1..3).forEach { tier ->
-                val unlocked = tier <= available
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (tier == selected) UITheme.Gold else UITheme.WoodDark)
-                        .pressable(unlocked) { onSelect(tier) }
-                        .padding(horizontal = 9.dp, vertical = 3.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (unlocked) "${tier}×" else "🔒${tier}×",
-                        color = if (tier == selected) UITheme.Ink else UITheme.Cream,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-            if (remaining > 0) {
+        (1..3).forEach { tier ->
+            val unlocked = tier <= available
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (tier == selected) UITheme.Gold else UITheme.WoodDark)
+                    .pressable { if (unlocked) onSelect(tier) else onLocked() }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    "%02d:%02d".format(minutes, seconds),
-                    color = UITheme.TextGood,
+                    if (unlocked) "${tier}×" else "🔒${tier}×",
+                    color = if (tier == selected) UITheme.Ink else UITheme.Cream,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
         }
-        GameButton(
-            text = if (available == 3) "看广告 · 续时 20 分钟（解锁 2×/3×）"
-                else "看广告 · 解锁 2×/3×，持续 20 分钟",
-            onClick = onWatchAd,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = adReady,
-            accent = UITheme.Gold,
-            fontSize = 11,
-        )
+        if (remaining > 0L) {
+            Text(
+                "%02d:%02d".format(remaining / 60_000, (remaining / 1_000) % 60),
+                color = UITheme.TextGood,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+fun SpeedUnlockDialog(
+    adReady: Boolean,
+    onDismiss: () -> Unit,
+    onUnlock: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(UITheme.PanelBg)
+                .border(2.dp, UITheme.GoldDark, RoundedCornerShape(14.dp))
+                .padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("解锁游戏倍速", color = UITheme.GoldLight, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "看完 1 条广告，同时解锁 2× / 3×\n持续 20 分钟，下线照常计时",
+                color = UITheme.Cream,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+            )
+            GameButton(
+                if (adReady) "看广告解锁" else "广告暂不可用",
+                onUnlock,
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                enabled = adReady,
+                accent = UITheme.Gold,
+                fontSize = 14,
+            )
+            GameButton(
+                "取消",
+                onDismiss,
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                accent = UITheme.WaterTop,
+                fontSize = 13,
+            )
+        }
     }
 }
 

@@ -393,6 +393,7 @@ class MainActivity : ComponentActivity() {
 
         // 广告礼包弹窗
         var showAdGift by remember { mutableStateOf(false) }
+        var showSpeedUnlock by remember { mutableStateOf(false) }
 
         val context = LocalContext.current
 
@@ -675,7 +676,22 @@ class MainActivity : ComponentActivity() {
                     verticalAlignment = Alignment.Top,
                 ) {
                     MoneyBar(gameState, revision)
-                    CatchStrip(gameState, revision)
+                    Column(horizontalAlignment = Alignment.End) {
+                        CatchStrip(gameState, revision)
+                        Spacer(Modifier.height(6.dp))
+                        SpeedControl(
+                            state = gameState,
+                            revision = revision,
+                            onSelect = { tier ->
+                                if (gameState.selectSpeed(tier)) {
+                                    audio.play("sfx_click", 0.6f)
+                                    saveManager.save(gameState, settings)
+                                    revision++
+                                }
+                            },
+                            onLocked = { showSpeedUnlock = true },
+                        )
+                    }
                 }
 
                 // 金币旁的「广告礼包」入口 + 限时 buff 倒计时。
@@ -702,29 +718,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-
-                // 1×/2×/3× 游戏速度直接放在主画面，不用先钻进广告礼包。
-                Spacer(Modifier.height(5.dp))
-                SpeedControl(
-                    state = gameState,
-                    revision = revision,
-                    adReady = RewardAds.isReady(),
-                    onSelect = { tier ->
-                        if (gameState.selectSpeed(tier)) {
-                            audio.play("sfx_click", 0.6f)
-                            saveManager.save(gameState, settings)
-                            revision++
-                        }
-                    },
-                    onWatchAd = {
-                        requestAd(RewardAds.PLACEMENT_SPEED) {
-                            gameState.unlockSpeed()
-                            saveManager.save(gameState, settings)
-                            revision++
-                            showToast("2×/3× 速度已解锁 20 分钟，可随时切换；离线照常计时")
-                        }
-                    },
-                )
 
                 Spacer(Modifier.height(8.dp))
                 AchievementToast(toast)
@@ -1037,6 +1030,22 @@ class MainActivity : ComponentActivity() {
                 assets = assets,
                 onDismiss = { unlockPopup = null },
             )
+
+            if (showSpeedUnlock) {
+                com.dshx.game.SU.ui.SpeedUnlockDialog(
+                    adReady = RewardAds.isReady(),
+                    onDismiss = { showSpeedUnlock = false },
+                    onUnlock = {
+                        showSpeedUnlock = false
+                        requestAd(RewardAds.PLACEMENT_SPEED) {
+                            gameState.unlockSpeed()
+                            saveManager.save(gameState, settings)
+                            revision++
+                            showToast("2×/3× 已解锁 20 分钟，离线照常计时")
+                        }
+                    },
+                )
+            }
 
             // 广告礼包：金币旁那个图标点开的面板
             if (showAdGift) {
