@@ -278,6 +278,16 @@ object Bestiary {
         seaweedSpacing = 280f,
     )
 
+    // ---------------- 长线经济曲线 ----------------
+    //
+    // 关键指标是**每张图的解锁耗时** = unlockCost ÷ 上一张图的 valueMultiplier。
+    // 旧配置下这个值恒等于 1.15e6，六张图完全一样 —— 于是每张图耗时相同，
+    // 一路买下去半小时就能推到最后一张图，玩家反馈"不用转生就通关了"。
+    //
+    // 现在改成逐级拉长（≈ ×2.6/图）：村口小河 → 芦苇荡约 4 分钟起步，
+    // 最后一张龙渊秘境要熬到上百小时量级，中途必须靠转生 + 技能树滚雪球。
+    // 改 unlockCost 时务必保持相邻两图的耗时递增，BestiaryTest 会守住这条。
+
     /** 1. 村口小河 —— 水浅鱼小，适合练手。 */
     val VILLAGE_CREEK = FishingMap(
         "creek", "村口小河", "水浅鱼小，适合练手。",
@@ -317,7 +327,7 @@ object Bestiary {
     /** 3. 深山碧潭 —— 潭深水冷，藏着年岁久远的老鱼。 */
     val DEEP_POOL = FishingMap(
         "pool", "深山碧潭", "潭深水冷，藏着年岁久远的老鱼。",
-        14_700_000.0, 4_420_000_000.0,
+        14_700_000.0, 1.634e10,
         env = ENV_POOL,
         species = listOf(
             sp("huaqiu", "花鳅", Rarity.COMMON, "fz_huaqiu", 1.0, 0.85),
@@ -335,7 +345,7 @@ object Bestiary {
     /** 4. 急流险滩 —— 水流湍急，只有强健的鱼能立足。 */
     val RAPIDS = FishingMap(
         "rapids", "急流险滩", "水流湍急，只有强健的鱼能立足。",
-        5.66e10, 1.70e13,
+        5.66e10, 2.314e14,
         env = ENV_RAPIDS,
         species = listOf(
             sp("qiaozui", "翘嘴鲌", Rarity.COMMON, "fy_qiaozui", 1.0, 1.00),
@@ -353,7 +363,7 @@ object Bestiary {
     /** 5. 月牙湖 —— 月圆之夜，湖底会浮起金光。 */
     val CRESCENT_LAKE = FishingMap(
         "lake", "月牙湖", "月圆之夜，湖底会浮起金光。",
-        2.17e14, 6.52e16,
+        2.17e14, 3.297e18,
         env = ENV_LAKE,
         species = listOf(
             sp("ziyu", "鲻鱼", Rarity.COMMON, "fy_ziyu", 1.0, 0.98),
@@ -371,7 +381,7 @@ object Bestiary {
     /** 6. 龙渊秘境 —— 传说中龙潜之渊，凡鱼皆已成精。 */
     val DRAGON_ABYSS = FishingMap(
         "abyss", "龙渊秘境", "传说中龙潜之渊，凡鱼皆已成精。",
-        8.35e17, 2.50e20,
+        8.35e17, 4.677e22,
         env = ENV_ABYSS,
         species = listOf(
             sp("wuli", "乌鲤", Rarity.COMMON, "fz_wuli", 1.0, 1.10),

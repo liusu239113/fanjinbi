@@ -109,6 +109,20 @@ class PrestigeTest {
         assertTrue("但远不到十倍 (a=$a b=$b)", b < a * 10)
     }
 
+    /**
+     * 后期珍珠不能失控。
+     *
+     * 旧公式一路开方：累计收入到 1.97e28 时一次转生给 4.2e11 颗珍珠，
+     * 而技能树全点满只要几千颗 —— 一次转生直接把长线成长清零。
+     * 现在超门槛 100 倍后改对数增长，同样收入只给几千颗。
+     */
+    @Test
+    fun `后期珍珠不会一次把技能树点满`() {
+        val huge = Prestige.pearlsFor(1.97e28)
+        assertTrue("后期珍珠应仍是有限量级，实际 $huge", huge < 10_000)
+        assertTrue("但仍应比中期多", huge > Prestige.pearlsFor(1e12))
+    }
+
     @Test
     fun `转生清空本轮进度`() {
         val s = richState()

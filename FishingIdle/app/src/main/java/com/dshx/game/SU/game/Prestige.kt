@@ -1,6 +1,7 @@
 package com.dshx.game.SU.game
 
 import kotlin.math.floor
+import kotlin.math.log10
 import kotlin.math.pow
 
 /**
@@ -15,18 +16,28 @@ object Prestige {
     /** 转生门槛：累计收入达到这个数才能转生。 */
     const val MIN_TOTAL_FOR_PRESTIGE = 1_000_000.0
 
+    /** 平方根区间的上界（相对门槛的倍数）：再往上改走对数增长。 */
+    private const val LINEAR_RATIO_CAP = 100.0
+
     /**
      * 本次转生能获得多少珍珠。
      *
-     * 3 颗打底 —— 第一次转生刚好够把「鱼饵精通」点两级（+50% 收益），
-     * 清空一切之后马上能感觉到"下一轮快多了"。
-     * 之后按累计收入的平方根增长：400 万 → 6 颗，900 万 → 9 颗，1 亿 → 30 颗。
-     * （旧公式是 ^0.42 且不乘系数，第一次转生只给 1 颗 —— 清空全部家当换一颗珍珠，
-     * 玩家自然觉得这功能没意义。）
+     * 前期保持原来的平方根增长，保证"第一次转生够点技能"的手感不变：
+     * 100 万 → 3 颗，400 万 → 6 颗，900 万 → 9 颗，1 亿 → 30 颗。
+     *
+     * 超过门槛 100 倍之后改成**对数增长**。原来的公式一路开方，
+     * 后期会失控 —— 玩家累计收入到 1.97e28 时一次转生能拿 4.2e11 颗珍珠，
+     * 技能树瞬间被点满，长线成长直接消失（技能树全点满只要几千颗）。
+     * 现在同样收入只给约 2900 颗，仍有明显进步，但不会一次毕业。
      */
     fun pearlsFor(totalMoney: Double): Long {
         if (totalMoney < MIN_TOTAL_FOR_PRESTIGE) return 0
-        val raw = 3.0 * (totalMoney / MIN_TOTAL_FOR_PRESTIGE).pow(0.5)
+        val ratio = totalMoney / MIN_TOTAL_FOR_PRESTIGE
+        val raw = if (ratio <= LINEAR_RATIO_CAP) {
+            3.0 * ratio.pow(0.5)
+        } else {
+            30.0 * (1.0 + log10(ratio / LINEAR_RATIO_CAP)).pow(1.5)
+        }
         return floor(raw).toLong().coerceAtLeast(1)
     }
 

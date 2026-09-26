@@ -88,6 +88,29 @@ class BestiaryTest {
         assertEquals("首图应免费", 0.0, maps.first().unlockCost, 0.001)
     }
 
+    /**
+     * 每张图的解锁耗时 = unlockCost ÷ 上一张图的 valueMultiplier。
+     *
+     * 旧配置下这个值恒等于 1.15e6，六张图一模一样 —— 于是每张图耗时相同，
+     * 玩家一路买下去半小时就推到最后一张图，反馈"不用转生就通关了"。
+     * 这里守住两件事：耗时必须逐图明显变长，且总时长不能短到能一口气通关。
+     */
+    @Test
+    fun `每张地图的解锁耗时逐图递增且总量足够长线`() {
+        val maps = Bestiary.maps
+        val costs = (1 until maps.size).map { i ->
+            maps[i].unlockCost / maps[i - 1].valueMultiplier
+        }
+        costs.zipWithNext().forEachIndexed { i, (a, b) ->
+            assertTrue(
+                "第 ${i + 2} 张图的解锁耗时应明显高于第 ${i + 1} 张（$a → $b）",
+                b > a * 1.5,
+            )
+        }
+        val total = costs.sum()
+        assertTrue("总解锁耗时应至少是第一张图的 30 倍，实际 ${total / costs.first()}", total > costs.first() * 30)
+    }
+
     @Test
     fun `后一张地图的常见鱼价值高于前一张的传说鱼`() {
         // 保证换图始终是明显变强，不会出现"新图不如老图"的断层
