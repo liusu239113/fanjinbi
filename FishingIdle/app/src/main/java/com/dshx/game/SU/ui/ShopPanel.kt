@@ -221,14 +221,14 @@ fun ShopPanel(
                                 val nextUpgrade = (Content.upgrades + Content.lateGame + Content.lateGame2)
                                     .asSequence()
                                     .filter { it.visibleWhen(state) && it.buyableWhen(state) &&
-                                        !it.isMaxed(state.owned(it.id), state) && it.price(state.owned(it.id)) > state.money }
-                                    .minByOrNull { it.price(state.owned(it.id)) }
-                                val gap = nextUpgrade?.let { (it.price(state.owned(it.id)) - state.money).coerceAtLeast(200.0) }
+                                        !it.isMaxed(state.owned(it.id), state) && it.price(state.owned(it.id), state) > state.money }
+                                    .minByOrNull { it.price(state.owned(it.id), state) }
+                                val gap = nextUpgrade?.let { (it.price(state.owned(it.id), state) - state.money).coerceAtLeast(200.0) }
                                 val freeUpgrade = (Content.upgrades + Content.lateGame + Content.lateGame2)
                                     .asSequence()
                                     .filter { it.visibleWhen(state) && it.buyableWhen(state) &&
                                         !it.isMaxed(state.owned(it.id), state) }
-                                    .minByOrNull { it.price(state.owned(it.id)) }
+                                    .minByOrNull { it.price(state.owned(it.id), state) }
                                 if (freeUpgrade != null) {
                                     AdActionRow(
                                         assets = assets,
@@ -237,7 +237,7 @@ fun ShopPanel(
                                         desc = when {
                                             freeUpgradeClaimedToday -> "今日已领取，明天继续"
                                             !RewardAds.isReady() -> "广告暂不可用"
-                                            else -> "原价 🪙${formatNumber(freeUpgrade.price(state.owned(freeUpgrade.id)))} · 今日限领 1 次"
+                                            else -> "原价 🪙${formatNumber(freeUpgrade.price(state.owned(freeUpgrade.id), state))} · 今日限领 1 次"
                                         },
                                         enabled = !freeUpgradeClaimedToday && RewardAds.isReady(),
                                         onClick = onFreeUpgrade,
@@ -365,7 +365,7 @@ private fun ItemList(
             .sortedWith(
                 compareBy(
                     { def -> if (def.isMaxed(state.owned(def.id), state)) 1 else 0 },
-                    { def -> def.price(state.owned(def.id)) },
+                    { def -> def.price(state.owned(def.id), state) },
                 )
             )
     }
@@ -477,7 +477,7 @@ private fun ShopItemRow(
 ) {
     val owned = state.owned(def.id)
     val maxed = def.isMaxed(owned, state)
-    val price = def.price(owned)
+    val price = def.price(owned, state)
     val affordable = state.money >= price
     val buyable = !maxed && affordable && def.buyableWhen(state)
 

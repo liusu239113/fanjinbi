@@ -191,9 +191,9 @@ class WorldSimulationTest {
         // 鱼少钓手多：每个钓手最多认领一条鱼，不会有多个钓手抢同一条
         val state = GameState()
         state.money = 1e12
-        repeat(20) { state.buy(Content.byId("helper")!!) }
+        repeat(10) { state.buy(Content.byId("helper")!!) }
         val world = World(state)
-        assertEquals(20, world.helpers.size)
+        assertEquals(10, world.helpers.size)
         assertEquals(GameState.INITIAL_COMMON_FISH, world.fishes.size)
 
         world.advance(45f)

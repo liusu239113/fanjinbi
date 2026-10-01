@@ -38,12 +38,13 @@ object Content {
         PurchasableDef(
             id = "helper", attribute = Attribute.HELPER,
             name = "自动钓手",
-            desc = "雇一名钓手替你钓鱼。最多 20 名，升级可让他一次照看多条鱼。",
-            // 钓手是挂机收益的来源，也是整个放置循环的核心：
-            // 首购价 500 不变（开局手感），但增长底数拉到 2.26 —— 曲线陡到
-            // 必须靠转生 + 技能树才雇得满 20 名，而不是"点几下就一队"。
-            icon = "icon_helper", priceBase = 2.26, priceMultiplier = 500.0,
-            maxPurchases = 20,
+            desc = "雇一名钓手替你钓鱼。最多 10 名，升级可让他一次照看多条鱼。",
+            // 钓手是挂机收益的来源，也是整个放置循环的核心。
+            // 上限从 20 收到 10：钓手数量是**线性**放大收入的，20 名等于
+            // 白送 20 倍，再叠上并行数就是 80 倍 —— 单靠这一项就能把
+            // 长线节奏压成几小时。收到 10 名后，成长压力交回给倍率升级。
+            icon = "icon_helper", priceBase = 2.6, priceMultiplier = 500.0,
+            maxPurchases = 10,
             // 先自己动手钓上几条鱼，钓手才会出现（别一进游戏就挂机）
             visibleWhen = { it.totalCatches >= 8 },
         ),
@@ -86,29 +87,29 @@ object Content {
         PurchasableDef(
             id = "value_mul_common", attribute = Attribute.COMMON_VALUE_MUL,
             name = "小鱼收益 ×", desc = "小鱼收益倍率 +{n}。",
-            icon = "icon_mul_common", priceBase = 2.45, priceMultiplier = 30.0,
-            increaseAmount = 0.2, maxPurchases = 20,
+            icon = "icon_mul_common", priceBase = 2.7, priceMultiplier = 30.0,
+            increaseAmount = 0.1, maxPurchases = 15,
             visibleWhen = { it.commonFish >= 20 },
         ),
         PurchasableDef(
             id = "value_mul_rare", attribute = Attribute.RARE_VALUE_MUL,
             name = "鲤鱼收益 ×", desc = "鲤鱼收益倍率 +{n}。",
-            icon = "icon_mul_rare", priceBase = 2.45, priceMultiplier = 150.0,
-            increaseAmount = 0.2, maxPurchases = 20,
+            icon = "icon_mul_rare", priceBase = 2.7, priceMultiplier = 150.0,
+            increaseAmount = 0.1, maxPurchases = 15,
             visibleWhen = { it.rareFish >= 10 },
         ),
         PurchasableDef(
             id = "value_mul_epic", attribute = Attribute.EPIC_VALUE_MUL,
             name = "锦鲤收益 ×", desc = "锦鲤收益倍率 +{n}。",
-            icon = "icon_mul_epic", priceBase = 2.45, priceMultiplier = 600.0,
-            increaseAmount = 0.2, maxPurchases = 20,
+            icon = "icon_mul_epic", priceBase = 2.7, priceMultiplier = 600.0,
+            increaseAmount = 0.1, maxPurchases = 15,
             visibleWhen = { it.epicFish >= 5 },
         ),
         PurchasableDef(
             id = "value_mul_legend", attribute = Attribute.LEGEND_VALUE_MUL,
             name = "巨口鱼收益 ×", desc = "巨口鱼收益倍率 +{n}。",
-            icon = "icon_mul_legend", priceBase = 2.45, priceMultiplier = 9000.0,
-            increaseAmount = 0.2, maxPurchases = 20,
+            icon = "icon_mul_legend", priceBase = 2.7, priceMultiplier = 9000.0,
+            increaseAmount = 0.1, maxPurchases = 15,
             visibleWhen = { it.legendFish >= 5 },
         ),
 
@@ -213,15 +214,17 @@ object Content {
         PurchasableDef(
             id = "rarity_mul", attribute = Attribute.RARITY_MUL,
             name = "鉴赏眼光", desc = "所有鱼的价值 +{n} 倍率。",
-            icon = "icon_rarity", priceBase = 2.26, priceMultiplier = 25000.0,
-            increaseAmount = 0.15, maxPurchases = 40,
+            // 满级 40×0.15 = ×7，是全局乘数里最大的一项。降到 25×0.06 = ×2.5。
+            icon = "icon_rarity", priceBase = 2.5, priceMultiplier = 25000.0,
+            increaseAmount = 0.06, maxPurchases = 25,
             visibleWhen = { it.epicFish > 0 },
         ),
         PurchasableDef(
             id = "map_bonus", attribute = Attribute.MAP_BONUS,
             name = "水域探索", desc = "当前水域价值倍率 +{n}。",
-            icon = "icon_explore", priceBase = 2.37, priceMultiplier = 500000.0,
-            increaseAmount = 0.25, maxPurchases = 40,
+            // 满级 40×0.25 = ×11。降到 25×0.08 = ×3。
+            icon = "icon_explore", priceBase = 2.6, priceMultiplier = 500000.0,
+            increaseAmount = 0.08, maxPurchases = 25,
             visibleWhen = { it.legendFish > 0 },
         ),
 
@@ -236,11 +239,11 @@ object Content {
         PurchasableDef(
             id = "helper_parallel", attribute = Attribute.HELPER_PARALLEL,
             name = "并行作业", desc = "每名钓手可同时多照看 {n} 条鱼。",
-            // 钓手总数收到 20 之后，这条升级是"扩大挂机产出"的正路，
-            // 但也得真的接线（以前买了完全没用）
+            // 这是**乘数**型升级，直接乘在钓手数量上（10 名 ×4 = 40 倍），
+            // 比任何单价曲线都危险。上限从 3 收到 2，满配也只到 3 倍。
             icon = "icon_parallel", priceBase = 4.4, priceMultiplier = 800000.0,
-            increaseAmount = 1.0, maxPurchases = 3,
-            visibleWhen = { it.helpers >= 10 },
+            increaseAmount = 1.0, maxPurchases = 2,
+            visibleWhen = { it.helpers >= 5 },
         ),
 
         // --- 进阶：连击强化 ---

@@ -1348,7 +1348,7 @@ class MainActivity : ComponentActivity() {
             .asSequence()
             .filter { it.visibleWhen(gameState) && it.buyableWhen(gameState) &&
                 !it.isMaxed(gameState.owned(it.id), gameState) }
-            .minByOrNull { it.price(gameState.owned(it.id)) }
+            .minByOrNull { it.price(gameState.owned(it.id), gameState) }
         if (def == null) {
             showToast("目前没有可升级的项目")
             return
@@ -1371,9 +1371,9 @@ class MainActivity : ComponentActivity() {
             .asSequence()
             .filter { it.visibleWhen(gameState) && it.buyableWhen(gameState) &&
                 !it.isMaxed(gameState.owned(it.id), gameState) &&
-                it.price(gameState.owned(it.id)) > gameState.money }
-            .minByOrNull { it.price(gameState.owned(it.id)) }
-        return next?.let { (it.price(gameState.owned(it.id)) - gameState.money).coerceAtLeast(200.0) }
+                it.price(gameState.owned(it.id), gameState) > gameState.money }
+            .minByOrNull { it.price(gameState.owned(it.id), gameState) }
+        return next?.let { (it.price(gameState.owned(it.id), gameState) - gameState.money).coerceAtLeast(200.0) }
             ?: (gameState.money * 0.12).coerceAtLeast(200.0)
     }
 

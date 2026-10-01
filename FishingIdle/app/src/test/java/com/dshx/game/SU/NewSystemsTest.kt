@@ -67,7 +67,7 @@ class NewSystemsTest {
         assertEquals(1, state.helpers)
         assertEquals(1, state.owned("helper"))
         assertEquals(before, state.money, 0.001)
-        repeat(19) { assertTrue(state.claimFreeHelper()) }
+        repeat(9) { assertTrue(state.claimFreeHelper()) }
         assertFalse(state.claimFreeHelper())
     }
 

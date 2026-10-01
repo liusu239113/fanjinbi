@@ -1,6 +1,7 @@
 package com.dshx.game.SU
 
 import com.dshx.game.SU.game.Achievements
+import com.dshx.game.SU.game.Bestiary
 import com.dshx.game.SU.game.Content
 import com.dshx.game.SU.game.Prestige
 import com.dshx.game.SU.game.Rarity
@@ -34,24 +35,24 @@ class EconomyTest {
         // small_coin: base=1.36, mult=2 → floor(1.36^n * 2)
         // 首购价保持 2 不变（开局手感），只是增长底数拉陡。
         val d = def("common_fish")
-        assertEquals(2.0, d.price(0), 0.001)     // floor(2)       = 2
-        assertEquals(2.0, d.price(1), 0.001)     // floor(2.72)    = 2
-        assertEquals(3.0, d.price(2), 0.001)     // floor(3.6992)  = 3
-        assertEquals(5.0, d.price(3), 0.001)     // floor(5.0309)  = 5
-        assertEquals(6.0, d.price(4), 0.001)     // floor(6.842)   = 6
+        assertEquals(2.0, d.price(0, GameState()), 0.001)     // floor(2)       = 2
+        assertEquals(2.0, d.price(1, GameState()), 0.001)     // floor(2.72)    = 2
+        assertEquals(3.0, d.price(2, GameState()), 0.001)     // floor(3.6992)  = 3
+        assertEquals(5.0, d.price(3, GameState()), 0.001)     // floor(5.0309)  = 5
+        assertEquals(6.0, d.price(4, GameState()), 0.001)     // floor(6.842)   = 6
 
         // medium_coin: base=1.44, mult=200 → floor(1.44^n * 200)
         val m = def("rare_fish")
-        assertEquals(200.0, m.price(0), 0.001)
-        assertEquals(288.0, m.price(1), 0.001)
-        assertEquals(414.0, m.price(2), 0.001)
+        assertEquals(200.0, m.price(0, GameState()), 0.001)
+        assertEquals(288.0, m.price(1, GameState()), 0.001)
+        assertEquals(414.0, m.price(2, GameState()), 0.001)
 
-        // helper: base=2.26, mult=500（首购 500 不变，曲线拉陡，总数 20 名）
+        // helper: base=2.6, mult=500（首购 500 不变，上限收到 10 名）
         val h = def("helper")
-        assertEquals(500.0, h.price(0), 0.001)
-        assertEquals(1130.0, h.price(1), 0.001)    // floor(2.26 * 500)
-        assertEquals(2553.0, h.price(2), 0.001)    // floor(2.26^2 * 500)
-        assertEquals(20, h.maxPurchases)
+        assertEquals(500.0, h.price(0, GameState()), 0.001)
+        assertEquals(1300.0, h.price(1, GameState()), 0.001)    // floor(2.6 * 500)
+        assertEquals(3380.0, h.price(2, GameState()), 0.001)    // floor(2.6^2 * 500)
+        assertEquals(10, h.maxPurchases)
     }
 
     @Test
@@ -63,14 +64,14 @@ class EconomyTest {
     }
 
     @Test
-    fun `钓手上限是20名`() {
+    fun `钓手上限是10名`() {
         val s = GameState()
         s.money = 1e30
         val h = def("helper")
-        repeat(20) { assertTrue("第 ${it + 1} 名应该买得起", s.buy(h)) }
-        assertEquals(20, s.helpers)
-        assertFalse("第 21 名不该再买得到", s.buy(h))
-        assertEquals(20, s.helpers)
+        repeat(10) { assertTrue("第 ${it + 1} 名应该买得起", s.buy(h)) }
+        assertEquals(10, s.helpers)
+        assertFalse("第 11 名不该再买得到", s.buy(h))
+        assertEquals(10, s.helpers)
     }
 
     @Test
@@ -118,7 +119,7 @@ class EconomyTest {
     @Test
     fun `早期成就奖励买不起一整队钓手`() {
         val state = GameState()
-        val squad = (0 until 6).sumOf { Content.byId("helper")!!.price(it) }
+        val squad = (0 until 6).sumOf { Content.byId("helper")!!.price(it, state) }
         val early = listOf(
             "first_catch", "catch_50", "catch_500", "earn_10k", "helper_5",
             "common_50", "rare_10", "combo_15", "combo_40", "single_1k",
@@ -185,7 +186,7 @@ class EconomyTest {
             autoReelUnlocked = true
         }
         assertTrue("买了自动收线又钓够 150 条，才轮到智能浮标", cast.visibleWhen(later))
-        assertTrue("挂机升级要明显比自动收线贵", cast.price(0) > reel.price(0) * 10)
+        assertTrue("挂机升级要明显比自动收线贵", cast.price(0, GameState()) > reel.price(0, GameState()) * 10)
     }
 
     /**
@@ -209,10 +210,10 @@ class EconomyTest {
     @Test
     fun `一次性解锁价格恒定`() {
         val d = def("auto_reel_unlock")
-        assertEquals(6000.0, d.price(0), 0.001)
-        assertEquals(6000.0, d.price(5), 0.001)
+        assertEquals(6000.0, d.price(0, GameState()), 0.001)
+        assertEquals(6000.0, d.price(5, GameState()), 0.001)
         assertEquals(1, d.maxPurchases)
-        assertEquals(250000.0, def("auto_cast_unlock").price(0), 0.001)
+        assertEquals(250000.0, def("auto_cast_unlock").price(0, GameState()), 0.001)
         val cast = def("auto_cast_unlock")
         assertEquals(1, cast.maxPurchases)
     }
@@ -229,15 +230,15 @@ class EconomyTest {
         // 这些是"买了直接变强"的核心成长项，各自满级总花费必须有量级
         val expectations = mapOf(
             "value_add_common" to 1e15,   // 50 级单次收益
-            "value_mul_common" to 1e9,    // 20 级收益倍率
-            "helper" to 1e9,              // 20 名钓手
-            "rarity_mul" to 1e18,         // 40 级全局倍率
-            "map_bonus" to 1e20,          // 40 级水域倍率
+            "value_mul_common" to 1e7,    // 15 级收益倍率
+            "helper" to 1e6,              // 10 名钓手
+            "rarity_mul" to 1e14,         // 25 级全局倍率
+            "map_bonus" to 1e15,          // 25 级水域倍率
         )
         for ((id, minTotal) in expectations) {
             val d = def(id)
             val max = d.effectiveMax(GameState())
-            val total = (0 until max).sumOf { d.price(it) }
+            val total = (0 until max).sumOf { d.price(it, GameState()) }
             assertTrue(
                 "$id 满级总花费 $total 太低（应 >= $minTotal），曲线不够陡",
                 total >= minTotal,
@@ -245,14 +246,45 @@ class EconomyTest {
         }
     }
 
+    /**
+     * 换图不能等于白送。
+     *
+     * 玩家反馈："买个自动鲤鱼，很快就能买自动掉锦鲤，很快就到巨口鱼了，然后几分钟毕业"。
+     * 根因：鱼苗价格是固定绝对值，而鱼的收益随地图倍率放大 ——
+     * 换到高倍率水域后，同样的钱买到几千倍收益，回本时间直接归零。
+     *
+     * 价格与收益同比例缩放后，任何水域的「回本时间」都必须保持一致。
+     */
+    @Test
+    fun `换水域不会让鱼苗白送`() {
+        // 各水域下，买一条传说鱼苗的回本时间应当同量级
+        val paybacks = Bestiary.maps.map { map ->
+            val s = GameState().apply {
+                unlockedMaps.add(map.id)
+                currentMapId = map.id
+            }
+            val fishDef = def("legend_fish")
+            val cost = fishDef.price(0, s)
+            // 真实渔获价值含地图倍率（catchValue(Rarity) 不含，别用错重载）
+            val legendValue = s.catchValue(Rarity.LEGEND) * map.valueMultiplier
+            cost / (legendValue / 2.5)
+        }
+        val min = paybacks.min()
+        val max = paybacks.max()
+        assertTrue(
+            "各水域回本时间应同量级，实际 $paybacks",
+            max < min * 3,
+        )
+    }
+
     /** 首购价必须保持原值：改曲线不能把开局手感一起改掉。 */
     @Test
     fun `商店首购价保持开局手感`() {
-        assertEquals(2.0, def("common_fish").price(0), 0.001)
-        assertEquals(200.0, def("rare_fish").price(0), 0.001)
-        assertEquals(500.0, def("helper").price(0), 0.001)
-        assertEquals(6000.0, def("auto_reel_unlock").price(0), 0.001)
-        assertEquals(250000.0, def("auto_cast_unlock").price(0), 0.001)
+        assertEquals(2.0, def("common_fish").price(0, GameState()), 0.001)
+        assertEquals(200.0, def("rare_fish").price(0, GameState()), 0.001)
+        assertEquals(500.0, def("helper").price(0, GameState()), 0.001)
+        assertEquals(6000.0, def("auto_reel_unlock").price(0, GameState()), 0.001)
+        assertEquals(250000.0, def("auto_cast_unlock").price(0, GameState()), 0.001)
     }
 
     @Test
@@ -306,8 +338,8 @@ class EconomyTest {
         assertEquals(4.0, s.catchValue(Rarity.COMMON), 0.001)  // (1+3)*1
 
         repeat(2) { s.buy(def("value_mul_common")) }
-        // (1 + 3) * (1 + 0.2*2) = 4 * 1.4 = 5.6
-        assertEquals(5.6, s.catchValue(Rarity.COMMON), 0.001)
+        // (1 + 3) * (1 + 0.1*2) = 4 * 1.2 = 4.8
+        assertEquals(4.8, s.catchValue(Rarity.COMMON), 0.001)
     }
 
     @Test
@@ -386,7 +418,7 @@ class EconomyTest {
 
         // 第 7 次购买应按 n=6 计价，而不是从头开始
         // floor(1.36^6 * 2) = floor(12.6537) = 12
-        assertEquals(12.0, def("common_fish").price(restored.owned("common_fish")), 0.001)
+        assertEquals(12.0, def("common_fish").price(restored.owned("common_fish"), restored), 0.001)
         assertEquals(6, restored.owned("common_fish"))
         restored.buy(def("common_fish"))
         assertEquals(7, restored.owned("common_fish"))
@@ -403,14 +435,14 @@ class EconomyTest {
     }
 
     @Test
-    fun `小鱼收益随升级从1增长到255`() {
+    fun `小鱼收益随升级增长`() {
         val s = GameState()
-        // 满级总价约 1.3e14，必须给足金币，否则会因余额不足提前中断
+        // 必须给足金币，否则会因余额不足提前中断
         s.money = 1e30
         repeat(50) { assertTrue(s.buy(def("value_add_common"))) }   // +1 × 50
-        repeat(20) { assertTrue(s.buy(def("value_mul_common"))) }   // +0.2 × 20 = ×5
-        // (1 + 50) * 5 = 255
-        assertEquals(255.0, s.catchValue(Rarity.COMMON), 0.001)
+        repeat(15) { assertTrue(s.buy(def("value_mul_common"))) }   // +0.1 × 15 = ×2.5
+        // (1 + 50) * 2.5 = 127.5
+        assertEquals(127.5, s.catchValue(Rarity.COMMON), 0.001)
     }
 
     @Test

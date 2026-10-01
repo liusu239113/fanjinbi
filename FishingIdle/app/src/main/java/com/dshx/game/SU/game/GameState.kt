@@ -778,7 +778,7 @@ class GameState {
         val ownedCount = owned(def.id)
         if (def.isMaxed(ownedCount, this)) return false
         if (!def.buyableWhen(this)) return false
-        val p = def.price(ownedCount)
+        val p = def.price(ownedCount, this)
         if (money < p) return false
         money -= p
         applyPurchase(def)

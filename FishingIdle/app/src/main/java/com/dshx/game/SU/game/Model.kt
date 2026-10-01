@@ -24,9 +24,24 @@ data class PurchasableDef(
     /** 满足该条件才能购买。 */
     val buyableWhen: (GameState) -> Boolean = { true },
 ) {
-    fun price(owned: Int): Double {
-        if (priceBase <= 0.0) return flatOffset
-        return floor(priceBase.pow(owned) * priceMultiplier + flatOffset)
+    /**
+     * 当前价格。
+     *
+     * ⚠️ 必须随**当前水域倍率**一起缩放。鱼的收益 = 基础值 × 地图倍率，
+     * 而商店价格原本是个固定绝对值 —— 于是换到高倍率水域后，同样的钱
+     * 能买到几千倍收益的鱼苗/升级，回本时间直接归零，玩家反馈
+     * 「买个自动鲤鱼，很快就能买自动掉锦鲤，几分钟毕业」。
+     *
+     * 价格与收益同比例缩放后，任何水域的「回本时间」都保持一致，
+     * 换图不再等于白送一整套鱼苗；长线节奏交回给地图解锁门槛控制。
+     */
+    fun price(owned: Int, state: GameState): Double {
+        val raw = if (priceBase <= 0.0) {
+            flatOffset
+        } else {
+            floor(priceBase.pow(owned) * priceMultiplier + flatOffset)
+        }
+        return raw * state.currentMap.valueMultiplier
     }
 
     /**
