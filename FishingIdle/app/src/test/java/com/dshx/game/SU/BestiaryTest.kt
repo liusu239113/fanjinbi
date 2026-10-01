@@ -91,24 +91,41 @@ class BestiaryTest {
     /**
      * 每张图的解锁耗时 = unlockCost ÷ 上一张图的 valueMultiplier。
      *
-     * 旧配置下这个值恒等于 1.15e6，六张图一模一样 —— 于是每张图耗时相同，
-     * 玩家一路买下去半小时就推到最后一张图，反馈"不用转生就通关了"。
-     * 这里守住两件事：耗时必须逐图明显变长，且总时长不能短到能一口气通关。
+     * 这个值衡量"攒多久才买得起下一张图"，与鱼的绝对价值无关。
+     * 历史问题：最初它恒等于 1.15e6（六张图一样，半小时通关）；
+     * 后来改成均匀 ×3.7 仍偏快，玩家反馈"商店随便买几下就到下一个水域"。
+     *
+     * 这里守住三条设计意图：
+     *  1. 相邻跨度必须**逐级拉大**（不是均匀翻倍）—— 越往后墙越硬；
+     *  2. 总时长要够长，必须靠转生滚雪球而不是"多点几下"；
+     *  3. 首图门槛不动，保证开局手感。
      */
     @Test
-    fun `每张地图的解锁耗时逐图递增且总量足够长线`() {
+    fun `每张地图的解锁耗时逐图递增且跨度逐级拉大`() {
         val maps = Bestiary.maps
         val costs = (1 until maps.size).map { i ->
             maps[i].unlockCost / maps[i - 1].valueMultiplier
         }
-        costs.zipWithNext().forEachIndexed { i, (a, b) ->
+
+        // 1. 每次跨度本身也要递增：后一段的倍数 > 前一段
+        val steps = costs.zipWithNext { a, b -> b / a }
+        steps.zipWithNext().forEachIndexed { i, (prev, next) ->
             assertTrue(
-                "第 ${i + 2} 张图的解锁耗时应明显高于第 ${i + 1} 张（$a → $b）",
-                b > a * 1.5,
+                "跨度应逐级拉大：第 ${i + 2} 段 ×$prev 不应小于第 ${i + 1} 段 ×$next",
+                next > prev,
             )
         }
+        assertTrue("每段跨度都应明显（至少 ×3），实际 $steps", steps.all { it >= 3.0 })
+
+        // 2. 总量足够长线
         val total = costs.sum()
-        assertTrue("总解锁耗时应至少是第一张图的 30 倍，实际 ${total / costs.first()}", total > costs.first() * 30)
+        assertTrue(
+            "总解锁耗时应至少是第一张图的 1000 倍，实际 ${total / costs.first()}",
+            total > costs.first() * 1000,
+        )
+
+        // 3. 首图门槛保持原值（开局手感不变）
+        assertEquals("芦苇荡的解锁价应保持 1.15e6", 1_150_000.0, maps[1].unlockCost, 1.0)
     }
 
     @Test
