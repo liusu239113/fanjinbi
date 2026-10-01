@@ -31,26 +31,26 @@ class EconomyTest {
 
     @Test
     fun `价格公式与原版一致`() {
-        // small_coin: base=1.3, mult=2  → floor(1.3^n * 2)
+        // small_coin: base=1.36, mult=2 → floor(1.36^n * 2)
+        // 首购价保持 2 不变（开局手感），只是增长底数拉陡。
         val d = def("common_fish")
-        assertEquals(2.0, d.price(0), 0.001)     // floor(2)      = 2
-        assertEquals(2.0, d.price(1), 0.001)     // floor(2.6)    = 2
-        assertEquals(3.0, d.price(2), 0.001)     // floor(3.38)   = 3
-        assertEquals(4.0, d.price(3), 0.001)     // floor(4.394)  = 4
-        assertEquals(5.0, d.price(4), 0.001)     // floor(5.7122) = 5
-        assertEquals(7.0, d.price(5), 0.001)     // floor(7.4259) = 7
+        assertEquals(2.0, d.price(0), 0.001)     // floor(2)       = 2
+        assertEquals(2.0, d.price(1), 0.001)     // floor(2.72)    = 2
+        assertEquals(3.0, d.price(2), 0.001)     // floor(3.6992)  = 3
+        assertEquals(5.0, d.price(3), 0.001)     // floor(5.0309)  = 5
+        assertEquals(6.0, d.price(4), 0.001)     // floor(6.842)   = 6
 
-        // medium_coin: base=1.3, mult=200 → floor(1.3^n * 200)
+        // medium_coin: base=1.44, mult=200 → floor(1.44^n * 200)
         val m = def("rare_fish")
         assertEquals(200.0, m.price(0), 0.001)
-        assertEquals(260.0, m.price(1), 0.001)
-        assertEquals(338.0, m.price(2), 0.001)
+        assertEquals(288.0, m.price(1), 0.001)
+        assertEquals(414.0, m.price(2), 0.001)
 
-        // helper: base=1.75, mult=500（门槛比早期版本高，总数收到 20 名）
+        // helper: base=2.26, mult=500（首购 500 不变，曲线拉陡，总数 20 名）
         val h = def("helper")
         assertEquals(500.0, h.price(0), 0.001)
-        assertEquals(875.0, h.price(1), 0.001)     // floor(1.75 * 500)
-        assertEquals(1531.0, h.price(2), 0.001)    // floor(1.75^2 * 500)
+        assertEquals(1130.0, h.price(1), 0.001)    // floor(2.26 * 500)
+        assertEquals(2553.0, h.price(2), 0.001)    // floor(2.26^2 * 500)
         assertEquals(20, h.maxPurchases)
     }
 
@@ -217,6 +217,44 @@ class EconomyTest {
         assertEquals(1, cast.maxPurchases)
     }
 
+    /**
+     * 商店曲线必须足够陡，否则「买几下就指数级毕业」。
+     *
+     * 玩家反馈原话："跑商店去随便买几下就直接指数级上升…买点商店，瞬间就全毕业了"。
+     * 首购价保持原值（开局手感不变），但每条曲线的**总花费**要够高，
+     * 保证满级是长线目标而不是几分钟的事。
+     */
+    @Test
+    fun `商店升级曲线足够陡峭不会瞬间毕业`() {
+        // 这些是"买了直接变强"的核心成长项，各自满级总花费必须有量级
+        val expectations = mapOf(
+            "value_add_common" to 1e15,   // 50 级单次收益
+            "value_mul_common" to 1e9,    // 20 级收益倍率
+            "helper" to 1e9,              // 20 名钓手
+            "rarity_mul" to 1e18,         // 40 级全局倍率
+            "map_bonus" to 1e20,          // 40 级水域倍率
+        )
+        for ((id, minTotal) in expectations) {
+            val d = def(id)
+            val max = d.effectiveMax(GameState())
+            val total = (0 until max).sumOf { d.price(it) }
+            assertTrue(
+                "$id 满级总花费 $total 太低（应 >= $minTotal），曲线不够陡",
+                total >= minTotal,
+            )
+        }
+    }
+
+    /** 首购价必须保持原值：改曲线不能把开局手感一起改掉。 */
+    @Test
+    fun `商店首购价保持开局手感`() {
+        assertEquals(2.0, def("common_fish").price(0), 0.001)
+        assertEquals(200.0, def("rare_fish").price(0), 0.001)
+        assertEquals(500.0, def("helper").price(0), 0.001)
+        assertEquals(6000.0, def("auto_reel_unlock").price(0), 0.001)
+        assertEquals(250000.0, def("auto_cast_unlock").price(0), 0.001)
+    }
+
     @Test
     fun `金币不足时购买失败`() {
         val s = GameState()
@@ -347,8 +385,8 @@ class EconomyTest {
         restored.money = 1e9
 
         // 第 7 次购买应按 n=6 计价，而不是从头开始
-        // floor(1.3^6 * 2) = floor(9.6536) = 9
-        assertEquals(9.0, def("common_fish").price(restored.owned("common_fish")), 0.001)
+        // floor(1.36^6 * 2) = floor(12.6537) = 12
+        assertEquals(12.0, def("common_fish").price(restored.owned("common_fish")), 0.001)
         assertEquals(6, restored.owned("common_fish"))
         restored.buy(def("common_fish"))
         assertEquals(7, restored.owned("common_fish"))

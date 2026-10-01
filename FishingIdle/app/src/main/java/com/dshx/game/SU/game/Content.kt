@@ -12,26 +12,26 @@ object Content {
         PurchasableDef(
             id = "common_fish", attribute = Attribute.COMMON_FISH,
             name = "小鱼", desc = "在钓场多放一条小鱼。基础收益 {v} 金币。",
-            icon = "fish_common", priceBase = 1.3, priceMultiplier = 2.0,
+            icon = "fish_common", priceBase = 1.36, priceMultiplier = 2.0,
             maxPurchases = 100,
         ),
         PurchasableDef(
             id = "rare_fish", attribute = Attribute.RARE_FISH,
             name = "鲤鱼", desc = "放入一条鲤鱼。基础收益 {v} 金币。",
-            icon = "fish_rare", priceBase = 1.3, priceMultiplier = 200.0,
+            icon = "fish_rare", priceBase = 1.44, priceMultiplier = 200.0,
             maxPurchases = 50,
         ),
         PurchasableDef(
             id = "epic_fish", attribute = Attribute.EPIC_FISH,
             name = "锦鲤", desc = "放入一条锦鲤。基础收益 {v} 金币。",
-            icon = "fish_epic", priceBase = 1.3, priceMultiplier = 5000.0,
+            icon = "fish_epic", priceBase = 1.55, priceMultiplier = 5000.0,
             maxPurchases = 30,
             visibleWhen = { it.rareFish > 0 },
         ),
         PurchasableDef(
             id = "legend_fish", attribute = Attribute.LEGEND_FISH,
             name = "传说鱼苗", desc = "放入一条中华鲟级别的名贵鱼。基础收益 {v} 金币。",
-            icon = "fw_xunyu", priceBase = 1.3, priceMultiplier = 80000.0,
+            icon = "fw_xunyu", priceBase = 1.71, priceMultiplier = 80000.0,
             maxPurchases = 20,
             visibleWhen = { it.epicFish > 0 },
         ),
@@ -40,9 +40,9 @@ object Content {
             name = "自动钓手",
             desc = "雇一名钓手替你钓鱼。最多 20 名，升级可让他一次照看多条鱼。",
             // 钓手是挂机收益的来源，也是整个放置循环的核心：
-            // 起步价抬高、曲线拉陡（1.75^n × 500），并把总数收到 20 名 ——
-            // 之前 1.6^n × 120 起步只要 120 金币，开局几分钟就能雇满一队。
-            icon = "icon_helper", priceBase = 1.75, priceMultiplier = 500.0,
+            // 首购价 500 不变（开局手感），但增长底数拉到 2.26 —— 曲线陡到
+            // 必须靠转生 + 技能树才雇得满 20 名，而不是"点几下就一队"。
+            icon = "icon_helper", priceBase = 2.26, priceMultiplier = 500.0,
             maxPurchases = 20,
             // 先自己动手钓上几条鱼，钓手才会出现（别一进游戏就挂机）
             visibleWhen = { it.totalCatches >= 8 },
@@ -56,28 +56,28 @@ object Content {
         PurchasableDef(
             id = "value_add_common", attribute = Attribute.COMMON_VALUE_ADD,
             name = "鱼饵改良", desc = "每条小鱼收益 +{n} 金币。",
-            icon = "icon_bait_common", priceBase = 1.8, priceMultiplier = 40.0,
+            icon = "icon_bait_common", priceBase = 1.98, priceMultiplier = 40.0,
             increaseAmount = 1.0, maxPurchases = 50,
             visibleWhen = { it.commonFish > 0 },
         ),
         PurchasableDef(
             id = "value_add_rare", attribute = Attribute.RARE_VALUE_ADD,
             name = "鲤鱼鱼饵", desc = "每条鲤鱼收益 +{n} 金币。",
-            icon = "icon_bait_rare", priceBase = 1.8, priceMultiplier = 200.0,
+            icon = "icon_bait_rare", priceBase = 1.98, priceMultiplier = 200.0,
             increaseAmount = 5.0, maxPurchases = 50,
             visibleWhen = { it.rareFish > 0 },
         ),
         PurchasableDef(
             id = "value_add_epic", attribute = Attribute.EPIC_VALUE_ADD,
             name = "锦鲤鱼饵", desc = "每条锦鲤收益 +{n} 金币。",
-            icon = "icon_bait_epic", priceBase = 1.8, priceMultiplier = 800.0,
+            icon = "icon_bait_epic", priceBase = 1.98, priceMultiplier = 800.0,
             increaseAmount = 30.0, maxPurchases = 50,
             visibleWhen = { it.epicFish > 0 },
         ),
         PurchasableDef(
             id = "value_add_legend", attribute = Attribute.LEGEND_VALUE_ADD,
             name = "深海鱼饵", desc = "每条巨口鱼收益 +{n} 金币。",
-            icon = "icon_bait_legend", priceBase = 1.8, priceMultiplier = 12000.0,
+            icon = "icon_bait_legend", priceBase = 1.98, priceMultiplier = 12000.0,
             increaseAmount = 150.0, maxPurchases = 50,
             visibleWhen = { it.legendFish > 0 },
         ),
@@ -86,28 +86,28 @@ object Content {
         PurchasableDef(
             id = "value_mul_common", attribute = Attribute.COMMON_VALUE_MUL,
             name = "小鱼收益 ×", desc = "小鱼收益倍率 +{n}。",
-            icon = "icon_mul_common", priceBase = 1.9, priceMultiplier = 30.0,
+            icon = "icon_mul_common", priceBase = 2.45, priceMultiplier = 30.0,
             increaseAmount = 0.2, maxPurchases = 20,
             visibleWhen = { it.commonFish >= 20 },
         ),
         PurchasableDef(
             id = "value_mul_rare", attribute = Attribute.RARE_VALUE_MUL,
             name = "鲤鱼收益 ×", desc = "鲤鱼收益倍率 +{n}。",
-            icon = "icon_mul_rare", priceBase = 1.9, priceMultiplier = 150.0,
+            icon = "icon_mul_rare", priceBase = 2.45, priceMultiplier = 150.0,
             increaseAmount = 0.2, maxPurchases = 20,
             visibleWhen = { it.rareFish >= 10 },
         ),
         PurchasableDef(
             id = "value_mul_epic", attribute = Attribute.EPIC_VALUE_MUL,
             name = "锦鲤收益 ×", desc = "锦鲤收益倍率 +{n}。",
-            icon = "icon_mul_epic", priceBase = 1.9, priceMultiplier = 600.0,
+            icon = "icon_mul_epic", priceBase = 2.45, priceMultiplier = 600.0,
             increaseAmount = 0.2, maxPurchases = 20,
             visibleWhen = { it.epicFish >= 5 },
         ),
         PurchasableDef(
             id = "value_mul_legend", attribute = Attribute.LEGEND_VALUE_MUL,
             name = "巨口鱼收益 ×", desc = "巨口鱼收益倍率 +{n}。",
-            icon = "icon_mul_legend", priceBase = 1.9, priceMultiplier = 9000.0,
+            icon = "icon_mul_legend", priceBase = 2.45, priceMultiplier = 9000.0,
             increaseAmount = 0.2, maxPurchases = 20,
             visibleWhen = { it.legendFish >= 5 },
         ),
@@ -116,7 +116,7 @@ object Content {
         PurchasableDef(
             id = "reel_speed_common", attribute = Attribute.COMMON_REEL_SPEED,
             name = "快收线轮", desc = "小鱼收线速度 +{n}。",
-            icon = "icon_reel_common", priceBase = 1.5, priceMultiplier = 500.0,
+            icon = "icon_reel_common", priceBase = 1.95, priceMultiplier = 500.0,
             increaseAmount = 0.1, maxPurchases = 20,
             visibleWhen = { it.commonFish >= 20 },
             buyableWhen = { it.commonFish >= 2 },
@@ -124,21 +124,21 @@ object Content {
         PurchasableDef(
             id = "reel_speed_rare", attribute = Attribute.RARE_REEL_SPEED,
             name = "碳素线轮", desc = "鲤鱼收线速度 +{n}。",
-            icon = "icon_reel_rare", priceBase = 1.5, priceMultiplier = 1500.0,
+            icon = "icon_reel_rare", priceBase = 1.95, priceMultiplier = 1500.0,
             increaseAmount = 0.15, maxPurchases = 20,
             visibleWhen = { it.rareFish >= 10 },
         ),
         PurchasableDef(
             id = "reel_speed_epic", attribute = Attribute.EPIC_REEL_SPEED,
             name = "液压绞盘", desc = "锦鲤收线速度 +{n}。",
-            icon = "icon_reel_epic", priceBase = 1.5, priceMultiplier = 4000.0,
+            icon = "icon_reel_epic", priceBase = 1.95, priceMultiplier = 4000.0,
             increaseAmount = 0.2, maxPurchases = 20,
             visibleWhen = { it.epicFish >= 5 },
         ),
         PurchasableDef(
             id = "reel_speed_legend", attribute = Attribute.LEGEND_REEL_SPEED,
             name = "深渊绞盘", desc = "巨口鱼收线速度 +{n}。",
-            icon = "icon_reel_legend", priceBase = 1.5, priceMultiplier = 60000.0,
+            icon = "icon_reel_legend", priceBase = 1.95, priceMultiplier = 60000.0,
             increaseAmount = 0.2, maxPurchases = 20,
             visibleWhen = { it.legendFish >= 5 },
         ),
@@ -147,7 +147,7 @@ object Content {
         PurchasableDef(
             id = "auto_reel_chance", attribute = Attribute.AUTO_REEL_CHANCE,
             name = "自动重抛", desc = "钓上鱼后有 {n} 概率立刻再来一竿，不用重新抛。",
-            icon = "icon_recast", priceBase = 1.9, priceMultiplier = 150.0,
+            icon = "icon_recast", priceBase = 2.69, priceMultiplier = 150.0,
             increaseAmount = 0.05, maxPurchases = 15,
             visibleWhen = { it.rareFish > 0 },
         ),
@@ -174,7 +174,7 @@ object Content {
         PurchasableDef(
             id = "helper_efficiency", attribute = Attribute.HELPER_EFFICIENCY,
             name = "钓手训练", desc = "钓手工作效率 +{n}。",
-            icon = "icon_train", priceBase = 1.9, priceMultiplier = 30.0,
+            icon = "icon_train", priceBase = 2.45, priceMultiplier = 30.0,
             increaseAmount = 0.15, maxPurchases = 20,
             visibleWhen = { it.helpers > 0 },
         ),
@@ -213,14 +213,14 @@ object Content {
         PurchasableDef(
             id = "rarity_mul", attribute = Attribute.RARITY_MUL,
             name = "鉴赏眼光", desc = "所有鱼的价值 +{n} 倍率。",
-            icon = "icon_rarity", priceBase = 2.0, priceMultiplier = 25000.0,
+            icon = "icon_rarity", priceBase = 2.26, priceMultiplier = 25000.0,
             increaseAmount = 0.15, maxPurchases = 40,
             visibleWhen = { it.epicFish > 0 },
         ),
         PurchasableDef(
             id = "map_bonus", attribute = Attribute.MAP_BONUS,
             name = "水域探索", desc = "当前水域价值倍率 +{n}。",
-            icon = "icon_explore", priceBase = 2.1, priceMultiplier = 500000.0,
+            icon = "icon_explore", priceBase = 2.37, priceMultiplier = 500000.0,
             increaseAmount = 0.25, maxPurchases = 40,
             visibleWhen = { it.legendFish > 0 },
         ),
@@ -229,7 +229,7 @@ object Content {
         PurchasableDef(
             id = "helper_speed", attribute = Attribute.HELPER_SPEED,
             name = "钓手轮班", desc = "钓手划船速度 +{n}。",
-            icon = "icon_shift", priceBase = 1.9, priceMultiplier = 8000.0,
+            icon = "icon_shift", priceBase = 2.32, priceMultiplier = 8000.0,
             increaseAmount = 0.2, maxPurchases = 25,
             visibleWhen = { it.helpers >= 3 },
         ),
@@ -238,7 +238,7 @@ object Content {
             name = "并行作业", desc = "每名钓手可同时多照看 {n} 条鱼。",
             // 钓手总数收到 20 之后，这条升级是"扩大挂机产出"的正路，
             // 但也得真的接线（以前买了完全没用）
-            icon = "icon_parallel", priceBase = 2.2, priceMultiplier = 800000.0,
+            icon = "icon_parallel", priceBase = 4.4, priceMultiplier = 800000.0,
             increaseAmount = 1.0, maxPurchases = 3,
             visibleWhen = { it.helpers >= 10 },
         ),
@@ -247,14 +247,14 @@ object Content {
         PurchasableDef(
             id = "combo_power", attribute = Attribute.COMBO_POWER,
             name = "行云流水", desc = "连击收益加成每层 +{n}。",
-            icon = "icon_combo", priceBase = 1.9, priceMultiplier = 60000.0,
+            icon = "icon_combo", priceBase = 2.32, priceMultiplier = 60000.0,
             increaseAmount = 0.02, maxPurchases = 25,
             visibleWhen = { it.bestCombo >= 10 },
         ),
         PurchasableDef(
             id = "combo_keep", attribute = Attribute.COMBO_KEEP,
             name = "稳如磐石", desc = "脱钩时保留 {n} 的连击层数。",
-            icon = "icon_combo_keep", priceBase = 2.0, priceMultiplier = 300000.0,
+            icon = "icon_combo_keep", priceBase = 4.0, priceMultiplier = 300000.0,
             increaseAmount = 0.25, maxPurchases = 4,
             visibleWhen = { it.bestCombo >= 20 },
         ),
@@ -263,14 +263,14 @@ object Content {
         PurchasableDef(
             id = "auto_reel_speed", attribute = Attribute.AUTO_REEL_SPEED,
             name = "自动绞盘", desc = "自动重抛的间隔缩短（每级 +{n} 速率）。",
-            icon = "icon_winch", priceBase = 1.9, priceMultiplier = 400000.0,
+            icon = "icon_winch", priceBase = 2.45, priceMultiplier = 400000.0,
             increaseAmount = 0.3, maxPurchases = 20,
             visibleWhen = { it.autoReelChance > 0.0 },
         ),
         PurchasableDef(
             id = "lucky_hook", attribute = Attribute.LUCKY_HOOK,
             name = "幸运鱼钩", desc = "钓到高稀有度鱼的概率 +{n}。",
-            icon = "icon_lucky", priceBase = 2.1, priceMultiplier = 1_200_000.0,
+            icon = "icon_lucky", priceBase = 2.47, priceMultiplier = 1_200_000.0,
             increaseAmount = 0.12, maxPurchases = 30,
             visibleWhen = { it.rareFish > 0 },
         ),
