@@ -114,7 +114,10 @@ fun GearPanel(
         Spacer(Modifier.height(5.dp))
 
         if (bag.isEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+            // 空背包：给一块**固定高度**的提示区，别用 weight(1f)。
+            // 外层 Column 不可滚动，weight(1f) 会把这块撑满剩余空间，
+            // 提示文字又居中，结果"背包（N）"与提示之间空出一大片。
+            Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
                 Text(
                     "背包是空的\n开箱试试手气",
                     color = UITheme.TextDim, fontSize = 12.sp, textAlign = TextAlign.Center,

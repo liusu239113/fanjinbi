@@ -217,9 +217,24 @@ class GameState {
     /** 已开箱次数，用于让箱价递增（开得越多越贵）。 */
     var gearBoxesOpened: Long = 0L
 
-    /** 金币开箱的价格：随开箱次数递增，避免无限刷。 */
-    fun gearBoxPrice(): Double =
-        50_000.0 * Math.pow(1.35, gearBoxesOpened.toDouble()) * currentMap.valueMultiplier
+    /**
+     * 金币开箱的价格。
+     *
+     * 早先只有 `50_000 × 地图倍率` 这一项：玩家的「渔获价值」升级会把单条鱼
+     * 的价值抬高几十上百倍，箱价却原地踏步 —— 到后期"一箱还不如一条鱼值钱"，
+     * 抽装备等于白送，装备系统直接失去意义。
+     *
+     * 现在把**当前渔获价值**也乘进去：箱价始终是玩家收入的固定倍数，
+     * 前期（价值 = 1）与原来的 50_000 完全一致，后期自动水涨船高。
+     * 再叠加开箱次数递增，避免无限刷。
+     */
+    fun gearBoxPrice(): Double {
+        val valueScale = catchValue(Rarity.COMMON) * currentMap.valueMultiplier
+        return BOX_BASE_PRICE * valueScale * Math.pow(1.35, gearBoxesOpened.toDouble())
+    }
+
+    /** 箱价基数：与"当前渔获价值"相乘，保证各阶段都是笔要掂量的钱。 */
+    private val BOX_BASE_PRICE = 50_000.0
 
     /**
      * 花金币开一件装备。金币不足返回 null。
@@ -377,6 +392,24 @@ class GameState {
 
     /** 鱼贩来过的次数（统计用）。 */
     var merchantVisits: Int = 0
+
+    // ---- 水族馆（展缸）----
+    // 仓库里的鱼只有两个去处：卖掉换钱，或放进鱼缸永久展出。
+    // 展出的鱼不再能卖，但按「稀有度 × 体型 × 鱼种」给**永久挂机收益加成**。
+    // 这是仓库真正的取舍点 —— 卖是即时收益，养是长线复利。
+
+    /** 鱼缸里展出的鱼（按入缸顺序）。 */
+    val aquarium: MutableList<StoredFish> = mutableListOf()
+
+    /** 已购买的缸位扩容次数。 */
+    var aquariumUpgrades: Int = 0
+
+    /** 展出的鱼带来的挂机收益加成（0.12 = +12%）。 */
+    val aquariumBonus: Double
+        get() = aquarium.sumOf { Aquarium.bonusOf(it) }
+
+    /** 鱼缸里的鱼总估值，用于界面展示。 */
+    fun aquariumWorth(now: Long): Double = Warehouse.marketTotal(aquarium, now)
 
     // ---- 每日任务 ----
     /** 当前是第几天（UTC 天数），用于判断是否要重置。 */
@@ -644,6 +677,20 @@ class GameState {
         get() = 1.0 + gearStat(GearStat.VALUE_BONUS)
 
     /**
+     * 拍卖场里的"声望"：转生次数、装备的渔获价值加成、当前角色的档次。
+     *
+     * 拍卖价**必须**随账号成长而放大，否则一条鱼的价值在后期完全被通胀淹没，
+     * 拍卖就成了摆设。这里把三样东西折算成一个无量纲系数，喂给
+     * [AuctionSession.open]：声望越高，越容易招来收藏家/鉴定师，心理上限也越高。
+     *
+     * 用对数而不是线性：转生到几十次时不该让价格失控。
+     */
+    val auctionRenown: Double
+        get() = prestigeCount * 0.35 +
+            kotlin.math.ln(1.0 + gearStat(GearStat.VALUE_BONUS) * 4.0) * 0.8 +
+            currentCharacter.rodSkill.ordinal * 0.12
+
+    /**
      * 具体鱼种的价值 = 稀有度基础价值 × 该鱼种倍率 × 地图倍率。
      * 地图倍率是长线成长的主轴。
      */
@@ -893,6 +940,22 @@ class GameState {
         it.gearEquipped = gear.equipped.values.toMutableList()
         it.gearBag = gear.bag.toMutableList()
         it.gearBoxesOpened = gearBoxesOpened
+        // 仓库与水族馆：鱼是玩家资产，两条路径（SaveManager 直读 state、
+        // 测试走 toSave/loadFrom）都必须带上，否则往返测试覆盖不到。
+        it.warehouseSpecies = warehouse.map { f -> f.speciesId }.toMutableList()
+        it.warehouseSize = warehouse.map { f -> f.sizeOrdinal }.toMutableList()
+        it.warehouseValue = warehouse.map { f -> f.baseValue }.toMutableList()
+        it.warehouseStoredAt = warehouse.map { f -> f.storedAt }.toMutableList()
+        it.warehouseFirstCatch = warehouse.map { f -> f.firstCatch }.toMutableList()
+        it.warehouseUpgrades = warehouseUpgrades
+        it.warehouseEarned = warehouseEarned
+        it.merchantVisits = merchantVisits
+        it.aquariumSpecies = aquarium.map { f -> f.speciesId }.toMutableList()
+        it.aquariumSize = aquarium.map { f -> f.sizeOrdinal }.toMutableList()
+        it.aquariumValue = aquarium.map { f -> f.baseValue }.toMutableList()
+        it.aquariumStoredAt = aquarium.map { f -> f.storedAt }.toMutableList()
+        it.aquariumFirstCatch = aquarium.map { f -> f.firstCatch }.toMutableList()
+        it.aquariumUpgrades = aquariumUpgrades
         it.money = money
         it.totalMoney = totalMoney
         it.highestMoney = highestMoney
@@ -940,6 +1003,15 @@ class GameState {
         unlockedMaps.clear()
         unlockedMaps.add(Bestiary.maps.first().id)
         currentMapId = Bestiary.maps.first().id
+        warehouse.clear()
+        warehouseUpgrades = 0
+        warehouseEarned = 0.0
+        merchantVisits = 0
+        aquarium.clear()
+        aquariumUpgrades = 0
+        gear.equipped.clear()
+        gear.bag.clear()
+        gearBoxesOpened = 0
         resetAttributes()
         SkillTree.applyAll(this)
     }
@@ -1020,6 +1092,21 @@ class GameState {
         merchantTimer = Warehouse.MERCHANT_INTERVAL
         merchantOffer = null
         merchantStay = 0f
+
+        // ---- 水族馆 ----
+        aquarium.clear()
+        for (i in data.aquariumSpecies.indices) {
+            aquarium.add(
+                StoredFish(
+                    speciesId = data.aquariumSpecies.getOrElse(i) { "" },
+                    sizeOrdinal = data.aquariumSize.getOrElse(i) { 0 },
+                    baseValue = data.aquariumValue.getOrElse(i) { 0.0 },
+                    storedAt = data.aquariumStoredAt.getOrElse(i) { 0L },
+                    firstCatch = data.aquariumFirstCatch.getOrElse(i) { false },
+                )
+            )
+        }
+        aquariumUpgrades = data.aquariumUpgrades
 
         money = data.money
         totalMoney = data.totalMoney

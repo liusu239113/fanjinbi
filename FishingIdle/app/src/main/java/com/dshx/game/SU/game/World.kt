@@ -55,19 +55,22 @@ object Space {
  * 换船体素材必须同步更新这里，不然船会沉进水里或浮在半空。
  */
 object BoatArt {
-    /** 帮手立绘高度（世界单位）。 */
-    const val HEIGHT = 170f
-
     /**
-     * 主角立绘高度（世界单位），比帮手矮一截。
+     * 立绘的**有效内容高度**（世界单位）—— 从船底木色（水位线）量到帽子/竿顶，
+     * **不含**素材四周的透明留白。
      *
-     * 主角素材是 384×256（3:2）、帮手是 192×192（1:1）。两张按**同一高度**画出来，
-     * 主角那条船会宽出整整 50%，摆在帮手旁边完全不是一个体量，看着很别扭。
-     * 按这个高度画，主角船的宽度才和帮手船接近（约 186 : 170 世界单位）。
+     * 为什么必须按内容高而不是整帧高来统一尺寸：
+     * 素材是 AI 生成的，16 套主角皮肤的整帧留白各不相同（内容占整帧高的
+     * 0.66~0.73），帮手素材是 0.76~0.87。按整帧高画，同一角色换根鱼竿皮肤
+     * 大小就会跳一下，主角整体也比帮手小一大截 —— 玩家一眼就能看出来。
+     * 改成"内容高一致"后，16 套皮肤与帮手才真正是同一个体量。
      */
-    const val PLAYER_HEIGHT = 124f
+    const val CONTENT_H = 200f
 
-    /** 船底（龙骨最低点）像素所在高度占立绘高度的比例。 */
+    /** 主角立绘的有效内容高度。与帮手取同一个值：两条船一个体量。 */
+    const val PLAYER_CONTENT_H = CONTENT_H
+
+    /** 船底（龙骨最低点）像素所在高度占立绘高度的比例（素材缺帧时的兜底）。 */
     const val PLAYER_HULL_FRAC = 0.902f
     const val HELPER_HULL_FRAC = 0.807f
 
@@ -77,19 +80,33 @@ object BoatArt {
     const val HELPER_ROD_TIP_X = 0.901f
     const val HELPER_ROD_TIP_Y = 0.266f
 
-    /** 主角立绘宽高比（384×256）。 */
-    const val PLAYER_ASPECT = 384f / 256f
-    /** 帮手立绘宽高比（192×192）。 */
-    const val HELPER_ASPECT = 1f
+    /** 素材缺失、量不到内容高时的兜底内容占比。 */
+    const val FALLBACK_CONTENT_FRAC = 0.70f
+
+    /**
+     * 逻辑层用的参考立绘高度：把"内容高 = [PLAYER_CONTENT_H]"反推成整帧高。
+     *
+     * 真正的绘制尺寸由 [GameRenderer] 按每套素材实测的内容占比算，
+     * 这个常量只服务于 [rodTipOffset] 这类**逻辑**近似（浮标起飞点）。
+     */
+    const val HEIGHT = PLAYER_CONTENT_H / FALLBACK_CONTENT_FRAC
 
     /** 以立绘中心绘制时，中心相对水位线的 y 偏移（朝上的负方向）。 */
-    fun centerOffsetY(hullFrac: Float, height: Float = HEIGHT): Float = -(hullFrac - 0.5f) * height
+    fun centerOffsetY(hullFrac: Float, height: Float = HEIGHT): Float =
+        -(hullFrac - 0.5f) * height
 
-    /** 主角竿尖相对船中心的偏移（按主角自己的立绘高度算）。 */
-    fun rodTipOffset(boatFacing: Float): Pair<Float, Float> = Pair(
-        (PLAYER_ROD_TIP_X - 0.5f) * PLAYER_HEIGHT * PLAYER_ASPECT * boatFacing,
-        centerOffsetY(PLAYER_HULL_FRAC, PLAYER_HEIGHT) + (PLAYER_ROD_TIP_Y - 0.5f) * PLAYER_HEIGHT,
-    )
+    /**
+     * 主角竿尖相对船中心的世界坐标偏移。
+     *
+     * 只用于**逻辑层**（浮标起飞点、副线起点）；画面上那条钓线由
+     * [GameRenderer] 从逐帧实测的竿尖画出去，比这里的近似值准。
+     */
+    fun rodTipOffset(boatFacing: Float): Pair<Float, Float> {
+        val frameW = HEIGHT * (582f / 388f)
+        val dx = (PLAYER_ROD_TIP_X - 0.5f) * frameW * boatFacing
+        val dy = centerOffsetY(PLAYER_HULL_FRAC) + (PLAYER_ROD_TIP_Y - 0.5f) * HEIGHT
+        return Pair(dx, dy)
+    }
 }
 
 enum class FishState { SWIMMING, APPROACHING, BITING, HOOKED, CAUGHT, ESCAPED }
@@ -1502,9 +1519,18 @@ class World(val gameState: GameState) {
         return pick
     }
 
+    /**
+     * 水族馆加成只作用在**挂机收益**上（钓手 / 鹈鹕 / 拖网）。
+     *
+     * 手动钓鱼刻意不吃这个加成：否则玩家会算出"越挂越赚"，点击循环就失去意义了。
+     * 展出的鱼是"雇来的人替你赚得更多"，而不是"你自己钓得更多"。
+     */
+    private fun afkValue(species: Species): Double =
+        gameState.catchValue(species, currentMap) * (1.0 + Aquarium.totalBonus(gameState))
+
     /** 鹈鹕把鱼叼走：立即结算，随后鱼回到水里。 */
     fun pelicanCatch(pelican: Pelican, fish: Fish) {
-        val value = gameState.catchValue(fish.species, currentMap)
+        val value = afkValue(fish.species)
         pendingSounds.add("pelican")
         award(fish, value, Source.PELICAN, fish.x, fish.y)
         spawnSplash(fish.x, fish.y, fish.kind)
@@ -1538,7 +1564,7 @@ class World(val gameState: GameState) {
         netEffectCount = targets.size
 
         for (f in targets) {
-            val value = gameState.catchValue(f.species, currentMap)
+            val value = afkValue(f.species)
             award(f, value, Source.NET, f.x, f.y)
             spawnSplash(f.x, f.y, f.kind)
             f.claimedBy = null
@@ -1549,7 +1575,7 @@ class World(val gameState: GameState) {
 
     /** 钓手钓上一条鱼，立即结算，随后鱼回到水里。 */
     fun helperCatch(helper: Helper, fish: Fish) {
-        val value = gameState.catchValue(fish.species, currentMap)
+        val value = afkValue(fish.species)
         award(fish, value, Source.HELPER, fish.x, fish.y)
         spawnSplash(fish.x, fish.y, fish.kind)
         returnToPond(fish)

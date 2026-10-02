@@ -238,6 +238,15 @@ class SaveData {
     var warehouseEarned: Double = 0.0
     var merchantVisits: Int = 0
 
+    // ---- 水族馆（展缸）----
+    // 展出的鱼同样是玩家的资产，必须存 —— 漏了会让玩家一重启就白养。
+    var aquariumSpecies: MutableList<String> = mutableListOf()
+    var aquariumSize: MutableList<Int> = mutableListOf()
+    var aquariumValue: MutableList<Double> = mutableListOf()
+    var aquariumStoredAt: MutableList<Long> = mutableListOf()
+    var aquariumFirstCatch: MutableList<Boolean> = mutableListOf()
+    var aquariumUpgrades: Int = 0
+
     // ---- 每日任务 ----
     var dailyDayIndex: Long = 0L
     var dailyDone: MutableSet<String> = mutableSetOf()

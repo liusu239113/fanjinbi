@@ -72,6 +72,9 @@ fun WarehousePanel(
 
     Column(Modifier.fillMaxSize()) {
         // ---- 顶部：容量 / 行情 ----
+        // 这一块必须**紧凑地贴在面板顶部**：它下面就是 weight(1f) 的鱼格，
+        // 上面一旦多出空白，玩家看到的就是"仓库上面空了一大片"。
+        // 所以这里不用任何 weight/Spacer 撑高，纯按内容高度排。
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -100,17 +103,20 @@ fun WarehousePanel(
         }
         Spacer(Modifier.height(8.dp))
 
-        // ---- 鱼贩子报价条 ----
-        if (offer != null) {
-            MerchantBar(offer = offer, remain = state.merchantStay)
-            Spacer(Modifier.height(8.dp))
-        } else {
-            Text(
-                "鱼贩子还有 ${formatBuffTime(state.merchantTimer)} 到访",
-                color = UITheme.TextDim, fontSize = 11.sp,
-            )
-            Spacer(Modifier.height(8.dp))
+        // ---- 鱼贩子报价条（固定高度，没鱼贩时也占位，避免列表上下跳） ----
+        Box(Modifier.fillMaxWidth().height(44.dp)) {
+            if (offer != null) {
+                MerchantBar(offer = offer, remain = state.merchantStay)
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    Text(
+                        "鱼贩子还有 ${formatBuffTime(state.merchantTimer)} 到访",
+                        color = UITheme.TextDim, fontSize = 11.sp,
+                    )
+                }
+            }
         }
+        Spacer(Modifier.height(8.dp))
 
         // ---- 九宫格 ----
         Box(Modifier.weight(1f)) {

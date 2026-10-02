@@ -73,7 +73,9 @@ object OfflineEarnings {
         // 钓手效率同时受「钓手训练」升级与技能树影响
         val efficiency = (state.helperEfficiency * state.skillHelperMultiplier)
             .coerceAtLeast(0.1)
+        // 水族馆的展出加成同样作用在离线挂机收益上（与在线挂机口径一致）
+        val aquarium = 1.0 + Aquarium.totalBonus(state)
         // 平均 2.5 秒一条鱼，效率越高越快
-        return expectedValue * efficiency / 2.5
+        return expectedValue * efficiency * aquarium / 2.5
     }
 }

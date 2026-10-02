@@ -31,28 +31,19 @@ class GameRenderer(
 ) {
     private companion object {
         /**
-         * 船的立绘高度（世界单位），与逻辑层共用 [BoatArt.HEIGHT]。
+         * 立绘的**有效内容高度**（世界单位），与逻辑层共用 [BoatArt.CONTENT_H]。
          *
-         * 按**高度**而不是宽度统一尺寸 —— 玩家与帮手的素材宽高比不同，
-         * 按宽度统一会把正方形那张放大成"巨型船+巨型竿"。
+         * 按"从船底量到帽顶"的内容高统一尺寸，而不是按整帧高：
+         * 每套素材四周的透明留白都不一样，按整帧高画会让换皮肤时大小乱跳、
+         * 主角整体比帮手小一圈。详见 [BoatArt.CONTENT_H] 的说明。
          */
-        const val BOAT_WORLD_H = BoatArt.HEIGHT
+        const val CONTENT_WORLD_H = BoatArt.CONTENT_H
 
-        /** 主角立绘高度：比帮手矮，两条船看起来才是一个体量。 */
-        const val PLAYER_BOAT_WORLD_H = BoatArt.PLAYER_HEIGHT
+        /** 主角立绘的有效内容高：与帮手同值，两条船一个体量。 */
+        const val PLAYER_CONTENT_WORLD_H = BoatArt.PLAYER_CONTENT_H
 
         /** 主角船下的水花宽度（世界单位），随主角立绘一起缩。 */
-        const val PLAYER_SPLASH_W = 150f
-
-        /**
-         * 抛竿动画帧的目标高度（世界单位）。
-         *
-         * 这两个数是按"动画里的船体看起来和静止立绘一样大"量出来的：
-         * 甩竿会把画面撑大，帧高直接照抄立绘高会让船在抛竿的一瞬间缩小。
-         * 换抛竿素材要重新量（tools/measure_boat.py 会给建议值）。
-         */
-        const val PLAYER_CAST_H = 134f
-        const val HELPER_CAST_H = 140f
+        const val PLAYER_SPLASH_W = 168f
 
         /** 鹈鹕的绘制高度（世界单位）—— 比船大一圈，才有"天上飞的大鸟"的体量。 */
         const val PELICAN_WORLD_H = 150f
@@ -192,6 +183,15 @@ class GameRenderer(
     /** 鱼王动画：按类型各一套（4 种鱼王长得完全不一样）。 */
     private val kingFrames: MutableMap<KingKind, List<Bitmap>> = mutableMapOf()
 
+    /**
+     * 立绘按内容高统一缩放所需的两个缓存：
+     *  - [measuredContentFrac]：素材名 → 内容高占整帧的比例（读像素量出来的，只量一次）
+     *  - [castFrameHCache]：素材名@屏幕高 → 整帧目标像素高
+     * 两者都是静态素材的派生值，换皮肤时按名字命中，不必反复读像素。
+     */
+    private val measuredContentFrac = HashMap<String, Float>()
+    private val castFrameHCache = HashMap<String, Int>()
+
     /** 鱼贩 NPC 立绘。 */
     private var bmpMerchant: Bitmap? = null
 
@@ -215,9 +215,8 @@ class GameRenderer(
         bmpBobber = assets.scaled(
             bobberSprite(), (30 * t.scale).toInt().coerceAtLeast(12),
         ) ?: assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
-        // 主角与帮手各自按**自己的立绘高度**画：
-        // 主角素材更宽（384×256），照帮手的高度直接画会宽出 50%，
-        // 船比帮手大一圈。PLAYER_BOAT_WORLD_H 就是为这个单列的。
+        // 主角与帮手都按**有效内容高**统一尺寸（见 CONTENT_WORLD_H）：
+        // 素材四周留白各不相同，按整帧高画会让 16 套皮肤互相不等大、主角还比帮手小。
         // 立绘与甩竿动画在 reloadCharacterSprites() 里按当前角色加载。
         // 主角船底的水花：和帮手立绘里自带的那圈同一套视觉
         bmpPlayerSplash = assets.scaled("boat_splash", (PLAYER_SPLASH_W * t.scale).toInt().coerceAtLeast(24))
@@ -340,13 +339,11 @@ class GameRenderer(
         // 皮肤素材缺失时自动回退原立绘 —— 不会因为少一张图就变成透明。
         val skinSprite = playerRodSkinSprite()
         if (skinSprite != loadedPlayerSprite) {
-            playerCastFrames = loadAnimation(
-                skinSprite, 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
-            )
+            playerCastFrames = loadAnimation(skinSprite, 0, targetCastFrameH(skinSprite, t))
             // 静止立绘 = 第 0 帧；图集缺失时才退回旧的单帧图（老素材仍有）
             bmpPlayerBoat = playerCastFrames.firstOrNull()
                 ?: assets.scaledToHeight(
-                    skinSprite, (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+                    skinSprite, (PLAYER_CONTENT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
                 )
             playerCastHull = if (playerCastFrames.isEmpty()) {
                 floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
@@ -361,12 +358,10 @@ class GameRenderer(
         }
 
         if (h.sprite != loadedHelperSprite) {
-            helperCastFrames = loadAnimation(
-                h.sprite, 0, (HELPER_CAST_H * t.scale).toInt().coerceAtLeast(20),
-            )
+            helperCastFrames = loadAnimation(h.sprite, 0, targetCastFrameH(h.sprite, t))
             bmpHelper = helperCastFrames.firstOrNull()
                 ?: assets.scaledToHeight(
-                    h.sprite, (BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
+                    h.sprite, (CONTENT_WORLD_H * t.scale).toInt().coerceAtLeast(28),
                 )
             helperCastHull = if (helperCastFrames.isEmpty()) {
                 floatArrayOf(BoatArt.HELPER_HULL_FRAC)
@@ -379,6 +374,79 @@ class GameRenderer(
                 ?: floatArrayOf(BoatArt.HELPER_ROD_TIP_X, BoatArt.HELPER_ROD_TIP_Y)
             loadedHelperSprite = h.sprite
         }
+    }
+
+    /**
+     * 算出某套立绘"整帧"该缩放到多高（像素），使**有效内容高**恰好等于
+     * [contentWorldH] 世界单位。
+     *
+     * 关键在 [measureContentHFrac]：它直接读素材第 0 帧、量出内容高占整帧的
+     * 比例。每套素材的留白都不一样，不量就只能猜 —— 猜的结果就是换皮肤时
+     * 角色忽大忽小、主角比帮手小一圈。
+     *
+     * 测过之后按 (name, 屏幕高) 缓存：素材是静态的，同一块屏幕没必要反复读像素。
+     */
+    private fun targetCastFrameH(name: String, t: ViewTransform, contentWorldH: Float = CONTENT_WORLD_H): Int {
+        val key = "$name@${t.screenH.toInt()}#$contentWorldH"
+        castFrameHCache[key]?.let { return it }
+        val frac = measureContentHFrac(name).coerceIn(0.35f, 1f)
+        val target = (contentWorldH * t.scale / frac).toInt().coerceAtLeast(24)
+        castFrameHCache[key] = target
+        return target
+    }
+
+    /** 素材第 0 帧的内容高占整帧的比例（含按 name 的记忆化）。 */
+    private fun measureContentHFrac(name: String): Float {
+        measuredContentFrac[name]?.let { return it }
+        val frac = contentHFracOf(name)
+        measuredContentFrac[name] = frac
+        return frac
+    }
+
+    /** 直接读原始图集第 0 帧，量内容高（最上到最下的不透明像素）。 */
+    private fun contentHFracOf(name: String): Float {
+        val cfg = assets.frameConfig("${name}_anim") ?: return 0.9f
+        val (cols, rows) = cfg
+        val sheet = assets.raw("${name}_anim") ?: return 0.9f
+        val fw = sheet.width / cols
+        val fh = sheet.height / rows
+        if (fw <= 0 || fh <= 0) return 0.9f
+        val frame = Bitmap.createBitmap(sheet, 0, 0, fw, fh)
+        val bb = contentBoundsOf(frame)
+        frame.recycle()
+        if (bb == null) return 0.9f
+        return ((bb[3] - bb[1]).toFloat() / fh).coerceIn(0.2f, 1f)
+    }
+
+    /**
+     * 内容包围盒 [x0, y0, x1, y1]（像素）；全透明返回 null。
+     * 采样步长 2px —— 船体是几百像素宽的大块素材，跳着采足够准，还快 4 倍。
+     */
+    private fun contentBoundsOf(bmp: Bitmap): IntArray? {
+        val w = bmp.width
+        val h = bmp.height
+        val row = IntArray(w)
+        var x0 = w
+        var y0 = h
+        var x1 = -1
+        var y1 = -1
+        var y = 0
+        while (y < h) {
+            bmp.getPixels(row, 0, w, 0, y, w, 1)
+            var x = 0
+            while (x < w) {
+                if (Color.alpha(row[x]) > 20) {
+                    if (x < x0) x0 = x
+                    if (x > x1) x1 = x
+                    if (y < y0) y0 = y
+                    y1 = y
+                }
+                x += 2
+            }
+            y += 2
+        }
+        if (x1 < 0) return null
+        return intArrayOf(x0, y0, x1, y1)
     }
 
     /** 换装后由外部调用，立即重载素材（下一帧就会画新角色）。 */
@@ -877,6 +945,24 @@ class GameRenderer(
             }
         }
         return 0.9f
+    }
+
+    /**
+     * 量"内容顶"（最上面的不透明像素）的比例高度。
+     *
+     * 逐帧动画每帧的留白不同：把帧缩放到"内容高 = 常数"需要知道每帧从哪开始
+     * 是内容。船底比例 [hullFracOf] 已经逐帧量了，这一项与它配对使用。
+     */
+    private fun topFracOf(bmp: Bitmap): Float {
+        val w = bmp.width
+        val row = IntArray(w)
+        for (y in 0 until bmp.height) {
+            bmp.getPixels(row, 0, w, 0, y, w, 1)
+            for (x in 0 until w) {
+                if (Color.alpha(row[x]) > 12) return y.toFloat() / bmp.height
+            }
+        }
+        return 0f
     }
 
     /**

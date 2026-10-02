@@ -1,9 +1,13 @@
 package com.dshx.game.SU
 
 import com.dshx.game.SU.game.Affix
+import com.dshx.game.SU.game.Aquarium
 import com.dshx.game.SU.game.Auction
+import com.dshx.game.SU.game.AuctionSession
+import com.dshx.game.SU.game.Bestiary
 import com.dshx.game.SU.game.Characters
 import com.dshx.game.SU.game.DexReward
+import com.dshx.game.SU.game.FishSize
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.GearItem
 import com.dshx.game.SU.game.GearRarity
@@ -189,6 +193,190 @@ class NewSystemsTest {
         Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
         // 流拍 = 什么都不做
         assertEquals("流拍后鱼还在", 1, s.warehouse.size)
+    }
+
+    // ---------------- 拍卖：逐轮竞价 ----------------
+
+    @Test
+    fun `拍卖逐轮加价_价格是现场长出来的`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        val fish = s.warehouse[0]
+        val session = AuctionSession.open(
+            fish, Warehouse.marketValue(fish, now), 0, renown = 0.0, rnd = kotlin.random.Random(7),
+        )
+
+        assertEquals("开局还没人出价", 0, session.round)
+        assertTrue("应当有多个买家进场", session.bidders.size >= 2)
+
+        session.advance()
+        val afterFirst = session.topFactor
+        assertTrue("第一轮就该有人出价", afterFirst > 0.0)
+
+        // 再推几轮，最高价至少不降低（除非有人退场把价带走）
+        repeat(3) { if (session.canContinue) session.advance() }
+        assertTrue("竞价应当往上走", session.topFactor >= afterFirst)
+    }
+
+    @Test
+    fun `买家退场后其出价作废`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        val fish = s.warehouse[0]
+        val session = AuctionSession.open(
+            fish, Warehouse.marketValue(fish, now), 0, renown = 0.0, rnd = kotlin.random.Random(3),
+        )
+        // 推到不能再推为止
+        var guard = 0
+        while (session.canContinue && guard++ < 20) session.advance()
+
+        // 退场的买家不该再算进最高价
+        val top = session.topBidder
+        if (top != null) {
+            assertTrue("最高价者必须还在场", top.inRoom)
+        }
+        assertTrue("不能无限推下去", guard < 20)
+    }
+
+    @Test
+    fun `落槌按当前最高价结算并扣手续费`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        val fish = s.warehouse[0]
+        val session = AuctionSession.open(
+            fish, Warehouse.marketValue(fish, now), 0, renown = 0.0, rnd = kotlin.random.Random(11),
+        )
+        session.advance()
+        session.advance()
+
+        val market = Warehouse.marketValue(fish, now)
+        val expected = market * session.topFactor * (1 - AuctionSession.FEE_RATE)
+        val before = s.money
+        val gain = session.settle(s)
+        assertEquals("按当前最高价扣手续费入账", expected, gain, 0.01)
+        assertEquals(before + gain, s.money, 0.01)
+        assertTrue("成交后鱼应移出仓库", s.warehouse.isEmpty())
+    }
+
+    @Test
+    fun `声望越高买家心理上限越高`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        val fish = s.warehouse[0]
+        val market = Warehouse.marketValue(fish, now)
+
+        // 同一个随机种子，只改声望 —— 上限应当被抬高
+        val low = AuctionSession.open(fish, market, 0, renown = 0.0, rnd = kotlin.random.Random(5))
+        val high = AuctionSession.open(fish, market, 0, renown = 3.0, rnd = kotlin.random.Random(5))
+        val lowCeil = low.bidders.sumOf { it.ceiling }
+        val highCeil = high.bidders.sumOf { it.ceiling }
+        assertTrue("声望高时买家的心理上限应当更高", highCeil > lowCeil)
+    }
+
+    // ---------------- 水族馆 ----------------
+
+    @Test
+    fun `水族馆加成随稀有度与体型放大`() {
+        val now = System.currentTimeMillis()
+        val common = StoredFish("baitiao", FishSize.NORMAL.ordinal, 100.0, now, false)
+        val commonBig = StoredFish("baitiao", FishSize.KING.ordinal, 100.0, now, false)
+        assertTrue(
+            "同种鱼体型越大，展出加成越高",
+            Aquarium.bonusOf(commonBig) > Aquarium.bonusOf(common),
+        )
+
+        // 找一条传说鱼与一条常见鱼对比
+        val legend = Bestiary.allSpecies.first { it.rarity == Rarity.LEGEND }
+        val legendFish = StoredFish(legend.id, FishSize.NORMAL.ordinal, 100.0, now, false)
+        assertTrue(
+            "传说鱼的展出加成应远高于常见鱼",
+            Aquarium.bonusOf(legendFish) > Aquarium.bonusOf(common) * 3,
+        )
+        assertTrue("单条鱼加成有上限", Aquarium.bonusOf(legendFish) <= 0.25 + 1e-9)
+    }
+
+    @Test
+    fun `入缸的鱼离开仓库_取回后回仓库`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        Warehouse.store(s, StoredFish("jiyu", 0, 1000.0, now, false))
+
+        assertTrue("应当能入缸", Aquarium.exhibit(s, 0))
+        assertEquals("仓库少一条", 1, s.warehouse.size)
+        assertEquals("缸里多一条", 1, s.aquarium.size)
+        assertTrue("展出后加成生效", s.aquariumBonus > 0.0)
+
+        assertTrue("应当能取回", Aquarium.takeBack(s, 0))
+        assertEquals("仓库回到两条", 2, s.warehouse.size)
+        assertEquals("缸空", 0, s.aquarium.size)
+        assertEquals("取回后加成为 0", 0.0, s.aquariumBonus, 1e-9)
+    }
+
+    @Test
+    fun `缸位满了不能再放`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        repeat(Aquarium.slots(s) + 2) {
+            Warehouse.store(s, StoredFish("baitiao", 0, 100.0, now + it, false))
+        }
+        repeat(Aquarium.slots(s)) { assertTrue(Aquarium.exhibit(s, 0)) }
+        assertTrue("缸位应当满了", Aquarium.isFull(s))
+        assertFalse("满了不能再放", Aquarium.exhibit(s, 0))
+    }
+
+    @Test
+    fun `水族馆存档往返不丢`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", FishSize.BIG.ordinal, 777.0, now, true))
+        Warehouse.store(s, StoredFish("jiyu", FishSize.HUGE.ordinal, 888.0, now, false))
+        Aquarium.exhibit(s, 1)
+        Aquarium.upgrade(s)
+        val expectedBonus = s.aquariumBonus
+
+        val restored = GameState().apply { loadFrom(s.toSave()) }
+        assertEquals("展品数量要恢复", 1, restored.aquarium.size)
+        assertEquals("展品鱼种要恢复", "jiyu", restored.aquarium[0].speciesId)
+        assertEquals("展品体型要恢复", FishSize.HUGE.ordinal, restored.aquarium[0].sizeOrdinal)
+        assertEquals("扩容次数要恢复", s.aquariumUpgrades, restored.aquariumUpgrades)
+        assertEquals("加成要恢复", expectedBonus, restored.aquariumBonus, 1e-9)
+        assertEquals("仓库里剩下的那条也要在", 1, restored.warehouse.size)
+        // 读档后 key 必须唯一，否则进「水族」页会闪退
+        val seqs = (restored.warehouse + restored.aquarium).map { it.seq }
+        assertEquals("仓库与鱼缸的 key 必须互不相同", seqs.size, seqs.distinct().size)
+    }
+
+    @Test
+    fun `水族馆加成只算挂机收益_不影响手动单条鱼价值`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        val before = s.catchValue(Rarity.COMMON)
+        Warehouse.store(s, StoredFish("baitiao", FishSize.NORMAL.ordinal, 100.0, now, false))
+        Aquarium.exhibit(s, 0)
+        assertTrue("加成已生效", s.aquariumBonus > 0.0)
+        assertEquals(
+            "手动钓鱼的单条价值不该被展出加成放大",
+            before, s.catchValue(Rarity.COMMON), 1e-9,
+        )
+    }
+
+    // ---------------- 开箱数值 ----------------
+
+    @Test
+    fun `开箱价格随渔获价值水涨船高`() {
+        val s = GameState()
+        val early = s.gearBoxPrice()
+        assertTrue("开局箱价应当是一笔要掂量的钱", early >= 50_000.0)
+
+        // 把「渔获价值」拉高，箱价必须跟着涨，不能原地踏步
+        s.commonValueMul = 40.0
+        val later = s.gearBoxPrice()
+        assertTrue("渔获价值涨了 40 倍，箱价不该还停在原地", later > early * 20)
     }
 
     // ---------------- 换装 ----------------

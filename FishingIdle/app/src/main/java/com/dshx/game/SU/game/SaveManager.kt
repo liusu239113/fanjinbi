@@ -93,6 +93,25 @@ class SaveManager(context: Context) {
         root.put("warehouseEarned", state.warehouseEarned)
         root.put("merchantVisits", state.merchantVisits)
 
+        // ---- 水族馆 ----
+        // 与仓库同一套扁平数组的存法：鱼是玩家资产，漏存会让玩家白养一场。
+        root.put("aquariumSpecies", JSONArray().apply {
+            state.aquarium.forEach { put(it.speciesId) }
+        })
+        root.put("aquariumSize", JSONArray().apply {
+            state.aquarium.forEach { put(it.sizeOrdinal) }
+        })
+        root.put("aquariumValue", JSONArray().apply {
+            state.aquarium.forEach { put(it.baseValue) }
+        })
+        root.put("aquariumStoredAt", JSONArray().apply {
+            state.aquarium.forEach { put(it.storedAt) }
+        })
+        root.put("aquariumFirstCatch", JSONArray().apply {
+            state.aquarium.forEach { put(it.firstCatch) }
+        })
+        root.put("aquariumUpgrades", state.aquariumUpgrades)
+
         // ---- 装备 ----
         // 每件装备存成一条字符串："槽位|稀有度|名字|stat:val,stat:val"，
         // 比嵌套 JSON 紧凑，读起来也不容易错位。
@@ -245,6 +264,23 @@ class SaveManager(context: Context) {
             data.warehouseUpgrades = root.optInt("warehouseUpgrades", 0)
             data.warehouseEarned = root.optDouble("warehouseEarned", 0.0)
             data.merchantVisits = root.optInt("merchantVisits", 0)
+
+            // ---- 水族馆 ----
+            val aqSpecies = root.optJSONArray("aquariumSpecies")
+            val aqSize = root.optJSONArray("aquariumSize")
+            val aqValue = root.optJSONArray("aquariumValue")
+            val aqAt = root.optJSONArray("aquariumStoredAt")
+            val aqFirst = root.optJSONArray("aquariumFirstCatch")
+            if (aqSpecies != null) {
+                for (i in 0 until aqSpecies.length()) {
+                    data.aquariumSpecies.add(aqSpecies.optString(i))
+                    data.aquariumSize.add(aqSize?.optInt(i, 0) ?: 0)
+                    data.aquariumValue.add(aqValue?.optDouble(i, 0.0) ?: 0.0)
+                    data.aquariumStoredAt.add(aqAt?.optLong(i, 0L) ?: 0L)
+                    data.aquariumFirstCatch.add(aqFirst?.optBoolean(i, false) ?: false)
+                }
+            }
+            data.aquariumUpgrades = root.optInt("aquariumUpgrades", 0)
 
             // ---- 装备 ----
             root.optJSONArray("gearEquipped")?.let { arr ->

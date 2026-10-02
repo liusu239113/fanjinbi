@@ -40,10 +40,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.dshx.game.SU.game.Aquarium
 import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.Attribute
-import com.dshx.game.SU.game.Auction
-import com.dshx.game.SU.game.AuctionResult
+import com.dshx.game.SU.game.AuctionSession
+import com.dshx.game.SU.game.BidEvent
 import com.dshx.game.SU.game.StoredFish
 import com.dshx.game.SU.game.AudioManager
 import com.dshx.game.SU.game.CharacterDef
@@ -133,9 +134,15 @@ class MainActivity : ComponentActivity() {
     /**
      * 当前拍卖状态。提升为类字段：发起拍卖的 [startAuction] 是普通方法，
      * 拿不到 composable 里的局部 remember。
+     *
+     * 现在是**逐轮竞价**的会话（AuctionSession），不再是"一次算完的结果"：
+     * 买家逐个亮相、一轮轮加价，玩家自己决定什么时候落槌。
      */
     private var auctionFish by mutableStateOf<StoredFish?>(null)
-    private var auctionResult by mutableStateOf<AuctionResult?>(null)
+    private var auctionSession by mutableStateOf<AuctionSession?>(null)
+
+    /** 拍卖推进计数：每次买家加价/退场 +1，用来触发拍卖场景重组。 */
+    private var auctionTick by mutableStateOf(0)
 
     /** 开箱结果弹窗（装备页开箱后展示）。 */
     private var gearReward by mutableStateOf<com.dshx.game.SU.game.GearItem?>(null)
@@ -890,6 +897,34 @@ class MainActivity : ComponentActivity() {
                     },
                     // 看广告免费扩容：只有看完广告才真的扩容，中途关掉不发奖。
                     onAuction = { idx -> startAuction(idx) },
+                    // 水族馆：状态由 ShopPanel 内部改（那里能直接给购买反馈条），
+                    // 这里只负责落盘与让世界读到新加成。
+                    onExhibit = {
+                        audio.play("sfx_click", 0.7f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onTakeBack = {
+                        audio.play("sfx_click", 0.6f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onUpgradeAquarium = {
+                        audio.play("sfx_buy", 0.9f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onAdUpgradeAquarium = {
+                        requestAd(RewardAds.PLACEMENT_WAREHOUSE_FREE_UPGRADE) {
+                            if (Aquarium.applyUpgrade(gameState)) {
+                                saveManager.save(gameState, settings)
+                                showToast("鱼缸已扩容 · ${Aquarium.slots(gameState)} 缸位")
+                            } else {
+                                showToast("缸位已满级，无需扩容")
+                            }
+                            revision++
+                        }
+                    },
                     onAdUpgradeWarehouse = {
                         requestAd(RewardAds.PLACEMENT_WAREHOUSE_FREE_UPGRADE) {
                             if (Warehouse.applyUpgrade(gameState)) {
@@ -1102,28 +1137,30 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // 拍卖行：仓库里点「拍卖」后弹出，展示 AI 买家竞价
+            // 拍卖行：仓库里点「拍卖」后进入，独立场景 + 逐轮竞价
             val aFish = auctionFish
-            val aResult = auctionResult
-            if (aFish != null && aResult != null) {
+            val aSession = auctionSession
+            if (aFish != null && aSession != null) {
                 com.dshx.game.SU.ui.AuctionDialog(
                     fish = aFish,
-                    result = aResult,
+                    session = aSession,
                     assets = assets,
+                    revision = auctionTick,
+                    onAdvance = { advanceAuction() },
                     onSettle = {
-                        val gain = Auction.settle(gameState, aResult, System.currentTimeMillis())
+                        val gain = aSession.settle(gameState)
                         gameState.warehouseEarned += gain
                         DailyTracker.onSold(gameState)
                         audio.play("sfx_success", 0.9f)
                         showToast("拍卖成交 +🪙${formatNumber(gain)}")
-                        auctionResult = null
+                        auctionSession = null
                         auctionFish = null
                         saveManager.save(gameState, settings)
                         revision++
                     },
                     onPass = {
                         audio.play("sfx_click", 0.6f)
-                        auctionResult = null
+                        auctionSession = null
                         auctionFish = null
                         revision++
                     },
@@ -1406,16 +1443,32 @@ class MainActivity : ComponentActivity() {
     // 奖励数值一律不写死在 UI 里（便于后期调参，也不把广告耦合进玩法代码）。
 
     /**
-     * 发起一次拍卖：对指定鱼生成一组 AI 买家出价。
-     * 结果交给弹窗展示，玩家自己决定成交或流拍。
+     * 发起一次拍卖：为指定鱼开一场**逐轮竞价**。
+     * 买家按鱼的品相与玩家的声望现场生成，价格随后一轮轮长出来。
      */
     private fun startAuction(idx: Int) {
         val fish = gameState.warehouse.getOrNull(idx) ?: return
         val now = System.currentTimeMillis()
         val market = Warehouse.marketValue(fish, now)
         auctionFish = fish
-        auctionResult = Auction.runAuction(fish, market, idx)
+        auctionSession = AuctionSession.open(
+            fish = fish,
+            marketPrice = market,
+            index = idx,
+            renown = gameState.auctionRenown,
+        )
         audio.play("sfx_click", 0.6f)
+    }
+
+    /** 推进拍卖一轮（买家加价 / 退场）。 */
+    private fun advanceAuction() {
+        val s = auctionSession ?: return
+        if (!s.canContinue) return
+        val events = s.advance()
+        // 有人抬价就播个轻响，让"过程"有听觉反馈
+        if (events.any { it is BidEvent.Raise }) audio.play("sfx_click", 0.35f)
+        auctionSession = s
+        auctionTick++
     }
 
     /** 看完广告送一名永久钓手，和鱼苗商店购买走同一套属性/存档链路。 */

@@ -59,6 +59,7 @@ import com.dshx.game.SU.game.Rarity
 import com.dshx.game.SU.game.RewardAds
 import com.dshx.game.SU.game.Species
 import com.dshx.game.SU.game.SpeciesLore
+import com.dshx.game.SU.game.Aquarium
 import com.dshx.game.SU.game.World
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.PurchasableDef
@@ -67,7 +68,7 @@ import com.dshx.game.SU.game.Warehouse
 import com.dshx.game.SU.game.formatNumber
 
 /**
- * 商店面板：鱼苗 / 升级 / 水域 / 任务 / 图鉴 / 角色 / 仓库 / 统计 八个页签。
+ * 商店面板：鱼苗 / 升级 / 水域 / 任务 / 图鉴 / 角色 / 仓库 / 水族馆 / 统计 九个页签。
  * 以底部抽屉形式呈现 —— 竖屏手机上单手可及，且不遮挡上方的钓场。
  *
  * [revision] 是 HUD 那套刷新计数：GameState 用的是普通 var，不接这个计数
@@ -90,6 +91,12 @@ fun ShopPanel(
     onAdUpgradeWarehouse: () -> Unit,
     /** 仓库页「拍卖」——把第 index 条鱼交给 AI 买家竞价。 */
     onAuction: (Int) -> Unit,
+    /** 水族馆页：把仓库第 index 条鱼放进缸展出。 */
+    onExhibit: (Int) -> Unit,
+    /** 水族馆页：把缸里第 index 条鱼取回仓库。 */
+    onTakeBack: (Int) -> Unit,
+    onUpgradeAquarium: () -> Unit,
+    onAdUpgradeAquarium: () -> Unit,
     /** 水域页「声呐探测」——看完广告立刻让一条鱼王现身。 */
     onKingSonar: () -> Unit,
     /** 角色页「钓协借调」——看完广告换取某角色的限时试用权。 */
@@ -123,7 +130,8 @@ fun ShopPanel(
     // 下一步该买什么。现在它们按依赖链接在普通升级后面，同页展示。
     //
     // 页签从 9 个减到 8 个：竖屏一行排 8 个按钮，"升级"两个字才不会被挤到换行。
-    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "角色", "仓库", "统计")
+    // 水族馆加回来变成 9 个 —— 它是一条独立的长线玩法，值得单独一页。
+    val tabs = listOf("鱼苗", "升级", "水域", "任务", "图鉴", "角色", "仓库", "水族", "统计")
 
     // 购买反馈条：成功/失败都在面板顶部闪一下，1.4 秒后自动收起
     var flash by remember { mutableStateOf<String?>(null) }
@@ -346,6 +354,39 @@ fun ShopPanel(
                             },
                             onAdUpgrade = onAdUpgradeWarehouse,
                             onAuction = onAuction,
+                            onClose = onClose,
+                        )
+                        // 水族馆：仓库里钓到的鱼除了卖钱，还能养起来换永久挂机加成。
+                        // 与仓库页并列，因为两者的取舍是连在一起的（卖 or 养）。
+                        7 -> AquariumPanel(
+                            state = state, assets = assets, revision = revision,
+                            onExhibit = { idx ->
+                                if (Aquarium.exhibit(state, idx)) {
+                                    flash = "已入缸 · 挂机收益 +${(Aquarium.totalBonus(state) * 100).toInt()}%"
+                                    flashOk = true
+                                } else {
+                                    flash = "缸位已满，先扩容"
+                                    flashOk = false
+                                }
+                                flashId++
+                                onExhibit(idx)
+                            },
+                            onTakeBack = { idx ->
+                                val ok = Aquarium.takeBack(state, idx)
+                                flash = if (ok) "已取回仓库" else "仓库已满"
+                                flashOk = ok
+                                flashId++
+                                onTakeBack(idx)
+                            },
+                            onUpgrade = {
+                                val ok = Aquarium.upgrade(state)
+                                flash = if (ok) "鱼缸已扩容 · ${Aquarium.slots(state)} 缸位"
+                                else "金币不足 · 扩容"
+                                flashOk = ok
+                                flashId++
+                                onUpgradeAquarium()
+                            },
+                            onAdUpgrade = onAdUpgradeAquarium,
                             onClose = onClose,
                         )
                         else -> StatsView(state, revision)

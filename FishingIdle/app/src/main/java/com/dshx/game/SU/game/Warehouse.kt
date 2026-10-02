@@ -103,9 +103,13 @@ object Warehouse {
      * 重排仓库里所有鱼的列表 key。
      * 读档后必须调用：存档不存 seq，不重排的话同一毫秒入库的鱼会撞 key，
      * 点开仓库直接闪退。
+     *
+     * 水族馆的鱼用的是同一套 key（同一个 [StoredFish]），也要一起重排 ——
+     * 漏掉的话鱼缸里所有展品的 seq 都是 0，进「水族」页直接闪退。
      */
     fun reindex(state: GameState) {
         for (f in state.warehouse) f.seq = ++seqCounter
+        for (f in state.aquarium) f.seq = ++seqCounter
     }
 
     /** 容量上限（含买过的扩容）。 */
