@@ -104,7 +104,10 @@ fun AquariumPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            // 同 WarehousePanel：SectionTitle 内部 fillMaxWidth，
+            // 左列不带 weight 会吃光整行、把右侧文字压成 0 宽逐字换行，
+            // 头部行被撑高后标题看起来就"悬在下面"。
+            Column(Modifier.weight(1f)) {
                 SectionTitle("水族馆")
                 Spacer(Modifier.height(2.dp))
                 Text(

@@ -80,7 +80,11 @@ fun WarehousePanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            // ⚠️ 左列必须带 weight(1f)：SectionTitle 内部是 fillMaxWidth()，
+            // 不带 weight 时左列会把整行宽度吃光，右列被压成 0 宽 ——
+            // 右侧文字逐字换行成几十行，把这一行撑到近 500px 高，
+            // 标题被 CenterVertically 顶到行中间，看起来就是"仓库顶部空了一大片"。
+            Column(Modifier.weight(1f)) {
                 SectionTitle("渔获仓库")
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -111,11 +115,10 @@ fun WarehousePanel(
         Spacer(Modifier.height(8.dp))
 
         // ---- 九宫格 ----
-        // ⚠️ 这里**不能**包 weight(1f) 的 Box。
-        // 上一版为了"别让网格被居中"给它加了 weight，结果那个 Box 先吃掉
-        // 整列剩余高度、网格再从顶部开始画，鱼少时下方反而空出一大块
-        // （玩家反馈"间距越来越大"就是这个）。
-        // 现在：网格与空态都只按**内容高度**排，列表多长就占多长。
+        // 网格用 weight(1f) 占满"头部与底部按钮之间"的剩余高度：槽位被填满，
+        // 网格从槽位顶部开始排，鱼少时空白落在网格下方、由底部按钮收边。
+        // （fill = false 时槽位不被填满，网格会被挤到槽位下半部分 ——
+        // 之前"仓库顶部空一大片"除了头部行被撑高，这个也有份。）
         if (stored.isEmpty()) {
             Column(
                 Modifier.fillMaxWidth().padding(top = 24.dp),
@@ -133,7 +136,7 @@ fun WarehousePanel(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
