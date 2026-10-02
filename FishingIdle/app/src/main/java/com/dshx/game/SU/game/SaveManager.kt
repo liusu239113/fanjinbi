@@ -110,7 +110,8 @@ class SaveManager(context: Context) {
         root.put("aquariumFirstCatch", JSONArray().apply {
             state.aquarium.forEach { put(it.firstCatch) }
         })
-        root.put("aquariumUpgrades", state.aquariumUpgrades)
+        root.put("aquariumTanks", state.aquariumTanks)
+        root.put("aquariumSlots", state.aquariumSlots)
 
         // ---- 装备 ----
         // 每件装备存成一条字符串："槽位|稀有度|名字|stat:val,stat:val"，
@@ -280,7 +281,8 @@ class SaveManager(context: Context) {
                     data.aquariumFirstCatch.add(aqFirst?.optBoolean(i, false) ?: false)
                 }
             }
-            data.aquariumUpgrades = root.optInt("aquariumUpgrades", 0)
+            data.aquariumTanks = root.optInt("aquariumTanks", 1)
+            data.aquariumSlots = root.optInt("aquariumSlots", 1)
 
             // ---- 装备 ----
             root.optJSONArray("gearEquipped")?.let { arr ->

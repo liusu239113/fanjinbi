@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,10 +26,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,8 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +62,9 @@ import com.dshx.game.SU.game.formatNumber
  * 仓库里的鱼有两条出路：**卖掉换钱**，或**放进这里永久展出**。
  * 展出的鱼不能再卖，但按「稀有度 × 体型 × 鱼种」给永久挂机收益加成。
  *
+ * 结构：开局 **1 个缸、只能放 1 条**；缸位可扩容（每缸最多 10 条）；
+ * 最多可建 **3 个缸**。两个升级方向（扩容 / 新建缸）价格都很贵，互相权衡。
+ *
  * 缸里的鱼用钓场那套**逐帧动画**（摆尾）+ 横向游动 ——
  * 它们本来就是活鱼，不该在缸里变成一排静止图标。
  */
@@ -71,18 +77,28 @@ fun AquariumPanel(
     onExhibit: (Int) -> Unit,
     /** 把缸里第 index 条鱼取回仓库。 */
     onTakeBack: (Int) -> Unit,
-    onUpgrade: () -> Unit,
-    onAdUpgrade: () -> Unit,
+    /** 扩容一个缸位。 */
+    onExpand: () -> Unit,
+    /** 新建一个水族馆。 */
+    onAddTank: () -> Unit,
+    /** 看广告免费扩容一个缸位。 */
+    onAdExpand: () -> Unit,
     onClose: () -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     val now = System.currentTimeMillis()
-    val slots = Aquarium.slots(state)
+    val tanks = Aquarium.tanks(state)
+    val per = Aquarium.slotsPerTank(state)
+    val cap = Aquarium.capacity(state)
     val bonusPct = (Aquarium.totalBonus(state) * 100).toInt()
+
+    var tankIdx by remember { mutableIntStateOf(0) }
+    // 缸数可能在别处变化（新建/读档），夹一下避免越界
+    val cur = tankIdx.coerceIn(0, (tanks - 1).coerceAtLeast(0))
     var picking by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        // ---- 顶部：加成与缸位 ----
+        // ---- 顶部：加成与容量 ----
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -90,11 +106,11 @@ fun AquariumPanel(
         ) {
             Column {
                 SectionTitle("水族馆")
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    "${state.aquarium.size} / $slots 缸位",
-                    color = if (state.aquarium.size >= slots) UITheme.TextBad else UITheme.TextNormal,
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    "${state.aquarium.size} / $cap 条 · $tanks 个缸",
+                    color = if (state.aquarium.size >= cap) UITheme.TextBad else UITheme.TextNormal,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -105,19 +121,42 @@ fun AquariumPanel(
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "展出的鱼不再能卖，但永久提升钓手/鹈鹕/拖网的产出（转生后依然生效）。",
-            color = UITheme.TextDim, fontSize = 10.sp, lineHeight = 14.sp,
-        )
+        Spacer(Modifier.height(4.dp))
+
+        // ---- 缸切换 ----
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (i in 0 until tanks) {
+                val count = Aquarium.tankContent(state, i).size
+                TankTab(
+                    label = "水族馆 ${i + 1}",
+                    sub = "$count/$per",
+                    selected = i == cur,
+                    onClick = { tankIdx = i; picking = false },
+                )
+            }
+            if (Aquarium.canAddTank(state)) {
+                // 新建缸入口就放在缸标签后面 —— 玩家看到"还能多一个缸"最直接
+                TankTab(
+                    label = "＋ 新建",
+                    sub = "🪙${formatNumber(Aquarium.addTankPrice(state))}",
+                    selected = false,
+                    enabled = state.money >= Aquarium.addTankPrice(state),
+                    onClick = onAddTank,
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
 
-        // ---- 鱼缸本体：背景 + 会游动的展品 ----
+        // ---- 当前缸：背景 + 会游动的展品 ----
         Tank(
-            fish = state.aquarium,
+            fish = Aquarium.tankContent(state, cur),
             assets = assets,
-            slots = slots,
-            onTap = { idx -> onTakeBack(idx) },
+            tankIndex = cur,
+            onTap = { localIdx -> onTakeBack(cur * per + localIdx) },
         )
 
         Spacer(Modifier.height(8.dp))
@@ -139,16 +178,16 @@ fun AquariumPanel(
         GameButton(
             if (picking) "收起候选" else "从仓库选鱼入缸",
             { picking = !picking },
-            modifier = Modifier.fillMaxWidth().height(42.dp),
+            modifier = Modifier.fillMaxWidth().height(40.dp),
             enabled = !Aquarium.isFull(state) && state.warehouse.isNotEmpty(),
             accent = UITheme.Gold,
-            fontSize = 14,
+            fontSize = 13,
         )
         if (Aquarium.isFull(state)) {
             Text(
                 "缸位已满，先扩容或取回一条",
                 color = UITheme.TextBad, fontSize = 10.sp,
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
                 textAlign = TextAlign.Center,
             )
         }
@@ -174,20 +213,21 @@ fun AquariumPanel(
 
         Spacer(Modifier.height(8.dp))
 
+        // ---- 底部：扩容 / 关闭 ----
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             GameButton(
-                if (Aquarium.canUpgrade(state))
-                    "扩容 · 🪙${formatNumber(Aquarium.upgradePrice(state))}"
-                else "已满级",
-                onUpgrade,
+                if (Aquarium.canExpand(state))
+                    "扩容缸位 · 🪙${formatNumber(Aquarium.expandPrice(state))}"
+                else "缸位已满",
+                onExpand,
                 modifier = Modifier.weight(1f).height(42.dp),
-                enabled = Aquarium.canUpgrade(state) &&
-                    state.money >= Aquarium.upgradePrice(state),
+                enabled = Aquarium.canExpand(state) &&
+                    state.money >= Aquarium.expandPrice(state),
                 accent = UITheme.WaterTop,
-                fontSize = 12,
+                fontSize = 11,
             )
             GameButton(
                 "关闭", onClose,
@@ -199,18 +239,55 @@ fun AquariumPanel(
 
         Spacer(Modifier.height(7.dp))
         val adReady = RewardAds.isReady()
-        val maxed = !Aquarium.canUpgrade(state)
+        val maxed = !Aquarium.canExpand(state)
         AdActionRow(
             assets = assets,
             iconName = "ad_gift",
-            title = "水族赞助 · 免费扩容",
+            title = "水族赞助 · 免费扩容缸位",
             desc = when {
                 maxed -> "缸位已满级"
                 !adReady -> "广告接入中"
-                else -> "白得 ${Aquarium.SLOT_STEP} 个缸位，不花金币"
+                else -> "白得 1 个缸位，不花金币"
             },
             enabled = adReady && !maxed,
-            onClick = onAdUpgrade,
+            onClick = onAdExpand,
+        )
+    }
+}
+
+/** 缸标签：显示第几个缸、已放几条。 */
+@Composable
+private fun TankTab(
+    label: String,
+    sub: String,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val bg = when {
+        selected -> UITheme.Gold
+        !enabled -> UITheme.WoodDark.copy(alpha = 0.5f)
+        else -> UITheme.WoodDark
+    }
+    Column(
+        Modifier
+            .width(86.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .border(2.dp, UITheme.Ink, RoundedCornerShape(8.dp))
+            .pressable(enabled) { onClick() }
+            .padding(vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            label,
+            color = if (selected) UITheme.Ink else UITheme.Cream,
+            fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+        )
+        Text(
+            sub,
+            color = if (selected) UITheme.Ink.copy(alpha = 0.8f) else UITheme.TextDim,
+            fontSize = 9.sp, maxLines = 1,
         )
     }
 }
@@ -225,13 +302,13 @@ fun AquariumPanel(
 private fun Tank(
     fish: List<StoredFish>,
     assets: Assets,
-    slots: Int,
+    tankIndex: Int,
     onTap: (Int) -> Unit,
 ) {
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .height(168.dp)
+            .height(160.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(3.dp, UITheme.WoodDark, RoundedCornerShape(12.dp)),
     ) {
@@ -252,7 +329,7 @@ private fun Tank(
         if (fish.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "鱼缸还空着\n从仓库挑几条鱼放进来",
+                    "这个缸还空着\n从仓库挑一条鱼放进来",
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 17.sp,
                 )
@@ -260,8 +337,9 @@ private fun Tank(
             return@BoxWithConstraints
         }
 
-        // 全局统一的动画时钟：所有鱼共用一个 0→1 的循环，相位各自错开
-        val clock = rememberInfiniteTransition(label = "tank")
+        // 全局统一的动画时钟：所有鱼共用一个 0→1 的循环，相位各自错开。
+        // 顺带解决"入缸/取回后不刷新"—— 缸内每帧重组，展示始终是最新的。
+        val clock = rememberInfiniteTransition(label = "tank$tankIndex")
         val phase by clock.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
@@ -275,10 +353,10 @@ private fun Tank(
         fish.forEachIndexed { i, f ->
             val species = Bestiary.speciesById(f.speciesId)
             val sprite = species?.sprite ?: return@forEachIndexed
-            // 用钓场那套摆尾动画（每帧宽约 44dp）；没有动画就退回静态首帧
+            // 用钓场那套摆尾动画（每帧宽约 40dp）；没有动画就退回静态首帧
             val frames = remember(sprite) {
-                assets.allFrames(sprite, 44).ifEmpty {
-                    listOfNotNull(assets.firstFrame(sprite, 44))
+                assets.allFrames(sprite, 40).ifEmpty {
+                    listOfNotNull(assets.firstFrame(sprite, 40))
                 }.map { it.asImageBitmap() }
             }
             if (frames.isEmpty()) return@forEachIndexed
@@ -286,11 +364,11 @@ private fun Tank(
             // 摆尾：每帧停留时间随鱼而异，整缸不会同步
             val frameIdx = ((phase * frames.size * 2f).toInt() + i) % frames.size
 
-            // 横向游动：在缸宽 62% 的范围内来回，奇偶条反向，相位错开
-            val span = 0.62f
+            // 横向游动：在缸宽 60% 的范围内来回，相位错开
+            val span = 0.60f
             val raw = (phase + i * 0.17f) % 1f
             val tri = if (raw < 0.5f) raw * 2f else (1f - raw) * 2f
-            val frac = 0.08f + tri * span
+            val frac = 0.10f + tri * span
             val goingRight = raw < 0.5f
 
             // 纵向轨道：按序号铺开，落在水体范围内（避开缸顶灯与缸底砂石）
@@ -302,8 +380,8 @@ private fun Tank(
 
             Box(
                 Modifier
-                    .offset(x = x - 22.dp, y = y - 16.dp)
-                    .size(width = 44.dp, height = 32.dp)
+                    .offset(x = x - 20.dp, y = y - 15.dp)
+                    .size(width = 40.dp, height = 30.dp)
                     .pressable { onTap(i) },
                 contentAlignment = Alignment.Center,
             ) {

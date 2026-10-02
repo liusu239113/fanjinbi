@@ -12,36 +12,47 @@ import kotlin.math.pow
  *  - 卖掉：立刻拿到一笔钱，但这笔钱会被后面的通胀吃掉
  *  - 展出：放弃这笔钱，换一条长期复利（转生后依然生效）
  *
- * 缸位有限、扩容越来越贵，所以不可能"全都要"——取舍是这套系统的核心。
+ * ## 缸位结构
+ *
+ * 不是"一个大缸随便放"，而是**多缸 + 每缸有限位**：
+ *  - 开局只有 **1 个缸**、缸里只能放 **1 条**（容量 1）
+ *  - 缸位可以扩容，**每个缸最多 10 条**
+ *  - 最多可以建 **3 个缸**（总容量上限 3 × 10 = 30）
+ *
+ * 两个升级方向互相独立、价格都很贵：先扩容（同一缸多放几条），
+ * 还是先开新缸（多一个 10 位的空间）。玩家要自己权衡。
  *
  * 加成口径：**挂机收益**（自动钓手 / 鹈鹕 / 拖网 / 离线结算）。
  * 手动钓鱼不加成 —— 否则玩家会发现"越挂越赚"，点击循环就没意义了。
  */
 object Aquarium {
 
-    /** 初始缸位。 */
-    const val BASE_SLOTS = 6
+    /** 最多几个水族馆。 */
+    const val MAX_TANKS = 3
 
-    /** 每次扩容增加的缸位。 */
-    const val SLOT_STEP = 3
+    /** 每个水族馆最多几个缸位。 */
+    const val SLOTS_PER_TANK_MAX = 10
 
-    /** 缸位上限。 */
-    const val MAX_SLOTS = 30
+    /** 开局缸数。 */
+    const val BASE_TANKS = 1
 
-    /** 首档扩容价。 */
-    const val UPGRADE_BASE = 1_000_000.0
-
-    /** 扩容价增长底数。 */
-    const val UPGRADE_GROWTH = 2.1
+    /** 开局每个缸的缸位数。 */
+    const val BASE_SLOTS_PER_TANK = 1
 
     /**
      * 加成上限。
      *
-     * 单条鱼最高约 +24%（王者传说），满缸 30 条理论上能到 +700%。
+     * 单条鱼最高约 +25%（王者传说），满配 30 条理论上能到 +700%。
      * 但那是"集满所有顶级鱼"的终局状态，中间过程是缓慢爬升的；
      * 这里再压一道总上限，防止后期数值失控。
      */
     const val MAX_BONUS = 4.0
+
+    /** 单条鱼加成上限。 */
+    private const val SINGLE_CAP = 0.25
+
+    /** 稀有度权重 1.0（常见、普通体型）的基准加成。 */
+    private const val BASE_PER_RARITY = 0.012
 
     /** 稀有度权重：越稀有的鱼，展出价值越高。 */
     private fun rarityWeight(rarity: Rarity): Double = when (rarity) {
@@ -75,33 +86,76 @@ object Aquarium {
         val firstCatchBonus = if (fish.firstCatch) 1.20 else 1.0
 
         val base = BASE_PER_RARITY * rarity * size * speciesFactor * firstCatchBonus
-        // 单条鱼最多 +25%，防止某一条极品鱼直接撑爆整个加成
         return base.coerceAtMost(SINGLE_CAP)
     }
 
-    /** 稀有度权重 1.0（常见、普通体型）的基准加成。 */
-    private const val BASE_PER_RARITY = 0.012
+    // ---------------- 容量 ----------------
 
-    /** 单条鱼加成上限。 */
-    private const val SINGLE_CAP = 0.25
+    /** 已建成的缸数。 */
+    fun tanks(state: GameState): Int =
+        state.aquariumTanks.coerceIn(BASE_TANKS, MAX_TANKS)
 
-    /** 全部展品带来的总加成（已压总上限）。 */
-    fun totalBonus(state: GameState): Double =
-        state.aquariumBonus.coerceAtMost(MAX_BONUS)
+    /** 每个缸的缸位数。 */
+    fun slotsPerTank(state: GameState): Int =
+        state.aquariumSlots.coerceIn(BASE_SLOTS_PER_TANK, SLOTS_PER_TANK_MAX)
 
-    /** 缸位上限（含扩容）。 */
-    fun slots(state: GameState): Int =
-        (BASE_SLOTS + state.aquariumUpgrades * SLOT_STEP).coerceAtMost(MAX_SLOTS)
+    /** 总容量 = 缸数 × 每缸缸位。 */
+    fun capacity(state: GameState): Int = tanks(state) * slotsPerTank(state)
 
     /** 是否已满。 */
-    fun isFull(state: GameState): Boolean = state.aquarium.size >= slots(state)
+    fun isFull(state: GameState): Boolean = state.aquarium.size >= capacity(state)
 
-    /** 还能不能扩容。 */
-    fun canUpgrade(state: GameState): Boolean = slots(state) < MAX_SLOTS
+    /** 还能不能扩容缸位。 */
+    fun canExpand(state: GameState): Boolean = slotsPerTank(state) < SLOTS_PER_TANK_MAX
 
-    /** 扩容价：随已扩容次数指数增长。 */
-    fun upgradePrice(state: GameState): Double =
-        UPGRADE_BASE * UPGRADE_GROWTH.pow(state.aquariumUpgrades.toDouble())
+    /** 还能不能新建水族馆。 */
+    fun canAddTank(state: GameState): Boolean = tanks(state) < MAX_TANKS
+
+    /**
+     * 某个缸当前展示的展品。
+     *
+     * 展品是一个扁平列表，按 [slotsPerTank] 切块分给各个缸 ——
+     * 这样不必为每条鱼单独记"它在哪个缸"，扩容时也不会出现"某个缸空了"的怪状态。
+     */
+    fun tankContent(state: GameState, tankIndex: Int): List<StoredFish> {
+        val per = slotsPerTank(state)
+        val from = tankIndex * per
+        if (from >= state.aquarium.size) return emptyList()
+        return state.aquarium.subList(from, (from + per).coerceAtMost(state.aquarium.size))
+    }
+
+    // ---------------- 价格 ----------------
+
+    /**
+     * 价格锚点：当前一条常见鱼的价值 × 地图倍率。
+     *
+     * 与开箱同一套思路 —— 绝对数字会被玩家的升级曲线甩开，
+     * 只有锚定"玩家现在的收入规模"，缸位才会一直是笔要掂量的投入。
+     */
+    private fun valueScale(state: GameState): Double =
+        state.catchValue(Rarity.COMMON) * state.currentMap.valueMultiplier
+
+    /** 扩容一个缸位的价格（每缸从 n 扩到 n+1）。 */
+    fun expandPrice(state: GameState): Double {
+        val n = slotsPerTank(state)
+        return EXPAND_BASE * valueScale(state) * EXPAND_GROWTH.pow((n - BASE_SLOTS_PER_TANK).toDouble())
+    }
+
+    /** 新建一个水族馆的价格。比扩容贵得多：多一个缸等于多 10 个潜在缸位。 */
+    fun addTankPrice(state: GameState): Double {
+        val n = tanks(state)
+        return TANK_BASE * valueScale(state) * TANK_GROWTH.pow((n - BASE_TANKS).toDouble())
+    }
+
+    /** 扩容基数（× 当前渔获价值）。 */
+    private const val EXPAND_BASE = 2_000_000.0
+    private const val EXPAND_GROWTH = 2.5
+
+    /** 新建缸的基数（× 当前渔获价值）。 */
+    private const val TANK_BASE = 50_000_000.0
+    private const val TANK_GROWTH = 5.0
+
+    // ---------------- 操作 ----------------
 
     /**
      * 把仓库里第 [index] 条鱼放进鱼缸。
@@ -126,20 +180,30 @@ object Aquarium {
         return true
     }
 
-    /** 花金币扩容。返回是否成功。 */
-    fun upgrade(state: GameState): Boolean {
-        if (!canUpgrade(state)) return false
-        val price = upgradePrice(state)
+    /** 花金币扩容一个缸位。返回是否成功。 */
+    fun expand(state: GameState): Boolean {
+        if (!canExpand(state)) return false
+        val price = expandPrice(state)
         if (state.money < price) return false
         state.money -= price
-        state.aquariumUpgrades++
+        state.aquariumSlots++
         return true
     }
 
-    /** 免费扩容一次（看广告奖励）。已满级返回 false。 */
-    fun applyUpgrade(state: GameState): Boolean {
-        if (!canUpgrade(state)) return false
-        state.aquariumUpgrades++
+    /** 花金币新建一个水族馆。返回是否成功。 */
+    fun addTank(state: GameState): Boolean {
+        if (!canAddTank(state)) return false
+        val price = addTankPrice(state)
+        if (state.money < price) return false
+        state.money -= price
+        state.aquariumTanks++
+        return true
+    }
+
+    /** 免费扩容一个缸位（看广告奖励）。已满级返回 false。 */
+    fun applyFreeExpand(state: GameState): Boolean {
+        if (!canExpand(state)) return false
+        state.aquariumSlots++
         return true
     }
 
@@ -148,4 +212,8 @@ object Aquarium {
         val pct = (totalBonus(state) * 100)
         return "+${pct.toInt()}%"
     }
+
+    /** 全部展品带来的总加成（已压总上限）。 */
+    fun totalBonus(state: GameState): Double =
+        state.aquariumBonus.coerceAtMost(MAX_BONUS)
 }

@@ -245,7 +245,8 @@ class SaveData {
     var aquariumValue: MutableList<Double> = mutableListOf()
     var aquariumStoredAt: MutableList<Long> = mutableListOf()
     var aquariumFirstCatch: MutableList<Boolean> = mutableListOf()
-    var aquariumUpgrades: Int = 0
+    var aquariumTanks: Int = 1
+    var aquariumSlots: Int = 1
 
     // ---- 每日任务 ----
     var dailyDayIndex: Long = 0L

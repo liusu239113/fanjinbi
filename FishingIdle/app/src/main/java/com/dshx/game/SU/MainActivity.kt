@@ -914,11 +914,16 @@ class MainActivity : ComponentActivity() {
                         saveManager.save(gameState, settings)
                         revision++
                     },
+                    onAddTankAquarium = {
+                        audio.play("sfx_buy", 0.95f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
                     onAdUpgradeAquarium = {
                         requestAd(RewardAds.PLACEMENT_WAREHOUSE_FREE_UPGRADE) {
-                            if (Aquarium.applyUpgrade(gameState)) {
+                            if (Aquarium.applyFreeExpand(gameState)) {
                                 saveManager.save(gameState, settings)
-                                showToast("鱼缸已扩容 · ${Aquarium.slots(gameState)} 缸位")
+                                showToast("缸位已扩容 · 每缸 ${Aquarium.slotsPerTank(gameState)} 条")
                             } else {
                                 showToast("缸位已满级，无需扩容")
                             }

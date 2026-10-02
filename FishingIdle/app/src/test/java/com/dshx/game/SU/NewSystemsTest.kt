@@ -318,15 +318,74 @@ class NewSystemsTest {
     }
 
     @Test
-    fun `缸位满了不能再放`() {
+    fun `开局只能放一条_扩容后才放得下更多`() {
         val s = GameState()
         val now = System.currentTimeMillis()
-        repeat(Aquarium.slots(s) + 2) {
-            Warehouse.store(s, StoredFish("baitiao", 0, 100.0, now + it, false))
-        }
-        repeat(Aquarium.slots(s)) { assertTrue(Aquarium.exhibit(s, 0)) }
-        assertTrue("缸位应当满了", Aquarium.isFull(s))
+        assertEquals("开局 1 个缸", 1, Aquarium.tanks(s))
+        assertEquals("开局每缸 1 条", 1, Aquarium.slotsPerTank(s))
+        assertEquals("总容量 1", 1, Aquarium.capacity(s))
+
+        repeat(4) { Warehouse.store(s, StoredFish("baitiao", 0, 100.0, now + it, false)) }
+        assertTrue("第一条能进", Aquarium.exhibit(s, 0))
+        assertTrue("一条就满了", Aquarium.isFull(s))
         assertFalse("满了不能再放", Aquarium.exhibit(s, 0))
+
+        // 扩容一个缸位
+        s.money = 1e18
+        assertTrue(Aquarium.expand(s))
+        assertEquals("每缸 2 条", 2, Aquarium.slotsPerTank(s))
+        assertFalse("扩容后不再满", Aquarium.isFull(s))
+        assertTrue("能放第二条", Aquarium.exhibit(s, 0))
+    }
+
+    @Test
+    fun `每缸最多十条_最多三个缸`() {
+        val s = GameState()
+        s.money = 1e30
+        // 一直扩容到上限
+        repeat(50) { Aquarium.expand(s) }
+        assertEquals("每缸最多 10 条", 10, Aquarium.slotsPerTank(s))
+        assertFalse("到顶就不能再扩容", Aquarium.canExpand(s))
+
+        // 一直新建缸到上限
+        repeat(10) { Aquarium.addTank(s) }
+        assertEquals("最多 3 个缸", 3, Aquarium.tanks(s))
+        assertFalse("到顶就不能再新建", Aquarium.canAddTank(s))
+        assertEquals("总容量 30", 30, Aquarium.capacity(s))
+    }
+
+    @Test
+    fun `展品按缸位切块分给各个缸`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        s.money = 1e30
+        repeat(3) { Aquarium.expand(s) }   // 每缸 4 条
+        Aquarium.addTank(s)                // 2 个缸
+        assertEquals("总容量 8", 8, Aquarium.capacity(s))
+
+        repeat(6) { Warehouse.store(s, StoredFish("baitiao", 0, 100.0, now + it, false)) }
+        repeat(6) { Aquarium.exhibit(s, 0) }
+
+        assertEquals("第 1 个缸 4 条", 4, Aquarium.tankContent(s, 0).size)
+        assertEquals("第 2 个缸 2 条", 2, Aquarium.tankContent(s, 1).size)
+        assertEquals("没有第 3 个缸", 0, Aquarium.tankContent(s, 2).size)
+        // 两个缸加起来就是全部展品，不重不漏
+        val all = Aquarium.tankContent(s, 0) + Aquarium.tankContent(s, 1)
+        assertEquals("展品总数对得上", 6, all.size)
+        assertEquals("展品不重复", 6, all.map { it.seq }.distinct().size)
+    }
+
+    @Test
+    fun `扩容与新建缸的价格都随进度水涨船高`() {
+        val s = GameState()
+        val expandEarly = Aquarium.expandPrice(s)
+        val tankEarly = Aquarium.addTankPrice(s)
+        assertTrue("新建缸应当比扩容贵得多", tankEarly > expandEarly * 10)
+
+        // 渔获价值涨上去，价格必须跟着涨
+        s.commonValueMul = 40.0
+        assertTrue("扩容价要随渔获价值涨", Aquarium.expandPrice(s) > expandEarly * 20)
+        assertTrue("新建缸价要随渔获价值涨", Aquarium.addTankPrice(s) > tankEarly * 20)
     }
 
     @Test
@@ -335,15 +394,20 @@ class NewSystemsTest {
         val now = System.currentTimeMillis()
         Warehouse.store(s, StoredFish("baitiao", FishSize.BIG.ordinal, 777.0, now, true))
         Warehouse.store(s, StoredFish("jiyu", FishSize.HUGE.ordinal, 888.0, now, false))
+        Warehouse.store(s, StoredFish("caoyu", FishSize.NORMAL.ordinal, 555.0, now, false))
+        s.money = 1e30
+        Aquarium.expand(s)   // 每缸 2 条，这样缸里能放 2 条
+        Aquarium.exhibit(s, 2)
         Aquarium.exhibit(s, 1)
-        Aquarium.upgrade(s)
+        Aquarium.addTank(s)
         val expectedBonus = s.aquariumBonus
 
         val restored = GameState().apply { loadFrom(s.toSave()) }
-        assertEquals("展品数量要恢复", 1, restored.aquarium.size)
-        assertEquals("展品鱼种要恢复", "jiyu", restored.aquarium[0].speciesId)
-        assertEquals("展品体型要恢复", FishSize.HUGE.ordinal, restored.aquarium[0].sizeOrdinal)
-        assertEquals("扩容次数要恢复", s.aquariumUpgrades, restored.aquariumUpgrades)
+        assertEquals("展品数量要恢复", 2, restored.aquarium.size)
+        assertEquals("展品鱼种要恢复", "caoyu", restored.aquarium[0].speciesId)
+        assertEquals("展品体型要恢复", FishSize.NORMAL.ordinal, restored.aquarium[0].sizeOrdinal)
+        assertEquals("缸数要恢复", s.aquariumTanks, restored.aquariumTanks)
+        assertEquals("每缸缸位要恢复", s.aquariumSlots, restored.aquariumSlots)
         assertEquals("加成要恢复", expectedBonus, restored.aquariumBonus, 1e-9)
         assertEquals("仓库里剩下的那条也要在", 1, restored.warehouse.size)
         // 读档后 key 必须唯一，否则进「水族」页会闪退

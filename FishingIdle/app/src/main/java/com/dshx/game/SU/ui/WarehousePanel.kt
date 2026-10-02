@@ -111,42 +111,45 @@ fun WarehousePanel(
         Spacer(Modifier.height(8.dp))
 
         // ---- 九宫格 ----
-        Box(Modifier.weight(1f)) {
-            if (stored.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("仓库是空的", color = UITheme.TextDim, fontSize = 14.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "钓到新鱼种或刷新体型纪录时，\n那条鱼会自动存进这里",
-                            color = UITheme.TextDim, fontSize = 11.sp,
-                            textAlign = TextAlign.Center, lineHeight = 16.sp,
-                        )
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    // 必须 fillMaxSize：不给尺寸时网格会被 Box 居中，
-                    // 鱼少的时候上下各留一大片空白（截图里"仓库上面留空"就是这个）。
-                    modifier = Modifier.fillMaxSize(),
-                    columns = GridCells.Fixed(3),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    // key 必须全局唯一：用 storedAt+speciesId 会在"同一毫秒入库
-                    // 两条同种鱼"时撞 key，LazyVerticalGrid 直接抛异常闪退。
-                    items(stored, key = { it.seq }) { fish ->
-                        WarehouseSlot(
-                            fish = fish,
-                            now = now,
-                            offerFactor = offer?.factor,
-                            assets = assets,
-                            // 点格子 = 直接按行情价卖掉（快）；
-                            // 长按不方便，所以把「拍卖」单独做成格子里的按钮。
-                            onClick = { onSell(state.warehouse.indexOf(fish)) },
-                            onAuction = { onAuction(state.warehouse.indexOf(fish)) },
-                        )
-                    }
+        // ⚠️ 这里**不能**包 weight(1f) 的 Box。
+        // 上一版为了"别让网格被居中"给它加了 weight，结果那个 Box 先吃掉
+        // 整列剩余高度、网格再从顶部开始画，鱼少时下方反而空出一大块
+        // （玩家反馈"间距越来越大"就是这个）。
+        // 现在：网格与空态都只按**内容高度**排，列表多长就占多长。
+        if (stored.isEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().padding(top = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("仓库是空的", color = UITheme.TextDim, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "钓到新鱼种或刷新体型纪录时，\n那条鱼会自动存进这里",
+                    color = UITheme.TextDim, fontSize = 11.sp,
+                    textAlign = TextAlign.Center, lineHeight = 16.sp,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                // key 必须全局唯一：用 storedAt+speciesId 会在"同一毫秒入库
+                // 两条同种鱼"时撞 key，LazyVerticalGrid 直接抛异常闪退。
+                items(stored, key = { it.seq }) { fish ->
+                    WarehouseSlot(
+                        fish = fish,
+                        now = now,
+                        offerFactor = offer?.factor,
+                        assets = assets,
+                        // 点格子 = 直接按行情价卖掉（快）；
+                        // 长按不方便，所以把「拍卖」单独做成格子里的按钮。
+                        onClick = { onSell(state.warehouse.indexOf(fish)) },
+                        onAuction = { onAuction(state.warehouse.indexOf(fish)) },
+                    )
                 }
             }
         }

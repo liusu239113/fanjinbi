@@ -398,11 +398,14 @@ class GameState {
     // 展出的鱼不再能卖，但按「稀有度 × 体型 × 鱼种」给**永久挂机收益加成**。
     // 这是仓库真正的取舍点 —— 卖是即时收益，养是长线复利。
 
-    /** 鱼缸里展出的鱼（按入缸顺序）。 */
+    /** 鱼缸里展出的鱼（按入缸顺序，按缸位切块分给各个缸）。 */
     val aquarium: MutableList<StoredFish> = mutableListOf()
 
-    /** 已购买的缸位扩容次数。 */
-    var aquariumUpgrades: Int = 0
+    /** 已建成的水族馆数量（1~3）。 */
+    var aquariumTanks: Int = Aquarium.BASE_TANKS
+
+    /** 每个水族馆的缸位数（1~10）。 */
+    var aquariumSlots: Int = Aquarium.BASE_SLOTS_PER_TANK
 
     /** 展出的鱼带来的挂机收益加成（0.12 = +12%）。 */
     val aquariumBonus: Double
@@ -955,7 +958,8 @@ class GameState {
         it.aquariumValue = aquarium.map { f -> f.baseValue }.toMutableList()
         it.aquariumStoredAt = aquarium.map { f -> f.storedAt }.toMutableList()
         it.aquariumFirstCatch = aquarium.map { f -> f.firstCatch }.toMutableList()
-        it.aquariumUpgrades = aquariumUpgrades
+        it.aquariumTanks = aquariumTanks
+        it.aquariumSlots = aquariumSlots
         it.money = money
         it.totalMoney = totalMoney
         it.highestMoney = highestMoney
@@ -1008,7 +1012,8 @@ class GameState {
         warehouseEarned = 0.0
         merchantVisits = 0
         aquarium.clear()
-        aquariumUpgrades = 0
+        aquariumTanks = Aquarium.BASE_TANKS
+        aquariumSlots = Aquarium.BASE_SLOTS_PER_TANK
         gear.equipped.clear()
         gear.bag.clear()
         gearBoxesOpened = 0
@@ -1084,8 +1089,6 @@ class GameState {
         gear.reindex()
         gearBoxesOpened = data.gearBoxesOpened
 
-        // 重排列表 key：存档不存 seq，不重排的话同一毫秒入库的鱼会撞 key 闪退
-        Warehouse.reindex(this)
         warehouseUpgrades = data.warehouseUpgrades
         warehouseEarned = data.warehouseEarned
         merchantVisits = data.merchantVisits
@@ -1106,7 +1109,15 @@ class GameState {
                 )
             )
         }
-        aquariumUpgrades = data.aquariumUpgrades
+        aquariumTanks = data.aquariumTanks.coerceIn(Aquarium.BASE_TANKS, Aquarium.MAX_TANKS)
+        aquariumSlots = data.aquariumSlots.coerceIn(Aquarium.BASE_SLOTS_PER_TANK, Aquarium.SLOTS_PER_TANK_MAX)
+
+        // ⚠️ 必须在**仓库与水族馆都装好之后**才能重排列表 key。
+        // 存档不存 seq，两个列表里的鱼读出来 seq 全是 0。
+        // 之前这一步写在装水族馆之前，结果缸里每条鱼的 key 都是 "0"，
+        // 打开水族馆页时 LazyVerticalGrid 直接抛
+        // "Key "0" was already used" 闪退。
+        Warehouse.reindex(this)
 
         money = data.money
         totalMoney = data.totalMoney

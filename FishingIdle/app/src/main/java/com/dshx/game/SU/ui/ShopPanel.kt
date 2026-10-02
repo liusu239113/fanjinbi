@@ -96,6 +96,7 @@ fun ShopPanel(
     /** 水族馆页：把缸里第 index 条鱼取回仓库。 */
     onTakeBack: (Int) -> Unit,
     onUpgradeAquarium: () -> Unit,
+    onAddTankAquarium: () -> Unit,
     onAdUpgradeAquarium: () -> Unit,
     /** 水域页「声呐探测」——看完广告立刻让一条鱼王现身。 */
     onKingSonar: () -> Unit,
@@ -383,15 +384,23 @@ fun ShopPanel(
                                 flashId++
                                 onTakeBack(idx)
                             },
-                            onUpgrade = {
-                                val ok = Aquarium.upgrade(state)
-                                flash = if (ok) "鱼缸已扩容 · ${Aquarium.slots(state)} 缸位"
-                                else "金币不足 · 扩容"
+                            onExpand = {
+                                val ok = Aquarium.expand(state)
+                                flash = if (ok) "缸位已扩容 · 每缸 ${Aquarium.slotsPerTank(state)} 条"
+                                else "金币不足 · 扩容缸位"
                                 flashOk = ok
                                 flashId++
                                 onUpgradeAquarium()
                             },
-                            onAdUpgrade = onAdUpgradeAquarium,
+                            onAddTank = {
+                                val ok = Aquarium.addTank(state)
+                                flash = if (ok) "新建水族馆 · 共 ${Aquarium.tanks(state)} 个缸"
+                                else "金币不足 · 新建水族馆"
+                                flashOk = ok
+                                flashId++
+                                onAddTankAquarium()
+                            },
+                            onAdExpand = onAdUpgradeAquarium,
                             onClose = onClose,
                         )
                         else -> StatsView(state, revision)
