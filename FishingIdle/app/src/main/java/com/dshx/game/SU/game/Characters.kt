@@ -83,7 +83,9 @@ object Characters {
             sprite = "player2_cast",
             desc = "镇上的钓鱼冠军，手上那根红竿能同时照看三个漂。",
             rodSkill = RodSkill.MULTI_LINE,
-            price = 250_000.0,
+            // 价格梯度：相邻角色之间**各差 100 倍**，越往后越难。
+            // 角色是"换一套玩法"的长线目标，不该在前期随手买得起。
+            price = 5e8,
             bobberColor = 0xFFFF4D4D.toInt(),
         ),
         CharacterDef(
@@ -93,7 +95,7 @@ object Characters {
             sprite = "player3_cast",
             desc = "在海上漂了四十年。他说鱼不是钓上来的，是哄上来的。",
             rodSkill = RodSkill.AREA_ATTRACT,
-            price = 2_500_000.0,
+            price = 5e10,
             bobberColor = 0xFF4DA6FF.toInt(),
         ),
         CharacterDef(
@@ -103,7 +105,7 @@ object Characters {
             sprite = "player4_cast",
             desc = "一天抛两千竿的男人。他说钓鱼就是不停地抛，直到鱼烦了。",
             rodSkill = RodSkill.FAST_CAST,
-            price = 12_000_000.0,
+            price = 5e12,
             bobberColor = 0xFF5AE06A.toInt(),
         ),
 
@@ -127,7 +129,7 @@ object Characters {
             sprite = "helper2_cast",
             desc = "手最快的一个，别人收一竿她能收两竿。",
             rodSkill = RodSkill.HELPER_BOOST,
-            price = 800_000.0,
+            price = 2e12,
             isHelper = true,
             bobberColor = 0xFFB06AE0.toInt(),
         ),
@@ -138,7 +140,7 @@ object Characters {
             sprite = "helper3_cast",
             desc = "自己削的竹竿，据说沾了手气。他钓上来的鱼总是偏大。",
             rodSkill = RodSkill.LUCKY_ROD,
-            price = 5_000_000.0,
+            price = 2e14,
             isHelper = true,
             bobberColor = 0xFFC8A05A.toInt(),
         ),

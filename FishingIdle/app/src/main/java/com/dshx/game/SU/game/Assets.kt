@@ -68,6 +68,13 @@ class Assets(context: Context) {
         return out
     }
 
+    /** 该动画图集是否存在（`art/<name>_anim.png`）。用于装备皮肤缺失时回退。 */
+    fun hasAnimation(name: String): Boolean = try {
+        appContext.assets.open("art/${name}_anim.png").use { true }
+    } catch (e: Exception) {
+        false
+    }
+
     /**
      * 读取动画图集的配置（列数、行数）。
      * 由 tools/build_animations.py 生成，用于把精灵表切成单帧。

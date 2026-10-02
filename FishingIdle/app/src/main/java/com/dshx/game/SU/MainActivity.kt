@@ -42,6 +42,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.dshx.game.SU.game.Assets
 import com.dshx.game.SU.game.Attribute
+import com.dshx.game.SU.game.Auction
+import com.dshx.game.SU.game.AuctionResult
+import com.dshx.game.SU.game.StoredFish
 import com.dshx.game.SU.game.AudioManager
 import com.dshx.game.SU.game.CharacterDef
 import com.dshx.game.SU.game.DailyQuests
@@ -126,6 +129,16 @@ class MainActivity : ComponentActivity() {
 
     /** 轻量提示（相当于 Toast），由 [showToast] 写入、游戏内顶部展示。 */
     private var toastText by mutableStateOf<String?>(null)
+
+    /**
+     * 当前拍卖状态。提升为类字段：发起拍卖的 [startAuction] 是普通方法，
+     * 拿不到 composable 里的局部 remember。
+     */
+    private var auctionFish by mutableStateOf<StoredFish?>(null)
+    private var auctionResult by mutableStateOf<AuctionResult?>(null)
+
+    /** 开箱结果弹窗（装备页开箱后展示）。 */
+    private var gearReward by mutableStateOf<com.dshx.game.SU.game.GearItem?>(null)
 
     /** 广告礼包角标数量：只统计当前可领取的权益，不把已领完项算进去。 */
     private val adGiftCount: Int get() {
@@ -876,6 +889,7 @@ class MainActivity : ComponentActivity() {
                         revision++
                     },
                     // 看广告免费扩容：只有看完广告才真的扩容，中途关掉不发奖。
+                    onAuction = { idx -> startAuction(idx) },
                     onAdUpgradeWarehouse = {
                         requestAd(RewardAds.PLACEMENT_WAREHOUSE_FREE_UPGRADE) {
                             if (Warehouse.applyUpgrade(gameState)) {
@@ -896,6 +910,47 @@ class MainActivity : ComponentActivity() {
                     onLottery = { doLottery() },
                     onDailyBonus = { doDailyBonus() },
                     onRareLure = { doRareLure() },
+                    onOpenGearBox = {
+                        val item = gameState.openGearBox()
+                        if (item != null) {
+                            audio.play("sfx_chest", 0.9f)
+                            gearReward = item
+                            saveManager.save(gameState, settings)
+                        } else {
+                            audio.play("sfx_cant_buy", 0.7f)
+                            showToast("金币不足")
+                        }
+                        revision++
+                    },
+                    onOpenGearBoxByAd = {
+                        requestAd(RewardAds.PLACEMENT_GEAR_BOX) {
+                            gearReward = gameState.openGearBoxByAd()
+                            saveManager.save(gameState, settings)
+                            revision++
+                        }
+                    },
+                    onEquipGear = { item ->
+                        gameState.gear.equip(item)
+                        audio.play("sfx_click", 0.7f)
+                        // 装备会换立绘（鱼竿）与浮漂，必须让渲染层重载素材
+                        gameViewRef?.onGearChanged()
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onUnequipGear = { slot ->
+                        gameState.gear.unequip(slot)
+                        audio.play("sfx_click", 0.6f)
+                        gameViewRef?.onGearChanged()
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onSalvageGear = { item ->
+                        val gain = gameState.gear.salvage(item)
+                        gameState.money += gain
+                        audio.play("sfx_buy", 0.8f)
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
                     onClaimDex = {
                         val got = DexReward.claimAll(gameState)
                         if (got > 0) {
@@ -1044,6 +1099,42 @@ class MainActivity : ComponentActivity() {
                             showToast("2×/3× 已解锁 20 分钟，离线照常计时")
                         }
                     },
+                )
+            }
+
+            // 拍卖行：仓库里点「拍卖」后弹出，展示 AI 买家竞价
+            val aFish = auctionFish
+            val aResult = auctionResult
+            if (aFish != null && aResult != null) {
+                com.dshx.game.SU.ui.AuctionDialog(
+                    fish = aFish,
+                    result = aResult,
+                    assets = assets,
+                    onSettle = {
+                        val gain = Auction.settle(gameState, aResult, System.currentTimeMillis())
+                        gameState.warehouseEarned += gain
+                        DailyTracker.onSold(gameState)
+                        audio.play("sfx_success", 0.9f)
+                        showToast("拍卖成交 +🪙${formatNumber(gain)}")
+                        auctionResult = null
+                        auctionFish = null
+                        saveManager.save(gameState, settings)
+                        revision++
+                    },
+                    onPass = {
+                        audio.play("sfx_click", 0.6f)
+                        auctionResult = null
+                        auctionFish = null
+                        revision++
+                    },
+                )
+            }
+
+            // 开箱结果：把开出来的装备亮给玩家看
+            gearReward?.let { item ->
+                com.dshx.game.SU.ui.GearRewardDialog(
+                    item = item,
+                    onDismiss = { gearReward = null },
                 )
             }
 
@@ -1313,6 +1404,19 @@ class MainActivity : ComponentActivity() {
     // ---------------- 各子页的广告点 ----------------
     // 每个页面最多一个广告入口，逻辑集中在这里，面板只管展示与回调。
     // 奖励数值一律不写死在 UI 里（便于后期调参，也不把广告耦合进玩法代码）。
+
+    /**
+     * 发起一次拍卖：对指定鱼生成一组 AI 买家出价。
+     * 结果交给弹窗展示，玩家自己决定成交或流拍。
+     */
+    private fun startAuction(idx: Int) {
+        val fish = gameState.warehouse.getOrNull(idx) ?: return
+        val now = System.currentTimeMillis()
+        val market = Warehouse.marketValue(fish, now)
+        auctionFish = fish
+        auctionResult = Auction.runAuction(fish, market, idx)
+        audio.play("sfx_click", 0.6f)
+    }
 
     /** 看完广告送一名永久钓手，和鱼苗商店购买走同一套属性/存档链路。 */
     private fun doFreeHelper() {

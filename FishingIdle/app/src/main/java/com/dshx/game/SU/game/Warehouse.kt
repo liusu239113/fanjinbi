@@ -29,6 +29,17 @@ class StoredFish(
      * 首捕与破纪录的鱼标一个金框，卖之前给玩家一个提醒。
      */
     val firstCatch: Boolean,
+    /**
+     * 列表 key，**全局唯一**。
+     *
+     * 仓库在 Compose 里用它当 key：`storedAt + speciesId` 会撞 ——
+     * 拖网一次捞多条鱼、或同一毫秒钓上两条同种鱼时，时间戳与鱼种都相同，
+     * 重复 key 会让 LazyVerticalGrid 直接抛异常闪退（玩家反馈"点仓库总是闪退"）。
+     *
+     * 新入库的鱼自动分配；读档时由 [Warehouse.reindex] 按索引重排，
+     * 保证存档往返后依然唯一。
+     */
+    var seq: Long = 0L,
 ) {
     val size: FishSize get() = FishSize.entries.getOrElse(sizeOrdinal) { FishSize.NORMAL }
 
@@ -85,6 +96,18 @@ object Warehouse {
     fun marketTotal(list: List<StoredFish>, now: Long): Double =
         list.sumOf { marketValue(it, now) }
 
+    /** 下一个可用的列表 key。全局单调递增，跨读档也不会重复。 */
+    private var seqCounter = 0L
+
+    /**
+     * 重排仓库里所有鱼的列表 key。
+     * 读档后必须调用：存档不存 seq，不重排的话同一毫秒入库的鱼会撞 key，
+     * 点开仓库直接闪退。
+     */
+    fun reindex(state: GameState) {
+        for (f in state.warehouse) f.seq = ++seqCounter
+    }
+
     /** 容量上限（含买过的扩容）。 */
     fun capacity(state: GameState): Int =
         (BASE_CAPACITY + state.warehouseUpgrades * CAPACITY_STEP).coerceAtMost(MAX_CAPACITY)
@@ -99,6 +122,8 @@ object Warehouse {
      */
     fun store(state: GameState, fish: StoredFish): Boolean {
         if (isFull(state)) return false
+        // 入库时分配唯一 key：调用方不必关心，也杜绝"同一毫秒两条同种鱼"撞 key
+        if (fish.seq <= 0L) fish.seq = ++seqCounter
         state.warehouse.add(fish)
         return true
     }

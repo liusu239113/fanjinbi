@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -86,6 +88,8 @@ fun ShopPanel(
     onUpgradeWarehouse: () -> Unit,
     /** 仓库页「看广告免费扩容」——由宿主走激励视频，看完再免费扩一次。 */
     onAdUpgradeWarehouse: () -> Unit,
+    /** 仓库页「拍卖」——把第 index 条鱼交给 AI 买家竞价。 */
+    onAuction: (Int) -> Unit,
     /** 水域页「声呐探测」——看完广告立刻让一条鱼王现身。 */
     onKingSonar: () -> Unit,
     /** 角色页「钓协借调」——看完广告换取某角色的限时试用权。 */
@@ -103,6 +107,12 @@ fun ShopPanel(
     /** 图鉴页「稀有鱼诱饵」——确定性提升稀有度，加速集齐图鉴。 */
     onRareLure: () -> Unit,
     onClaimDex: () -> Unit,
+    /** 装备页回调。 */
+    onOpenGearBox: () -> Unit,
+    onOpenGearBoxByAd: () -> Unit,
+    onEquipGear: (com.dshx.game.SU.game.GearItem) -> Unit,
+    onUnequipGear: (com.dshx.game.SU.game.GearSlot) -> Unit,
+    onSalvageGear: (com.dshx.game.SU.game.GearItem) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -159,15 +169,21 @@ fun ShopPanel(
         ) {
             WoodPanel(Modifier.fillMaxSize(), assets = assets, cornerPx = 110) {
                 Column(Modifier.fillMaxSize().padding(12.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        tabs.forEachIndexed { i, name ->
-                            TabButton(name, i == tab, Modifier.weight(1f)) { tab = i }
+                    // 页签超过 8 个，竖屏一行放不下（会被挤成换行），
+                    // 所以改成横向可滚动；「✕」固定在右侧不跟着滚。
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            tabs.forEachIndexed { i, name ->
+                                TabButton(name, i == tab, Modifier.width(58.dp)) { tab = i }
+                            }
                         }
-                        Spacer(Modifier.width(3.dp))
+                        Spacer(Modifier.width(4.dp))
                         GameButton("✕", onClose, accent = UITheme.WaterTop, fontSize = 14)
                     }
 
@@ -184,6 +200,10 @@ fun ShopPanel(
                         }
                     }
 
+                    // 子页面统一放在 weight(1f) 的 Box 里：不包的话每个页面
+                    // 各自 fillMaxSize 会撑满整列，内容被挤出可见区（仓库页
+                    // 顶部那片空白就是这么来的）。
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
                     when (tab) {
                         0 -> ItemList(Content.fishItems, state, assets, purchase, "鱼苗", revision, justBought,
                             headerAd = {
@@ -260,8 +280,15 @@ fun ShopPanel(
                         2 -> MapList(state, assets, unlock, revision, onKingSonar)
                         3 -> DailyQuestList(state, assets, revision, onDailyBonus)
                         4 -> FishDex(state, assets, revision, onClaimDex, onRareLure)
+                        // 角色页里含「装备」子页：装备与角色都是"换一套手感"，
+                        // 放同一页更自然，也避免页签越加越多。
                         5 -> CharacterPanel(
                             state = state, assets = assets, revision = revision,
+                            onOpenGearBox = onOpenGearBox,
+                            onOpenGearBoxByAd = onOpenGearBoxByAd,
+                            onEquipGear = onEquipGear,
+                            onUnequipGear = onUnequipGear,
+                            onSalvageGear = onSalvageGear,
                             onUnlock = { def ->
                                 val ok = onUnlockCharacter(def)
                                 flash = if (ok) "已解锁 · ${def.name}" else "金币不足 · ${def.name}"
@@ -314,9 +341,11 @@ fun ShopPanel(
                                 flashId++
                             },
                             onAdUpgrade = onAdUpgradeWarehouse,
+                            onAuction = onAuction,
                             onClose = onClose,
                         )
                         else -> StatsView(state, revision)
+                    }
                     }
                 }
             }

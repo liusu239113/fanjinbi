@@ -57,6 +57,9 @@ object RewardAds {
     /** 免费雇佣一名永久钓手（每日一次，需要先解锁钓手）。 */
     const val PLACEMENT_FREE_HELPER = "free_helper"
 
+    /** 免费开一次装备箱（稀有度更高，可重复看）。 */
+    const val PLACEMENT_GEAR_BOX = "gear_box"
+
     /** 升级免单：当前最接近的可见未解锁升级免费购入一档（每日一次）。 */
     const val PLACEMENT_FREE_UPGRADE = "free_upgrade"
 

@@ -79,6 +79,12 @@ class GameView(
         postInvalidateOnAnimation()
     }
 
+    /** 换了装备（鱼竿/浮标）后调用：立绘与浮漂换皮肤。 */
+    fun onGearChanged() {
+        renderer.onGearChanged()
+        postInvalidateOnAnimation()
+    }
+
     override fun onDraw(canvas: android.graphics.Canvas) {
         super.onDraw(canvas)
         val t = ViewTransform(width.toFloat(), height.toFloat())

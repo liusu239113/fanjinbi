@@ -59,6 +59,8 @@ fun WarehousePanel(
     onUpgrade: () -> Unit,
     /** 看广告免费扩容一次（[RewardAds.isReady] 为 false 时按钮置灰）。 */
     onAdUpgrade: () -> Unit,
+    /** 把第 index 条鱼送去拍卖。 */
+    onAuction: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
@@ -130,13 +132,18 @@ fun WarehousePanel(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    items(stored, key = { it.storedAt.toString() + it.speciesId }) { fish ->
+                    // key 必须全局唯一：用 storedAt+speciesId 会在"同一毫秒入库
+                    // 两条同种鱼"时撞 key，LazyVerticalGrid 直接抛异常闪退。
+                    items(stored, key = { it.seq }) { fish ->
                         WarehouseSlot(
                             fish = fish,
                             now = now,
                             offerFactor = offer?.factor,
                             assets = assets,
+                            // 点格子 = 直接按行情价卖掉（快）；
+                            // 长按不方便，所以把「拍卖」单独做成格子里的按钮。
                             onClick = { onSell(state.warehouse.indexOf(fish)) },
+                            onAuction = { onAuction(state.warehouse.indexOf(fish)) },
                         )
                     }
                 }
@@ -237,6 +244,7 @@ private fun WarehouseSlot(
     offerFactor: Double?,
     assets: Assets,
     onClick: () -> Unit,
+    onAuction: () -> Unit,
 ) {
     val species = Bestiary.speciesById(fish.speciesId)
     val icon = remember(fish.speciesId) {
@@ -295,6 +303,22 @@ private fun WarehouseSlot(
             color = UITheme.GoldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
+        Spacer(Modifier.height(3.dp))
+        // 「拍卖」让这条鱼有机会卖出高于行情的价 —— 仓库里真正的博弈点
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(5.dp))
+                .background(UITheme.Gold.copy(alpha = 0.85f))
+                .pressable { onAuction() }
+                .padding(vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "拍卖",
+                color = UITheme.Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 

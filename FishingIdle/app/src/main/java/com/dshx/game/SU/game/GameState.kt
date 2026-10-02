@@ -206,6 +206,45 @@ class GameState {
         }
     }
 
+    // ---- 装备 ----
+
+    /** 装备栏（已装备 + 背包）。加成全部从这里读，保证只有一处真相。 */
+    val gear: GearLoadout = GearLoadout()
+
+    /** 某装备属性的总加成。 */
+    fun gearStat(stat: GearStat): Double = gear.total(stat)
+
+    /** 已开箱次数，用于让箱价递增（开得越多越贵）。 */
+    var gearBoxesOpened: Long = 0L
+
+    /** 金币开箱的价格：随开箱次数递增，避免无限刷。 */
+    fun gearBoxPrice(): Double =
+        50_000.0 * Math.pow(1.35, gearBoxesOpened.toDouble()) * currentMap.valueMultiplier
+
+    /**
+     * 花金币开一件装备。金币不足返回 null。
+     * 开出来的装备进背包，玩家自己去装备页装上。
+     */
+    fun openGearBox(): GearItem? {
+        val price = gearBoxPrice()
+        if (money < price) return null
+        money -= price
+        gearBoxesOpened++
+        val item = GearItem.roll()
+        gear.add(item)
+        return item
+    }
+
+    /**
+     * 广告开箱：免费开一件，且**稀有度更好**（luck 拉高）。
+     * 这是装备系统里转化率最高的一类广告位 —— 玩家为了刷传说装备会反复看。
+     */
+    fun openGearBoxByAd(): GearItem {
+        val item = GearItem.roll(luck = 1.2)
+        gear.add(item)
+        return item
+    }
+
     // ---- 换装（角色）----
 
     /** 已拥有的角色 id。 */
@@ -369,7 +408,8 @@ class GameState {
      * 角色「大力收线」会让连击加成翻倍。
      */
     val comboMultiplier: Double
-        get() = 1.0 + (combo.coerceAtMost(30) * (skillComboStep + comboPower) *
+        get() = 1.0 + (combo.coerceAtMost(30) *
+            (skillComboStep + comboPower + gearStat(GearStat.COMBO_BONUS)) *
             characterComboBonus)
 
     /**
@@ -596,8 +636,12 @@ class GameState {
             Rarity.EPIC -> (BASE_EPIC + epicValueAdd) * epicValueMul
             Rarity.LEGEND -> (BASE_LEGEND + legendValueAdd) * legendValueMul
         }
-        return base * skillValueMultiplier * globalValueMultiplier
+        return base * skillValueMultiplier * globalValueMultiplier * gearValueMultiplier
     }
+
+    /** 装备带来的渔获价值加成。 */
+    val gearValueMultiplier: Double
+        get() = 1.0 + gearStat(GearStat.VALUE_BONUS)
 
     /**
      * 具体鱼种的价值 = 稀有度基础价值 × 该鱼种倍率 × 地图倍率。
@@ -665,7 +709,7 @@ class GameState {
         return isNew
     }
 
-    /** 某鱼种收线耗时倍率（越大越快），含技能加成与角色鱼竿技能。 */
+    /** 某鱼种收线耗时倍率（越大越快），含技能、角色鱼竿与装备加成。 */
     fun reelSpeed(kind: Rarity): Double {
         val base = when (kind) {
             Rarity.COMMON -> commonReelSpeed
@@ -673,7 +717,7 @@ class GameState {
             Rarity.EPIC -> epicReelSpeed
             Rarity.LEGEND -> legendReelSpeed
         }
-        return base * skillReelMultiplier * characterReelBonus
+        return base * skillReelMultiplier * characterReelBonus * (1.0 + gearStat(GearStat.REEL_SPEED))
     }
 
     /**
@@ -845,6 +889,10 @@ class GameState {
     }
 
     fun toSave(): SaveData = SaveData().also {
+        // 装备：已装备的与背包里的都要存，否则读档后皮肤与加成全丢
+        it.gearEquipped = gear.equipped.values.toMutableList()
+        it.gearBag = gear.bag.toMutableList()
+        it.gearBoxesOpened = gearBoxesOpened
         it.money = money
         it.totalMoney = totalMoney
         it.highestMoney = highestMoney
@@ -956,6 +1004,16 @@ class GameState {
                 )
             )
         }
+        // ---- 装备 ----
+        gear.equipped.clear()
+        gear.bag.clear()
+        for (g in data.gearEquipped) gear.equipped[g.slot] = g
+        gear.bag.addAll(data.gearBag)
+        gear.reindex()
+        gearBoxesOpened = data.gearBoxesOpened
+
+        // 重排列表 key：存档不存 seq，不重排的话同一毫秒入库的鱼会撞 key 闪退
+        Warehouse.reindex(this)
         warehouseUpgrades = data.warehouseUpgrades
         warehouseEarned = data.warehouseEarned
         merchantVisits = data.merchantVisits

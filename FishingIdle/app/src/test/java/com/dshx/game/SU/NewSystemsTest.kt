@@ -1,9 +1,16 @@
 package com.dshx.game.SU
 
+import com.dshx.game.SU.game.Affix
+import com.dshx.game.SU.game.Auction
 import com.dshx.game.SU.game.Characters
 import com.dshx.game.SU.game.DexReward
 import com.dshx.game.SU.game.GameState
+import com.dshx.game.SU.game.GearItem
+import com.dshx.game.SU.game.GearRarity
+import com.dshx.game.SU.game.GearSlot
+import com.dshx.game.SU.game.GearStat
 import com.dshx.game.SU.game.KingKind
+import com.dshx.game.SU.game.Rarity
 import com.dshx.game.SU.game.RodSkill
 import com.dshx.game.SU.game.StoredFish
 import com.dshx.game.SU.game.Warehouse
@@ -86,6 +93,104 @@ class NewSystemsTest {
         assertFalse(state.claimFreeUpgrade(helper))
     }
 
+    // ---------------- 装备 ----------------
+
+    @Test
+    fun `装备加成会真的生效到属性上`() {
+        val s = GameState()
+        val reelBefore = s.reelSpeed(Rarity.COMMON)
+
+        // 装一根必定带收线速度的鱼竿
+        val rod = GearItem(
+            slot = GearSlot.ROD, rarity = GearRarity.LEGEND, name = "测试竿",
+            affixes = listOf(Affix(GearStat.REEL_SPEED, 0.5)),
+        )
+        s.gear.add(rod)
+        s.gear.equip(rod)
+        assertEquals("收线速度应被装备放大", reelBefore * 1.5, s.reelSpeed(Rarity.COMMON), 0.001)
+
+        // 卸下后回到原值
+        s.gear.unequip(GearSlot.ROD)
+        assertEquals(reelBefore, s.reelSpeed(Rarity.COMMON), 0.001)
+    }
+
+    @Test
+    fun `装备的渔获价值加成参与结算`() {
+        val s = GameState()
+        val before = s.catchValue(Rarity.COMMON)
+        val bait = GearItem(
+            slot = GearSlot.BAIT, rarity = GearRarity.EPIC, name = "测试饵",
+            affixes = listOf(Affix(GearStat.VALUE_BONUS, 0.25)),
+        )
+        s.gear.add(bait)
+        s.gear.equip(bait)
+        assertEquals(before * 1.25, s.catchValue(Rarity.COMMON), 0.001)
+    }
+
+    @Test
+    fun `开箱得到装备并进背包`() {
+        val s = GameState()
+        s.money = 1e30
+        val item = s.openGearBox()
+        assertNotNull("金币够就该开出装备", item)
+        assertEquals("开出的装备应进背包", 1, s.gear.bag.size)
+        assertEquals("开箱次数要累计", 1L, s.gearBoxesOpened)
+        // 箱价随开箱次数递增
+        assertTrue("箱价应递增", s.gearBoxPrice() > 50_000.0)
+    }
+
+    @Test
+    fun `装备存档往返不丢`() {
+        val s = GameState()
+        val rod = GearItem(GearSlot.ROD, GearRarity.LEGEND, "龙纹竿",
+            listOf(Affix(GearStat.REEL_SPEED, 0.42)))
+        s.gear.add(rod)
+        s.gear.equip(rod)
+        s.gear.add(GearItem(GearSlot.LINE, GearRarity.RARE, "编织线",
+            listOf(Affix(GearStat.ESCAPE_REDUCE, 0.2))))
+        s.gearBoxesOpened = 7
+
+        val restored = GameState().apply { loadFrom(s.toSave()) }
+        val rRod = restored.gear.equipped[GearSlot.ROD]
+        assertNotNull("装备的鱼竿应恢复", rRod)
+        assertEquals("龙纹竿", rRod!!.name)
+        assertEquals(0.42, rRod.stat(GearStat.REEL_SPEED), 0.0001)
+        assertEquals("背包里的鱼线应恢复", 1, restored.gear.bag.size)
+        assertEquals(7L, restored.gearBoxesOpened)
+    }
+
+    // ---------------- 拍卖 ----------------
+
+    @Test
+    fun `拍卖取最高出价并扣手续费`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        val fish = s.warehouse[0]
+        val market = Warehouse.marketValue(fish, now)
+
+        val result = Auction.runAuction(fish, market, 0, kotlin.random.Random(42))
+        assertEquals("应有多个买家出价", Auction.BIDDER_COUNT, result.bids.size)
+        assertTrue("最高价应不低于其他出价",
+            result.bids.all { it.factor <= result.topBid!!.factor })
+
+        val before = s.money
+        val gain = Auction.settle(s, result, now)
+        assertEquals("按最高价扣手续费入账",
+            market * result.topBid!!.factor * (1 - Auction.FEE_RATE), gain, 0.01)
+        assertEquals(before + gain, s.money, 0.01)
+        assertTrue("成交后鱼应移出仓库", s.warehouse.isEmpty())
+    }
+
+    @Test
+    fun `拍卖流拍不扣鱼`() {
+        val s = GameState()
+        val now = System.currentTimeMillis()
+        Warehouse.store(s, StoredFish("baitiao", 0, 1000.0, now, false))
+        // 流拍 = 什么都不做
+        assertEquals("流拍后鱼还在", 1, s.warehouse.size)
+    }
+
     // ---------------- 换装 ----------------
 
     @Test
@@ -119,12 +224,13 @@ class NewSystemsTest {
     @Test
     fun `解锁角色要扣钱_重复解锁不生效`() {
         val s = GameState()
-        s.money = 1_000_000.0
+        // 角色价格已按 100 倍梯度上调（首个 5e8），这里给足金币
+        s.money = 1e15
         val def = Characters.players.first { !it.owned }
 
         assertTrue("钱够应当能解锁", s.unlockCharacter(def))
         val after = s.money
-        assertTrue("应当扣掉解锁费", after < 1_000_000.0)
+        assertTrue("应当扣掉解锁费", after < 1e15)
         assertFalse("已拥有不能再解锁", s.unlockCharacter(def))
         assertEquals("重复解锁不该再扣钱", after, s.money, 0.001)
     }
@@ -132,7 +238,7 @@ class NewSystemsTest {
     @Test
     fun `换装后当前角色生效且分主角帮手`() {
         val s = GameState()
-        s.money = 1e12
+        s.money = 1e15
         val helper = Characters.helpers.first { !it.owned }
         s.unlockCharacter(helper)
         s.equipCharacter(helper)
@@ -157,6 +263,30 @@ class NewSystemsTest {
             "满了必须返回 false，让调用方折现",
             Warehouse.store(s, StoredFish("baitiao", 0, 100.0, 0L, false)),
         )
+    }
+
+    /**
+     * 仓库列表的 key 必须唯一，否则 Compose 直接闪退。
+     *
+     * 玩家反馈："玩到最后一个水域，仓库满了，点击仓库总是闪退"。
+     * 根因：列表 key 用的是 `storedAt + speciesId`，而拖网一次捞多条、
+     * 或同一毫秒钓上两条同种鱼时这两项都相同 → 重复 key → LazyVerticalGrid 抛异常。
+     */
+    @Test
+    fun `仓库入库序号唯一_同毫秒同鱼种也不会撞key`() {
+        val s = GameState()
+        // 同一毫秒、同一鱼种入库多条（拖网/连锁就是这个场景）
+        val sameMs = 1_700_000_000_000L
+        repeat(6) {
+            assertTrue(Warehouse.store(s, StoredFish("baitiao", 0, 100.0, sameMs, false)))
+        }
+        val seqs = s.warehouse.map { it.seq }
+        assertEquals("入库序号必须互不相同", seqs.size, seqs.distinct().size)
+
+        // 存档往返后依然唯一（存档不存 seq，靠 reindex 重排）
+        val restored = GameState().apply { loadFrom(s.toSave()) }
+        val rseqs = restored.warehouse.map { it.seq }
+        assertEquals("读档后序号仍须唯一", rseqs.size, rseqs.distinct().size)
     }
 
     @Test

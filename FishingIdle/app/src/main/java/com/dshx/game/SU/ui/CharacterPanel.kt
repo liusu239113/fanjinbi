@@ -59,10 +59,83 @@ fun CharacterPanel(
     onEquip: (CharacterDef) -> Unit,
     /** 「钓协借调」：看完广告给这个角色一段限时试用权。 */
     onTrial: (CharacterDef) -> Unit,
+    /** 装备子页回调。 */
+    onOpenGearBox: () -> Unit,
+    onOpenGearBoxByAd: () -> Unit,
+    onEquipGear: (com.dshx.game.SU.game.GearItem) -> Unit,
+    onUnequipGear: (com.dshx.game.SU.game.GearSlot) -> Unit,
+    onSalvageGear: (com.dshx.game.SU.game.GearItem) -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
     var detail by remember { mutableStateOf<CharacterDef?>(null) }
+    // 页内子页：角色 / 装备。装备并入这里，避免页签越加越多。
+    var sub by remember { mutableStateOf(0) }
 
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            SubTab("角色", sub == 0, Modifier.weight(1f)) { sub = 0 }
+            SubTab("装备", sub == 1, Modifier.weight(1f)) { sub = 1 }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        if (sub == 1) {
+            GearPanel(
+                state = state, assets = assets, revision = revision,
+                onOpenBox = onOpenGearBox,
+                onOpenBoxByAd = onOpenGearBoxByAd,
+                onEquip = onEquipGear,
+                onUnequip = onUnequipGear,
+                onSalvage = onSalvageGear,
+            )
+            return@Column
+        }
+
+        CharacterList(state, assets, onUnlock, onEquip, onTrial) { detail = it }
+    }
+
+    detail?.let { def ->
+        CharacterDetail(
+            def = def,
+            state = state,
+            assets = assets,
+            onUnlock = { if (onUnlock(def)) detail = null },
+            onEquip = { onEquip(def); detail = null },
+            onTrial = { onTrial(def); detail = null },
+            onClose = { detail = null },
+        )
+    }
+}
+
+/** 页内子页按钮。 */
+@Composable
+private fun SubTab(text: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) UITheme.Gold else UITheme.WoodDark)
+            .border(2.dp, UITheme.Ink, RoundedCornerShape(8.dp))
+            .clickableNoRipple { onClick() }
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            color = if (selected) UITheme.Ink else UITheme.Cream,
+            fontSize = 13.sp, fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** 角色列表本体。 */
+@Composable
+private fun CharacterList(
+    state: GameState,
+    assets: Assets,
+    onUnlock: (CharacterDef) -> Boolean,
+    onEquip: (CharacterDef) -> Unit,
+    onTrial: (CharacterDef) -> Unit,
+    onDetail: (CharacterDef) -> Unit,
+) {
     LazyColumn(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -113,7 +186,7 @@ fun CharacterPanel(
                 state = state,
                 assets = assets,
                 equipped = state.currentCharacterId == def.id,
-                onClick = { detail = def },
+                onClick = { onDetail(def) },
             )
         }
 
@@ -134,22 +207,10 @@ fun CharacterPanel(
                 state = state,
                 assets = assets,
                 equipped = state.currentHelperId == def.id,
-                onClick = { detail = def },
+                onClick = { onDetail(def) },
             )
         }
         item { Spacer(Modifier.height(8.dp)) }
-    }
-
-    detail?.let { def ->
-        CharacterDetail(
-            def = def,
-            state = state,
-            assets = assets,
-            onUnlock = { if (onUnlock(def)) detail = null },
-            onEquip = { onEquip(def); detail = null },
-            onTrial = { onTrial(def); detail = null },
-            onClose = { detail = null },
-        )
     }
 }
 

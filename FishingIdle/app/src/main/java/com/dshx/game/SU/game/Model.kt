@@ -217,6 +217,11 @@ class SaveData {
     var selectedSpeed: Int = 1
     var speedUntilMillis: Long = 0L
 
+    /** 装备：已装备的与背包里的。 */
+    var gearEquipped: MutableList<GearItem> = mutableListOf()
+    var gearBag: MutableList<GearItem> = mutableListOf()
+    var gearBoxesOpened: Long = 0L
+
     // ---- 换装 ----
     var ownedCharacters: MutableSet<String> = mutableSetOf()
     var currentCharacterId: String = ""

@@ -93,6 +93,17 @@ class SaveManager(context: Context) {
         root.put("warehouseEarned", state.warehouseEarned)
         root.put("merchantVisits", state.merchantVisits)
 
+        // ---- 装备 ----
+        // 每件装备存成一条字符串："槽位|稀有度|名字|stat:val,stat:val"，
+        // 比嵌套 JSON 紧凑，读起来也不容易错位。
+        root.put("gearEquipped", JSONArray().apply {
+            state.gear.equipped.forEach { (_, g) -> put(encodeGear(g)) }
+        })
+        root.put("gearBag", JSONArray().apply {
+            state.gear.bag.forEach { put(encodeGear(it)) }
+        })
+        root.put("gearBoxesOpened", state.gearBoxesOpened)
+
         // 每日任务进度
         root.put("dailyDay", state.dailyDayIndex)
         root.put("dailyCatches", state.dailyProgress.catches)
@@ -120,6 +131,31 @@ class SaveManager(context: Context) {
         root.put("options", opts)
 
         prefs.edit().putString(KEY, root.toString()).apply()
+    }
+
+    /** 装备 → 字符串。格式：槽位|稀有度|名字|stat:val,stat:val */
+    private fun encodeGear(g: GearItem): String {
+        val affixes = g.affixes.joinToString(",") { "${it.stat.name}:${it.value}" }
+        return "${g.slot.name}|${g.rarity.name}|${g.name}|$affixes"
+    }
+
+    /** 字符串 → 装备。解析失败返回 null（老存档没有这些字段，不能崩）。 */
+    private fun decodeGear(s: String): GearItem? = try {
+        val parts = s.split("|")
+        if (parts.size < 4) null else {
+            val slot = GearSlot.valueOf(parts[0])
+            val rarity = GearRarity.valueOf(parts[1])
+            val name = parts[2]
+            val affixes = parts[3].split(",").filter { it.isNotBlank() }.mapNotNull { a ->
+                val kv = a.split(":")
+                if (kv.size != 2) null else {
+                    runCatching { Affix(GearStat.valueOf(kv[0]), kv[1].toDouble()) }.getOrNull()
+                }
+            }
+            GearItem(slot, rarity, name, affixes)
+        }
+    } catch (t: Throwable) {
+        null
     }
 
     fun load(state: GameState, settings: Settings): Boolean {
@@ -209,6 +245,19 @@ class SaveManager(context: Context) {
             data.warehouseUpgrades = root.optInt("warehouseUpgrades", 0)
             data.warehouseEarned = root.optDouble("warehouseEarned", 0.0)
             data.merchantVisits = root.optInt("merchantVisits", 0)
+
+            // ---- 装备 ----
+            root.optJSONArray("gearEquipped")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    decodeGear(arr.optString(i))?.let { data.gearEquipped.add(it) }
+                }
+            }
+            root.optJSONArray("gearBag")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    decodeGear(arr.optString(i))?.let { data.gearBag.add(it) }
+                }
+            }
+            data.gearBoxesOpened = root.optLong("gearBoxesOpened", 0L)
 
             state.loadFrom(data)
 

@@ -1085,6 +1085,7 @@ class World(val gameState: GameState) {
         // 广告的「稀有鱼诱饵」（rareLureBonus）同理，强度更高。
         // 角色「幸运竿」再叠一层稀有偏好。
         val rareBias = gameState.skillRareWeightBonus + gameState.rareLureBonus +
+            gameState.gearStat(GearStat.RARE_BIAS) +
             (if (rodSkill == RodSkill.LUCKY_ROD) LUCKY_ROD_RARE_BIAS else 0.0)
         val fish = fishes
             .asSequence()
@@ -1107,8 +1108,9 @@ class World(val gameState: GameState) {
         if (fish != null) {
             val range = Content.biteDelay(fish.kind)
             val wait = range.start + Random.nextFloat() * (range.endInclusive - range.start)
-            // 声呐：稀有鱼更早咬钩
-            bobber.biteTimer = wait / sonarBiteSpeed(fish.kind)
+            // 声呐：稀有鱼更早咬钩；鱼饵装备再叠一层提速
+            val gearBite = (1.0 + gameState.gearStat(GearStat.BITE_SPEED)).toFloat()
+            bobber.biteTimer = wait / (sonarBiteSpeed(fish.kind) * gearBite)
         }
         pendingSounds.add("cast")
         DailyTracker.onCast(gameState)
@@ -1743,8 +1745,12 @@ class World(val gameState: GameState) {
                 if (f != null) {
                     // 鱼的个体逃跑系数（escapeMul）也要算进去，
                     // 否则越大的鱼和普通鱼一样容易上岸，体型差别白做了
+                    // 装备（鱼线）的抗脱钩与技能一起作用，总减伤上限 90%，
+                    // 否则堆满后鱼永远不会跑，钓鱼就没有张力了
+                    val escapeReduce = (gameState.skillEscapeReduce +
+                        gameState.gearStat(GearStat.ESCAPE_REDUCE)).coerceAtMost(0.90)
                     val chance = Content.escapeChance(f.kind) * f.species.escapeMul *
-                        (1.0 - gameState.skillEscapeReduce).toFloat() * 0.35f
+                        (1.0 - escapeReduce).toFloat() * 0.35f
                     if (Random.nextFloat() < chance) {
                         f.state = FishState.ESCAPED
                         f.vx = if (Random.nextBoolean()) 110f else -110f

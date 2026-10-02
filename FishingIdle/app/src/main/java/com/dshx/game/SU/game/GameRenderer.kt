@@ -106,6 +106,22 @@ class GameRenderer(
     private var bmpWater: Bitmap? = null
     private var bmpRiverbed: Bitmap? = null
     private var bmpBobber: Bitmap? = null
+
+    /**
+     * 水里那个浮漂的素材名。
+     * 装备了浮标就按稀有度换图；没有对应素材时回退默认浮漂。
+     */
+    private fun bobberSprite(): String {
+        val b = gameState.gear.equipped[GearSlot.BOBBER] ?: return "bobber_small"
+        val tier = when (b.rarity) {
+            GearRarity.COMMON -> "common"
+            GearRarity.RARE -> "rare"
+            GearRarity.EPIC -> "epic"
+            GearRarity.LEGEND -> "legend"
+        }
+        val name = "bobber_skin_$tier"
+        return if (assets.raw(name) != null) name else "bobber_small"
+    }
     private var bmpHelper: Bitmap? = null
     /** 玩家立绘：钓手 + 小船 + 鱼竿一体。 */
     private var bmpPlayerBoat: Bitmap? = null
@@ -194,8 +210,11 @@ class GameRenderer(
         bmpWater = assets.scaled("water_tile", (512 * t.scale).toInt().coerceIn(256, 768))
         // 河床用侧视条带素材（原来那张俯视的 riverbed 拉出来是绿色竖条）
         bmpRiverbed = assets.scaled("riverbed_side", (512 * t.scale).toInt().coerceIn(256, 1024))
-        // 浮漂：用小号素材，别盖住整片水域
-        bmpBobber = assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
+        // 浮漂：用小号素材，别盖住整片水域。
+        // 装备了浮标就按它的稀有度换图；没装备/素材缺失则用默认浮漂。
+        bmpBobber = assets.scaled(
+            bobberSprite(), (30 * t.scale).toInt().coerceAtLeast(12),
+        ) ?: assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
         // 主角与帮手各自按**自己的立绘高度**画：
         // 主角素材更宽（384×256），照帮手的高度直接画会宽出 50%，
         // 船比帮手大一圈。PLAYER_BOAT_WORLD_H 就是为这个单列的。
@@ -278,20 +297,56 @@ class GameRenderer(
      * 自动接在它自己的竿尖上 —— 不会出现线从船身里穿过去。
      */
     private var loadedPlayerSprite: String = ""
+    /** 上次用的浮漂素材：换了装备要重新加载。 */
+    private var loadedBobberSprite: String = ""
+
+    /**
+     * 主角立绘素材名。
+     *
+     * 装备了鱼竿就按**该竿的稀有度**换立绘（4 主角 × 4 档 = 16 套）；
+     * 没装备鱼竿、或对应皮肤素材不存在时，回退角色本身的立绘。
+     * 这样加装备不会把没做皮肤的角色变成空白。
+     */
+    private fun playerRodSkinSprite(): String {
+        val rod = gameState.gear.equipped[GearSlot.ROD]
+        val base = gameState.currentCharacter.sprite
+        if (rod == null) return base
+
+        // 角色 id → 皮肤前缀：小渔 p1 / 林娜 p2 / 老陈 p3 / 阿炎 p4
+        val prefix = when (gameState.currentCharacter.id) {
+            "boy_default" -> "p1"
+            "girl_linna" -> "p2"
+            "old_chen" -> "p3"
+            "speed_yan" -> "p4"
+            else -> return base
+        }
+        val tier = when (rod.rarity) {
+            GearRarity.COMMON -> "common"
+            GearRarity.RARE -> "rare"
+            GearRarity.EPIC -> "epic"
+            GearRarity.LEGEND -> "legend"
+        }
+        val skin = "${prefix}_cast_$tier"
+        // 素材缺失就回退，别让画面空白
+        return if (assets.hasAnimation(skin)) skin else base
+    }
     private var loadedHelperSprite: String = ""
 
     private fun reloadCharacterSprites(t: ViewTransform) {
         val p = gameState.currentCharacter
         val h = gameState.currentHelper
 
-        if (p.sprite != loadedPlayerSprite) {
+        // 装备的鱼竿皮肤：传说鱼竿会换上对应的立绘。
+        // 皮肤素材缺失时自动回退原立绘 —— 不会因为少一张图就变成透明。
+        val skinSprite = playerRodSkinSprite()
+        if (skinSprite != loadedPlayerSprite) {
             playerCastFrames = loadAnimation(
-                p.sprite, 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
+                skinSprite, 0, (PLAYER_CAST_H * t.scale).toInt().coerceAtLeast(24),
             )
             // 静止立绘 = 第 0 帧；图集缺失时才退回旧的单帧图（老素材仍有）
             bmpPlayerBoat = playerCastFrames.firstOrNull()
                 ?: assets.scaledToHeight(
-                    p.sprite, (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
+                    skinSprite, (PLAYER_BOAT_WORLD_H * t.scale).toInt().coerceAtLeast(20),
                 )
             playerCastHull = if (playerCastFrames.isEmpty()) {
                 floatArrayOf(BoatArt.PLAYER_HULL_FRAC)
@@ -302,7 +357,7 @@ class GameRenderer(
             playerStaticHull = playerCastHull.firstOrNull() ?: BoatArt.PLAYER_HULL_FRAC
             playerStaticTip = playerCastTips.firstOrNull()
                 ?: floatArrayOf(BoatArt.PLAYER_ROD_TIP_X, BoatArt.PLAYER_ROD_TIP_Y)
-            loadedPlayerSprite = p.sprite
+            loadedPlayerSprite = skinSprite
         }
 
         if (h.sprite != loadedHelperSprite) {
@@ -330,6 +385,23 @@ class GameRenderer(
     fun onCharacterChanged() {
         if (lastScreenW > 0f && lastScreenH > 0f) {
             reloadCharacterSprites(ViewTransform(lastScreenW, lastScreenH))
+        }
+    }
+
+    /**
+     * 换了装备（鱼竿 / 浮标）后调用：立绘与浮漂都可能要换素材。
+     * 传空串强制 [reloadCharacterSprites] 重新量竿尖与船底比例 ——
+     * 不同皮肤的竿尖位置不一样，不重量的话鱼线会接歪。
+     */
+    fun onGearChanged() {
+        loadedPlayerSprite = ""
+        loadedBobberSprite = ""
+        if (lastScreenW > 0f && lastScreenH > 0f) {
+            val t = ViewTransform(lastScreenW, lastScreenH)
+            reloadCharacterSprites(t)
+            bmpBobber = assets.scaled(
+                bobberSprite(), (30 * t.scale).toInt().coerceAtLeast(12),
+            ) ?: assets.scaled("bobber_small", (30 * t.scale).toInt().coerceAtLeast(12))
         }
     }
 
