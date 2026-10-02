@@ -128,6 +128,9 @@ fun WarehousePanel(
                 }
             } else {
                 LazyVerticalGrid(
+                    // 必须 fillMaxSize：不给尺寸时网格会被 Box 居中，
+                    // 鱼少的时候上下各留一大片空白（截图里"仓库上面留空"就是这个）。
+                    modifier = Modifier.fillMaxSize(),
                     columns = GridCells.Fixed(3),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp),

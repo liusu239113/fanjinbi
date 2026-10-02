@@ -213,16 +213,20 @@ private fun BagRow(
             Text(item.affixText(), color = UITheme.TextNormal, fontSize = 10.sp, lineHeight = 13.sp)
         }
         Spacer(Modifier.width(6.dp))
-        Column(horizontalAlignment = Alignment.End) {
+        // 两个按钮固定宽度 + 足够高度：之前"分解 🪙5.00K"太长，
+        // 24dp 高度会把文字上下裁掉（截图里"分解"被切一半）。
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             GameButton(
                 "装备", onEquip,
-                modifier = Modifier.height(28.dp),
+                modifier = Modifier.width(76.dp).height(30.dp),
                 accent = UITheme.Gold, fontSize = 11,
             )
-            Spacer(Modifier.height(3.dp))
             GameButton(
-                "分解 🪙${formatNumber(GearLoadout.salvageValue(item))}", onSalvage,
-                modifier = Modifier.height(24.dp),
+                "分解 ${formatNumber(GearLoadout.salvageValue(item))}", onSalvage,
+                modifier = Modifier.width(76.dp).height(28.dp),
                 accent = UITheme.TextDim, fontSize = 9,
             )
         }

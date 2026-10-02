@@ -165,7 +165,11 @@ fun ShopPanel(
                 .fillMaxHeight(0.78f)
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                // 面板自身吃掉所有点击：否则点在木纹装饰等"非控件"区域时，
+                // 事件会穿透到底下的遮罩，触发 onClose —— 表现就是
+                // "想滑动列表却把商店关掉了"。关闭只能靠右上角的 ✕。
+                .clickableNoRipple { },
         ) {
             WoodPanel(Modifier.fillMaxSize(), assets = assets, cornerPx = 110) {
                 Column(Modifier.fillMaxSize().padding(12.dp)) {
