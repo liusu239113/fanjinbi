@@ -1,17 +1,26 @@
 package com.dshx.game.SU.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -25,9 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -50,8 +59,8 @@ import com.dshx.game.SU.game.formatNumber
  * 仓库里的鱼有两条出路：**卖掉换钱**，或**放进这里永久展出**。
  * 展出的鱼不能再卖，但按「稀有度 × 体型 × 鱼种」给永久挂机收益加成。
  *
- * 这是仓库真正的取舍点 —— 卖是即时收益，养是长期复利（转生后依然生效）。
- * 缸位有限、扩容越来越贵，所以不可能"全都要"。
+ * 缸里的鱼用钓场那套**逐帧动画**（摆尾）+ 横向游动 ——
+ * 它们本来就是活鱼，不该在缸里变成一排静止图标。
  */
 @Composable
 fun AquariumPanel(
@@ -103,51 +112,16 @@ fun AquariumPanel(
         )
         Spacer(Modifier.height(8.dp))
 
-        // ---- 鱼缸本体：背景 + 展品 ----
-        // 用固定高度而不是 aspectRatio：面板里还有页签/按钮/广告条，
-        // 按比例撑高在小屏上会把底部按钮挤出屏幕。
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(168.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .border(3.dp, UITheme.WoodDark, RoundedCornerShape(12.dp)),
-        ) {
-            val tank = remember { assets.raw("aquarium_bg")?.asImageBitmap() }
-            if (tank != null) {
-                Image(
-                    tank, contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(Modifier.fillMaxSize().background(UITheme.DeepWater))
-            }
-            if (state.aquarium.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "鱼缸还空着\n从仓库挑几条鱼放进来",
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 17.sp,
-                    )
-                }
-            } else {
-                LazyVerticalGrid(
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    columns = GridCells.Fixed(4),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(state.aquarium, key = { it.seq }) { fish ->
-                        ExhibitCell(fish, assets) { onTakeBack(state.aquarium.indexOf(fish)) }
-                    }
-                }
-            }
-        }
+        // ---- 鱼缸本体：背景 + 会游动的展品 ----
+        Tank(
+            fish = state.aquarium,
+            assets = assets,
+            slots = slots,
+            onTap = { idx -> onTakeBack(idx) },
+        )
 
         Spacer(Modifier.height(8.dp))
 
-        // ---- 展品总览 ----
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -156,10 +130,7 @@ fun AquariumPanel(
                 "展品估值 🪙${formatNumber(state.aquariumWorth(now))}",
                 color = UITheme.GoldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold,
             )
-            Text(
-                "点击展品可取回仓库",
-                color = UITheme.TextDim, fontSize = 10.sp,
-            )
+            Text("点击展品可取回仓库", color = UITheme.TextDim, fontSize = 10.sp)
         }
 
         Spacer(Modifier.height(8.dp))
@@ -203,7 +174,6 @@ fun AquariumPanel(
 
         Spacer(Modifier.height(8.dp))
 
-        // ---- 底部：扩容 / 关闭 ----
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -245,36 +215,109 @@ fun AquariumPanel(
     }
 }
 
-/** 缸里的一个展品。点一下取回仓库。 */
+/**
+ * 鱼缸：水族箱背景 + 每条展品在自己的轨道上游动。
+ *
+ * 布局是**纯相对定位**（百分比），所以缸体高度由调用方给多少就适配多少，
+ * 不会因为改成固定高度就把鱼挤出缸外。
+ */
 @Composable
-private fun ExhibitCell(fish: StoredFish, assets: Assets, onClick: () -> Unit) {
-    val species = Bestiary.speciesById(fish.speciesId)
-    val icon = remember(fish.speciesId) {
-        species?.let { assets.firstFrame(it.sprite, 160)?.asImageBitmap() }
-    }
-    val color = rarityColorOf(species?.rarity)
-    Column(
+private fun Tank(
+    fish: List<StoredFish>,
+    assets: Assets,
+    slots: Int,
+    onTap: (Int) -> Unit,
+) {
+    BoxWithConstraints(
         Modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(Color(0x66000000))
-            .border(1.5.dp, color.copy(alpha = 0.8f), RoundedCornerShape(7.dp))
-            .pressable { onClick() }
-            .padding(3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .fillMaxWidth()
+            .height(168.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(3.dp, UITheme.WoodDark, RoundedCornerShape(12.dp)),
     ) {
-        Box(Modifier.fillMaxWidth().height(34.dp), contentAlignment = Alignment.Center) {
-            if (icon != null) {
+        val tankW = maxWidth
+        val tankH = maxHeight
+
+        val bg = remember { assets.raw("aquarium_bg")?.asImageBitmap() }
+        if (bg != null) {
+            Image(
+                bg, contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Box(Modifier.fillMaxSize().background(UITheme.DeepWater))
+        }
+
+        if (fish.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "鱼缸还空着\n从仓库挑几条鱼放进来",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 17.sp,
+                )
+            }
+            return@BoxWithConstraints
+        }
+
+        // 全局统一的动画时钟：所有鱼共用一个 0→1 的循环，相位各自错开
+        val clock = rememberInfiniteTransition(label = "tank")
+        val phase by clock.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 5200, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "swim",
+        )
+
+        fish.forEachIndexed { i, f ->
+            val species = Bestiary.speciesById(f.speciesId)
+            val sprite = species?.sprite ?: return@forEachIndexed
+            // 用钓场那套摆尾动画（每帧宽约 44dp）；没有动画就退回静态首帧
+            val frames = remember(sprite) {
+                assets.allFrames(sprite, 44).ifEmpty {
+                    listOfNotNull(assets.firstFrame(sprite, 44))
+                }.map { it.asImageBitmap() }
+            }
+            if (frames.isEmpty()) return@forEachIndexed
+
+            // 摆尾：每帧停留时间随鱼而异，整缸不会同步
+            val frameIdx = ((phase * frames.size * 2f).toInt() + i) % frames.size
+
+            // 横向游动：在缸宽 62% 的范围内来回，奇偶条反向，相位错开
+            val span = 0.62f
+            val raw = (phase + i * 0.17f) % 1f
+            val tri = if (raw < 0.5f) raw * 2f else (1f - raw) * 2f
+            val frac = 0.08f + tri * span
+            val goingRight = raw < 0.5f
+
+            // 纵向轨道：按序号铺开，落在水体范围内（避开缸顶灯与缸底砂石）
+            val lane = if (fish.size <= 1) 0.5f else (i % 5) / 4f
+            val yFrac = 0.30f + lane * 0.42f
+
+            val x = tankW * frac
+            val y = tankH * yFrac
+
+            Box(
+                Modifier
+                    .offset(x = x - 22.dp, y = y - 16.dp)
+                    .size(width = 44.dp, height = 32.dp)
+                    .pressable { onTap(i) },
+                contentAlignment = Alignment.Center,
+            ) {
                 Image(
-                    icon, contentDescription = species?.name,
-                    modifier = Modifier.fillMaxSize(),
+                    frames[frameIdx],
+                    contentDescription = species?.name,
+                    // 朝左游时水平翻转，看起来才是"在游"而不是倒退
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { if (!goingRight) scaleX = -1f },
                     contentScale = ContentScale.Fit,
                 )
             }
         }
-        Text(
-            "+${(Aquarium.bonusOf(fish) * 100).toInt()}%",
-            color = UITheme.TextGood, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-        )
     }
 }
 

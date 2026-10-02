@@ -199,12 +199,17 @@ fun ShopPanel(
                         GameButton("✕", onClose, accent = UITheme.WaterTop, fontSize = 14)
                     }
 
-                    // 购买反馈条（固定高度，避免出现/消失时列表上下跳）
-                    Box(Modifier.fillMaxWidth().height(26.dp), contentAlignment = Alignment.Center) {
-                        val text = flash
-                        if (text != null) {
+                    // 购买反馈条：**只在真的有文字时占位**。
+                    // 早先无论有没有反馈都固定占 26dp，加上其它固定间距，
+                    // 标签栏与页面标题之间会空出一大条 —— 仓库/水族馆页尤其明显。
+                    val flashText = flash
+                    if (flashText != null) {
+                        Box(
+                            Modifier.fillMaxWidth().height(22.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Text(
-                                text,
+                                flashText,
                                 color = if (flashOk) UITheme.TextGood else UITheme.TextBad,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,

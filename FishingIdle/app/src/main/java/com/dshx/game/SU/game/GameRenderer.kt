@@ -43,7 +43,7 @@ class GameRenderer(
         const val PLAYER_CONTENT_WORLD_H = BoatArt.PLAYER_CONTENT_H
 
         /** 主角船下的水花宽度（世界单位），随主角立绘一起缩。 */
-        const val PLAYER_SPLASH_W = 168f
+        const val PLAYER_SPLASH_W = 143f
 
         /** 鹈鹕的绘制高度（世界单位）—— 比船大一圈，才有"天上飞的大鸟"的体量。 */
         const val PELICAN_WORLD_H = 150f

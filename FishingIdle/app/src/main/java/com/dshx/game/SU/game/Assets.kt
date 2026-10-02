@@ -19,6 +19,9 @@ class Assets(context: Context) {
     private val appContext = context.applicationContext
     private val cache = HashMap<String, Bitmap>()
 
+    /** 多帧动画的缓存（[allFrames]）：key 与单帧缓存分开，避免类型冲突。 */
+    private val cacheList = HashMap<String, List<Bitmap>>()
+
     /**
      * 原始位图。素材不存在时返回 null —— 调用方一律判空处理。
      * 不要把 null 塞进缓存（HashMap 可以存 null，但会让 getOrPut 反复重算）。
@@ -131,8 +134,42 @@ class Assets(context: Context) {
         return fallback
     }
 
+    /**
+     * 取某个动画图集的**全部帧**，每帧缩放到 [targetW] 宽。
+     *
+     * 鱼在钓场里本来就是逐帧动画（摆尾），水族馆里的鱼也该动起来 ——
+     * 直接用同一套图集，不必为鱼缸另做素材。
+     * 图集不存在时返回空表，调用方退回 [firstFrame] 的静态帧。
+     */
+    fun allFrames(name: String, targetW: Int): List<Bitmap> {
+        if (targetW <= 0) return emptyList()
+        val key = "$name#frames@$targetW"
+        cacheList[key]?.let { return it }
+
+        val cfg = frameConfig("${name}_anim")
+        val sheet = raw("${name}_anim")
+        if (cfg == null || sheet == null) return emptyList()
+        val (cols, rows) = cfg
+        val fw = sheet.width / cols
+        val fh = sheet.height / rows
+        if (fw <= 0 || fh <= 0) return emptyList()
+
+        val ratio = targetW.toFloat() / fw
+        val h = (fh * ratio).toInt().coerceAtLeast(1)
+        val out = ArrayList<Bitmap>(cols * rows)
+        for (r in 0 until rows) {
+            for (c in 0 until cols) {
+                val crop = Bitmap.createBitmap(sheet, c * fw, r * fh, fw, fh)
+                out.add(Bitmap.createScaledBitmap(crop, targetW, h, true))
+            }
+        }
+        cacheList[key] = out
+        return out
+    }
+
     fun evict() {
         cache.clear()
+        cacheList.clear()
     }
 }
 

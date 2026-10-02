@@ -65,7 +65,7 @@ object BoatArt {
      * 大小就会跳一下，主角整体也比帮手小一大截 —— 玩家一眼就能看出来。
      * 改成"内容高一致"后，16 套皮肤与帮手才真正是同一个体量。
      */
-    const val CONTENT_H = 200f
+    const val CONTENT_H = 170f
 
     /** 主角立绘的有效内容高度。与帮手取同一个值：两条船一个体量。 */
     const val PLAYER_CONTENT_H = CONTENT_H

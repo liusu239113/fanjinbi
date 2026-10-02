@@ -71,10 +71,10 @@ fun WarehousePanel(
     val marketTotal = Warehouse.marketTotal(state.warehouse, now)
 
     Column(Modifier.fillMaxSize()) {
-        // ---- 顶部：容量 / 行情 ----
-        // 这一块必须**紧凑地贴在面板顶部**：它下面就是 weight(1f) 的鱼格，
-        // 上面一旦多出空白，玩家看到的就是"仓库上面空了一大片"。
-        // 所以这里不用任何 weight/Spacer 撑高，纯按内容高度排。
+        // ---- 顶部：容量 / 行情 / 鱼贩 ----
+        // 压成**一行**：仓库页的头部比水族馆页高出二十多 dp，玩家看到的就是
+        // "仓库上面空了一大片"。三行信息其实一行放得下，压平后头部高度与
+        // 水族馆页持平，鱼格能多露出一行。
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -82,38 +82,30 @@ fun WarehousePanel(
         ) {
             Column {
                 SectionTitle("渔获仓库")
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     "${state.warehouse.size} / $cap 格",
                     color = if (state.warehouse.size >= cap) UITheme.TextBad else UITheme.TextNormal,
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    Warehouse.trendText(now),
+                    "市值 🪙${formatNumber(marketTotal)} · ${Warehouse.trendText(now)}",
                     color = if (Warehouse.marketFactor(now) >= 1.0) UITheme.TextGood else UITheme.TextBad,
                     fontSize = 11.sp, fontWeight = FontWeight.Bold,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    "市值 🪙${formatNumber(marketTotal)}",
-                    color = UITheme.GoldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    if (offer != null) {
+                        val pct = ((offer.factor - 1.0) * 100).toInt()
+                        "鱼贩收购 ${if (pct >= 0) "+" else ""}$pct% · 剩 ${state.merchantStay.toInt()}s"
+                    } else {
+                        "鱼贩还有 ${formatBuffTime(state.merchantTimer)} 到访"
+                    },
+                    color = if (offer?.isGood == true) UITheme.TextGood else UITheme.TextDim,
+                    fontSize = 11.sp, fontWeight = FontWeight.Bold,
                 )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-
-        // ---- 鱼贩子报价条（固定高度，没鱼贩时也占位，避免列表上下跳） ----
-        Box(Modifier.fillMaxWidth().height(44.dp)) {
-            if (offer != null) {
-                MerchantBar(offer = offer, remain = state.merchantStay)
-            } else {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                    Text(
-                        "鱼贩子还有 ${formatBuffTime(state.merchantTimer)} 到访",
-                        color = UITheme.TextDim, fontSize = 11.sp,
-                    )
-                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -213,35 +205,6 @@ fun WarehousePanel(
             enabled = adReady && !full,
             onClick = onAdUpgrade,
         )
-    }
-}
-
-/** 鱼贩报价条：明确写出"比行情高/低多少"，这是玩家决策的全部依据。 */
-@Composable
-private fun MerchantBar(offer: MerchantOffer, remain: Float) {
-    val pct = ((offer.factor - 1.0) * 100).toInt()
-    val color = if (offer.isGood) UITheme.TextGood else UITheme.TextBad
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(color.copy(alpha = 0.18f))
-            .border(2.dp, color.copy(alpha = 0.85f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("🧑🌾", fontSize = 18.sp)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                if (offer.isGood) "鱼贩子出价不错！" else "鱼贩子在压价",
-                color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-            )
-            Text(
-                "全部按行情价 ${if (pct >= 0) "+" else ""}$pct% 收购 · 还剩 ${remain.toInt()}s",
-                color = UITheme.TextNormal, fontSize = 10.sp,
-            )
-        }
     }
 }
 
