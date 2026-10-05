@@ -277,6 +277,40 @@ class EconomyTest {
         )
     }
 
+    /**
+     * 切回旧水域不能占便宜。
+     *
+     * 玩家反馈："到第二个塘以后再去第一个塘，可以用很少的钱升级技能；
+     * 到第三个塘钓几条鱼，就可以去第一个塘把技能加满了。"
+     *
+     * 根因：升级效果全局生效，而价格按**当前**水域倍率缩放 ——
+     * 切回倍率 1.0 的第一张图，升级价立刻掉到几千分之一。
+     * 现在价格锚定"已解锁的最高倍率"，切图不再影响定价。
+     */
+    @Test
+    fun `切回旧水域不会让升级变便宜`() {
+        val s = GameState().apply {
+            Bestiary.maps.take(3).forEach { unlockedMaps.add(it.id) }
+        }
+        val d = def("helper")
+
+        // 站在最高倍率图上的价格
+        s.currentMapId = Bestiary.maps[2].id
+        val atBest = d.price(0, s)
+
+        // 切回第一张图，价格必须**一模一样**（不能变便宜）
+        s.currentMapId = Bestiary.maps.first().id
+        assertEquals("切回旧图后升级价不该变化", atBest, d.price(0, s), 0.001)
+
+        // 而且应当按最高倍率算，远高于"只解锁了第一张图"时的价格
+        val creekOnly = GameState()   // 只解锁了 creek（倍率 1.0）
+        val creekPrice = d.price(0, creekOnly)
+        assertTrue(
+            "定价应取已解锁的最高倍率，实际 $atBest 应明显高于第一张图的价 $creekPrice",
+            atBest > creekPrice * 1000,
+        )
+    }
+
     /** 首购价必须保持原值：改曲线不能把开局手感一起改掉。 */
     @Test
     fun `商店首购价保持开局手感`() {

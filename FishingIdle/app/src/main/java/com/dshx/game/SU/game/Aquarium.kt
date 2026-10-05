@@ -133,7 +133,7 @@ object Aquarium {
      * 只有锚定"玩家现在的收入规模"，缸位才会一直是笔要掂量的投入。
      */
     private fun valueScale(state: GameState): Double =
-        state.catchValue(Rarity.COMMON) * state.currentMap.valueMultiplier
+        state.catchValue(Rarity.COMMON) * state.priceMapMultiplier()
 
     /** 扩容一个缸位的价格（每缸从 n 扩到 n+1）。 */
     fun expandPrice(state: GameState): Double {

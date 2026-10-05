@@ -1,11 +1,15 @@
 package com.dshx.game.SU
 
+import com.dshx.game.SU.game.Aquarium
 import com.dshx.game.SU.game.Bestiary
 import com.dshx.game.SU.game.Content
+import com.dshx.game.SU.game.FishSize
 import com.dshx.game.SU.game.GameState
 import com.dshx.game.SU.game.Prestige
 import com.dshx.game.SU.game.Rarity
 import com.dshx.game.SU.game.SkillTree
+import com.dshx.game.SU.game.StoredFish
+import com.dshx.game.SU.game.Warehouse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -123,6 +127,32 @@ class PrestigeTest {
         assertTrue("但仍应比中期多", huge > Prestige.pearlsFor(1e12))
     }
 
+    /**
+     * 单次转生的珍珠必须**封顶**，否则后期一定会一次毕业。
+     *
+     * 玩家实测：累计收入 9.3e29 时一次转生给 8255 颗，而技能树全点满只要约
+     * 2400 颗 —— 转生一次就无敌了。曲线再缓也没用，只要没有上限，
+     * 后期收入一涨就会突破。
+     */
+    @Test
+    fun `单次转生珍珠封顶且远低于点满技能树所需`() {
+        // 技能树全点满要多少珍珠
+        val fullTree = SkillTree.all.sumOf { def ->
+            (1..def.maxLevel).sumOf { lv -> def.costPerLevel * lv.toLong() }
+        }
+        val cap = Prestige.MAX_PEARLS_PER_PRESTIGE
+        assertTrue(
+            "单次转生上限 $cap 应远低于点满技能树的 $fullTree（至多 1/8）",
+            cap * 8 <= fullTree,
+        )
+
+        // 各种天文数字收入都不能突破上限
+        listOf(1e12, 1e20, 9.28e29, 1e40, Double.MAX_VALUE).forEach { income ->
+            val p = Prestige.pearlsFor(income)
+            assertTrue("收入 $income 时珍珠 $p 不应超过上限 $cap", p <= cap)
+        }
+    }
+
     @Test
     fun `转生清空本轮进度`() {
         val s = richState()
@@ -149,6 +179,32 @@ class PrestigeTest {
         assertEquals("地图应回到第一张", Bestiary.maps.first().id, s.currentMapId)
         assertEquals("已解锁地图应只剩第一张", 1, s.unlockedMaps.size)
         assertEquals("连击应清零", 0, s.combo)
+    }
+
+    /**
+     * 转生必须清空仓库与鱼缸。
+     *
+     * 玩家反馈："把最后一个塘的鱼放鱼缸里面，转生后再把鱼卖了，直接起飞。"
+     *
+     * 根因：仓库/鱼缸里的鱼带着**入库时**（高倍率水域）的估值，转生只把
+     * 地图打回第一张、却没清这两个仓库，取回来一卖就是天文数字。
+     */
+    @Test
+    fun `转生清空仓库与鱼缸`() {
+        val s = richState()
+        val now = 1_700_000_000_000L
+        // 模拟在高倍率水域钓到的高价鱼
+        Warehouse.store(s, StoredFish("legend", FishSize.KING.ordinal, 9.9e20, now, true))
+        Warehouse.store(s, StoredFish("liyu", FishSize.HUGE.ordinal, 5.0e18, now, false))
+        Aquarium.exhibit(s, 0)
+        assertTrue("前置条件：仓库应有鱼", s.warehouse.isNotEmpty())
+        assertTrue("前置条件：鱼缸应有鱼", s.aquarium.isNotEmpty())
+
+        s.doPrestige()
+
+        assertEquals("转生后仓库应清空", 0, s.warehouse.size)
+        assertEquals("转生后鱼缸应清空", 0, s.aquarium.size)
+        assertEquals("清空后展出加成归零", 0.0, s.aquariumBonus, 1e-9)
     }
 
     @Test

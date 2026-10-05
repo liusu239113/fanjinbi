@@ -20,15 +20,27 @@ object Prestige {
     private const val LINEAR_RATIO_CAP = 100.0
 
     /**
+     * 单次转生的珍珠**硬上限**。
+     *
+     * 技能树全点满约需 2400 颗，这里压到 150 —— 一次转生最多只能点满约 1/16，
+     * 想毕业必须反复转生，转生这个动作才有意义。
+     *
+     * 历史教训：只把公式从「开方」改成「对数」是不够的。旧对数公式在
+     * 累计收入 9.3e29 时仍会给到 8255 颗，玩家一次转生直接把技能树点满，
+     * 之后所有成长都失去意义（玩家反馈"转生都无敌了"）。
+     * 曲线再缓，只要**没有上限**，后期就一定会失控 —— 所以必须封顶。
+     */
+    const val MAX_PEARLS_PER_PRESTIGE = 150L
+
+    /**
      * 本次转生能获得多少珍珠。
      *
-     * 前期保持原来的平方根增长，保证"第一次转生够点技能"的手感不变：
+     * 前期保持平方根增长，保证"第一次转生够点技能"的手感不变：
      * 100 万 → 3 颗，400 万 → 6 颗，900 万 → 9 颗，1 亿 → 30 颗。
      *
-     * 超过门槛 100 倍之后改成**对数增长**。原来的公式一路开方，
-     * 后期会失控 —— 玩家累计收入到 1.97e28 时一次转生能拿 4.2e11 颗珍珠，
-     * 技能树瞬间被点满，长线成长直接消失（技能树全点满只要几千颗）。
-     * 现在同样收入只给约 2900 颗，仍有明显进步，但不会一次毕业。
+     * 超过门槛 100 倍之后转对数增长，并封顶 [MAX_PEARLS_PER_PRESTIGE]。
+     * 对数段每 10 倍收入只多给 12 颗，所以从"够点几级"到"接近上限"
+     * 需要极长的累计收入跨度，不会出现"某一刻突然毕业"。
      */
     fun pearlsFor(totalMoney: Double): Long {
         if (totalMoney < MIN_TOTAL_FOR_PRESTIGE) return 0
@@ -36,9 +48,9 @@ object Prestige {
         val raw = if (ratio <= LINEAR_RATIO_CAP) {
             3.0 * ratio.pow(0.5)
         } else {
-            30.0 * (1.0 + log10(ratio / LINEAR_RATIO_CAP)).pow(1.5)
+            30.0 + 12.0 * log10(ratio / LINEAR_RATIO_CAP)
         }
-        return floor(raw).toLong().coerceAtLeast(1)
+        return floor(raw).toLong().coerceIn(1L, MAX_PEARLS_PER_PRESTIGE)
     }
 
     /** 距离下一次转生的进度 0..1。 */

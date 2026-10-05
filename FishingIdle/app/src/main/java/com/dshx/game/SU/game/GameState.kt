@@ -229,7 +229,9 @@ class GameState {
      * 再叠加开箱次数递增，避免无限刷。
      */
     fun gearBoxPrice(): Double {
-        val valueScale = catchValue(Rarity.COMMON) * currentMap.valueMultiplier
+        // 同 [priceMapMultiplier]：用"已解锁的最高倍率"而非当前水域，
+        // 否则玩家切回老图就能用白菜价刷永久装备。
+        val valueScale = catchValue(Rarity.COMMON) * priceMapMultiplier()
         return BOX_BASE_PRICE * valueScale * Math.pow(1.35, gearBoxesOpened.toDouble())
     }
 
@@ -433,6 +435,20 @@ class GameState {
     val currentMap: FishingMap
         get() = Bestiary.mapById(currentMapId) ?: Bestiary.maps.first()
 
+    /**
+     * 商店定价用的水域倍率 = **已解锁水域里的最高倍率**（至少为 1）。
+     *
+     * 不用 [currentMap] 是因为那会留下一个刷钱漏洞：升级效果全局生效，
+     * 玩家切回低倍率的老图就能用白菜价买满升级，再切到高倍图收割。
+     * 以"已解锁的最高倍率"定价后，解锁新图会立刻抬高升级价，
+     * 想买就得在当前最高倍率的水域赚够钱 —— 切回旧图不再能占便宜。
+     *
+     * 回本时间（价格 ÷ 单条鱼价值）依然与水域无关：分子分母都取同一个倍率。
+     */
+    fun priceMapMultiplier(): Double =
+        unlockedMaps.mapNotNull { Bestiary.mapById(it)?.valueMultiplier }
+            .maxOrNull() ?: Bestiary.maps.first().valueMultiplier
+
     /** 当前连击数：连续成功收线不脱钩会累加，脱钩清零。 */
     var combo: Int = 0
     /** 历史最高连击。 */
@@ -630,6 +646,19 @@ class GameState {
         unlockedMaps.clear()
         unlockedMaps.add(Bestiary.maps.first().id)
         currentMapId = Bestiary.maps.first().id
+
+        // ⚠️ 仓库与鱼缸必须一起清空。
+        // 这两处里的鱼带着**入库时**的估值（StoredFish.baseValue），而那时玩家
+        // 通常在高倍率水域。转生把地图打回第一张后，若不清理，玩家把鱼取回来
+        // 一卖就是一笔天文数字 —— 相当于转生白送一次"原地起飞"。
+        // 玩家反馈原话：「把最后一个塘的鱼放鱼缸里面，转生后再把鱼卖了，直接起飞」。
+        // 现在让转生把这两个仓库一并清零，与"金币/鱼群/升级"同等对待。
+        warehouse.clear()
+        aquarium.clear()
+        merchantOffer = null
+        merchantStay = 0f
+        merchantTimer = Warehouse.MERCHANT_INTERVAL
+
         resetAttributes()
         // 技能效果在重置后再套一遍（resetAttributes 不会动技能字段）
         SkillTree.applyAll(this)

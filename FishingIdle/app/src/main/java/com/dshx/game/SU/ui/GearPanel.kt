@@ -57,7 +57,13 @@ fun GearPanel(
     onSalvage: (GearItem) -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") revision
-    val bag = state.gear.bag
+    // ⚠️ 必须**拷贝**一份再交给 LazyColumn，不能直接把活的 bag 传进去。
+    // 分解会在点击回调里 state.gear.bag.remove(item)，而这个列表正是
+    // LazyColumn 的 items 数据源 —— 在列表测量/绘制过程中原地改它，
+    // Compose 会抛 "Reading a state that was modified during composition" /
+    // IndexOutOfBounds，表现为**分解偶发闪退**。
+    // 快照后数据源与真实背包解耦，下一帧 revision 变化时再重取。
+    val bag = state.gear.bag.toList()
     val price = state.gearBoxPrice()
     val affordable = state.money >= price
 
